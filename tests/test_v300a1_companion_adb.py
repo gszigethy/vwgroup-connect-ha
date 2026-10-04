@@ -450,7 +450,6 @@ class TestCoordinatorGuards:
         assert c.command_method_available("command_lock") is False
         assert c.command_method_available("command_flash") is False
         assert c.command_method_available("command_wake") is False
-        assert c.command_method_available("command_set_target_soc") is False
 
     def test_b1_only_mapped_command_methods_reported_available(self) -> None:
         # Adapter methods alone are insufficient: a command is available only
@@ -462,6 +461,7 @@ class TestCoordinatorGuards:
         assert c.command_method_available("command_set_climate_temperature") is True
         assert c.command_method_available("command_start_charging") is True
         assert c.command_method_available("command_stop_charging") is True
+        assert c.command_method_available("command_set_target_soc") is True
 
     def test_b1_no_client_defers_to_capability(self) -> None:
         # Before the client is built, the method-availability guard must not
