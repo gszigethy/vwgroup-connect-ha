@@ -679,6 +679,14 @@ _VW = BrandPreset(
                 ),
                 # Window heating switched on directly (the existing
                 # ``window_heating_front`` state the window heating switch shows).
+                # Running in the air conditioning mode means it is not on by
+                # itself; the window-heating mode title or the Mk8 row override.
+                FieldSelector(
+                    target="window_heating_front",
+                    present_rid="cta_stop",
+                    present_value="false",
+                    parse="bool_switch",
+                ),
                 FieldSelector(
                     target="window_heating_front",
                     resource_id="title",

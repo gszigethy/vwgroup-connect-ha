@@ -129,6 +129,9 @@ class CompanionChannel:
         # and the values persist in between so the sensors don't flap.
         self._nav_cache: dict[str, object] = {}
         self._last_nav_at: float | None = None
+        # After a command, only the detail path that command used is re-read on
+        # the next poll; the other opted-in paths keep their own cadence.
+        self._nav_only: set[str] = set()
         self._screen_lock = asyncio.Lock()
         self._battery_strings: dict[str, set[str]] = {}
         self._strings_version: str | None = None
@@ -330,7 +333,7 @@ class CompanionChannel:
         # read, so the detail sensors froze. Refresh first (against the true
         # overview state), then let the cache only backfill gaps on non-due polls.
         if self._preset.nav_reads:
-            if self.nav_reads_enabled and self._nav_due():
+            if self.nav_reads_enabled and (self._nav_due() or self._nav_only):
                 await self._augment_via_nav(fields)
             for key, val in self._nav_cache.items():
                 fields.setdefault(key, val)
@@ -344,10 +347,15 @@ class CompanionChannel:
         the overview afterwards so the next plain read sees the main screen.
         Successful values are cached and re-applied on later polls.
         """
-        self._last_nav_at = self._now()
+        only, self._nav_only = self._nav_only, set()
+        if not only or self._nav_due():
+            only = set()
+            self._last_nav_at = self._now()
         for nav in self._preset.nav_reads:
             if not self._nav_allowed(nav):
                 continue  # this path's own opt-in is off
+            if only and nav.name not in only:
+                continue  # a command's readback re-reads its own path only
             if all(fields.get(v.target) is not None for v in nav.values):
                 continue  # nothing to fetch from this detail
             walked = 0
@@ -712,10 +720,14 @@ class CompanionChannel:
                 )
             # Prevent repeated taps even if a transport fails after delivery.
             self._last_write_at = self._now()
-            # Refresh on the next poll; a delivered tap is not proof that the
-            # vehicle accepted it, and cached pre-command state is not readback.
-            self._nav_cache.clear()
-            self._last_nav_at = None
+            # Re-read this command's own detail path on the next poll: a
+            # delivered tap is not proof that the vehicle accepted it, and the
+            # cached pre-command values are not readback. Other paths keep
+            # their cadence, so a command never triggers a walk of every screen.
+            if nav is not None:
+                for value in nav.values:
+                    self._nav_cache.pop(value.target, None)
+                self._nav_only.add(nav.name)
             await self._t.tap(*node.tap_point)
         except CompanionTransportError as err:
             raise CompanionWriteBlocked(str(err)) from err

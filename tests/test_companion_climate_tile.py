@@ -326,10 +326,20 @@ async def test_start_ac_on_the_picker_layout_taps_start_once_and_returns():
     phone = FakePhone(layout="pick")
     _ch, ctrl = _controller(phone)
     await ctrl.start()
-    # The picker is opened to verify the mode by its own row title (no
-    # translated word needed), then closed with the app's own control.
-    assert phone.taps == ["tile", "pick", "up", "start"]
+    # Tile, Start, done: the mode picker is not opened for an AC start.
+    assert phone.taps == ["tile", "start"]
     assert phone.running == "ac" and phone.screen == "overview"
+
+
+@pytest.mark.asyncio
+async def test_a_command_drops_only_the_climate_values_from_the_cache():
+    phone = FakePhone(layout="pick")
+    channel, ctrl = _controller(phone)
+    channel._nav_cache = {"climatisation_active": False, "battery_soc": 80, "target_temperature": 22.0}
+    channel._last_nav_at = 123.0
+    await ctrl.start()
+    assert channel._nav_cache == {"battery_soc": 80, "target_temperature": 22.0}
+    assert channel._last_nav_at == 123.0  # no walk of every opted-in screen
 
 
 @pytest.mark.asyncio
@@ -390,7 +400,7 @@ async def test_window_heating_stop_refuses_to_end_running_air_conditioning():
 async def test_off_grid_confirmation_is_never_accepted():
     phone = FakePhone(layout="pick", off_grid=True)
     _ch, ctrl = _controller(phone)
-    with pytest.raises(CompanionWriteBlocked, match="confirmation"):
+    with pytest.raises(CompanionWriteBlocked, match="another screen"):
         await ctrl.start()
     assert "activate" not in phone.taps
 
@@ -543,3 +553,16 @@ async def test_coordinator_routes_the_temperature_to_the_companion_client():
     await VagConnectCoordinator.async_set_climatisation_temperature(coord, "VIN", 22.5)
     assert sent == [("VIN", "command_set_climate_temperature", {"temp_c": 22.5})]
     assert ctrl.calls == [("set_temperature", 22.5)]
+
+
+@pytest.mark.parametrize(("mode", "expected"), [("ac", False), ("wh", True)])
+def test_window_heating_state_while_running(mode, expected):
+    # Running in the AC mode: window heating is not on by itself. Running the
+    # window-heating mode (picker title): it is.
+    import asyncio
+
+    phone = FakePhone(layout="pick", running=mode, mode=mode)
+    phone.screen = "sheet"
+    fields = read_selectors(parse_ui_dump(asyncio.run(phone.dump_ui())), DETAIL.values)
+    assert fields["window_heating_front"] is expected
+    assert fields["climatisation_active"] is (mode == "ac")

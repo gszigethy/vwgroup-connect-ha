@@ -41,6 +41,13 @@ by default.
 
 ## Commands and safety
 
+- **Shortest path.** Start and stop are two taps: the climate tile, then
+  Start or Stop. The mode picker opens only to switch to or from
+  window-heating-only. Each step waits only for the screen it expects, not for
+  a generic settle. After the app closes the sheet itself, no walk back is
+  needed. A command drops only the climate values from the cache: the overview
+  tile, read on every poll, shows the new state, and no other detail path is
+  re-walked.
 - Commands are armed for app 4.3.2 only. Other builds are refused before any
   tap. Reads keep the preset's verified versions.
 - Every step is read back:
