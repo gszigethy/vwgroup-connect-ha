@@ -1405,6 +1405,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 CONF_COMPANION_CLOSE_APP,
                 CONF_COMPANION_READ_CHARGE_DETAIL,
                 CONF_COMPANION_READ_CLIMATE_DETAIL,
+                CONF_COMPANION_READ_CLIMATE_SETTINGS,
                 CONF_COMPANION_READ_PARKING_POSITION,
                 CONF_COMPANION_READ_VEHICLE_HEALTH,
                 CONF_COMPANION_USE_ADDON,
@@ -1427,6 +1428,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                     ("charge_detail", CONF_COMPANION_READ_CHARGE_DETAIL),
                     ("vehicle_health", CONF_COMPANION_READ_VEHICLE_HEALTH),
                     ("climate_detail", CONF_COMPANION_READ_CLIMATE_DETAIL),
+                    ("climate_settings", CONF_COMPANION_READ_CLIMATE_SETTINGS),
                     ("parking_position", CONF_COMPANION_READ_PARKING_POSITION),
                 )
                 if _companion_opt(key)
