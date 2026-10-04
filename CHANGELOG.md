@@ -42,6 +42,22 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0b3] - 2026-10-04 — Set the charge limit from the companion (fork pre-release)
+
+> Pre-release from the fork [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha). The charge
+> limit walk was run live up to the slider without changing it; saving a new limit has not been tried on the car yet.
+
+### From the fork's pending upstream pull requests
+
+#### Added
+- **Set the charge limit from the Volkswagen app's vehicle Settings (#968).** The existing charge-limit slider in Home
+  Assistant now works on the Companion channel, with the app's own range: 50 to 100 % in 10 % steps (a value in
+  between is rounded to the nearest step). HA opens Settings, moves the "Charging up to" slider, checks the app shows
+  the new value, and presses Save; it reports success only when the app has finished saving. If the slider does not
+  reach the value, the change is cancelled and nothing is sent. The slider's position is worked out from the screen
+  itself, so it does not depend on the phone's resolution or display size, and the Settings entry is found in any app
+  language. App 4.3.2 only.
+
 ## [4.11.0b2] - 2026-10-04 — Faster climate commands and a charging-state fix (fork pre-release)
 
 > Pre-release from the fork [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha), after the
