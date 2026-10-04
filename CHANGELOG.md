@@ -42,6 +42,25 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0b4] - 2026-10-04 — The car's request limit, named (fork pre-release)
+
+> Pre-release from the fork [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha), after the
+> field test of 4.11.0b3 on a Tiguan eHybrid (app 4.3.2).
+>
+> **Installing with HACS:** this fork publishes only pre-releases. Turn on *Show beta versions* for this repository in
+> HACS, or HACS falls back to a commit download that fails (404) and the old version stays installed while HACS
+> reports the new one.
+
+### From the fork's pending upstream pull requests
+
+#### Fixed
+- **A car that refuses more requests is now recognised.** Each remote request wakes the car and spends part of a daily
+  power budget that protects its 12 V battery. When it ran out during testing, the Volkswagen app answered taps with
+  "Too many requests sent to the vehicle", and Home Assistant only reported that it "could not open the Air
+  Conditioning sheet" — and would have kept trying. Now that alert, and the app's "Request limit reached", are
+  recognised in any app language: commands pause with a reason that says to start the car (which resets the budget),
+  and Reset companion connection clears the pause. Any other unexpected screen is reported with its own text.
+
 ## [4.11.0b3] - 2026-10-04 — Set the charge limit from the companion (fork pre-release)
 
 > Pre-release from the fork [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha). The charge
