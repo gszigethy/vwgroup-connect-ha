@@ -48,17 +48,9 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 > 4.10.0 plus two pending upstream pull requests for the Companion (ADB) channel. Reads were validated live on a
 > Tiguan eHybrid with app 4.3.2. Charge and climate commands have not yet been run on the car — treat them as a test.
 
-### Added
-- **Trip and consumption figures for Car-Net cars on the volkswagen.de channel (#1313, thanks @realynot).**
-  Older Volkswagens whose data comes through the volkswagen.de channel now get their three trip-computer memories:
-  the last trip, the cumulative long-term one, and the distance since refuelling — each with distance, duration,
-  average speed and average consumption, fuel and electric separately. These are the figures the car shows on its
-  own display and the website shows online, and on these cars the EU Data Act portal does not deliver them at all.
-  @realynot captured all three from his Tiguan in one session a month ago, including the awkward cases: a downhill
-  trip where the electric consumption is **negative** because the car recovered more than it used (the website shows
-  that too, and the sign is kept), a leg driven purely on electricity where the fuel figure is simply absent, and a
-  month of individual trips that arrive in no particular order, so the newest is picked by its timestamp rather than
-  by position.
+### From the fork's pending upstream pull requests
+
+#### Added
 - **The Volkswagen app's battery tile on the Companion (ADB) channel: SoC, ranges, charge state, target, and start/stop charging (#968, #1684, thanks @plainmad, @kgroshert and @gszigethy).**
   The overview and the charge sheet behind the range tile now fill the battery entities you already have: battery
   level separately from the upper charge limit, electric range and, on plug-in hybrids, petrol range (which also
@@ -78,17 +70,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
   for you. Mapped from @plainmad's Mk8 Golf GTE captures (idle, running, overview with climate on, 4.2.1 and 4.3.2),
   @kgroshert's German ID.4 and e-up! captures, and @gszigethy's Tiguan eHybrid on 4.3.2.
 
-### Changed
-- **The "Volkswagen.de channel needs re-login" notice now has a Fix button that takes you straight to the login (#1717, thanks @Ra72xx).**
-  Volkswagen asks for the e-mail one-time code again every few weeks, and until now the notice about it only told you
-  what to do: open the integration's options and re-run "Add a Volkswagen.de read channel". Following that meant
-  Settings, then Devices & Services, then finding the integration, then finding the **right** entry — anyone with two
-  accounts or two cars set up separately has several, and the notice never said which — then Configure, then hunting
-  for the tick box in the full options form. Six steps before you reached the login. Selecting **Fix** now does all of
-  that for you and opens the login for the car the notice is about. The one-time code itself is unchanged: Volkswagen
-  wants it and only you have it.
-
-### Fixed
+#### Fixed
 - **Companion: the charging switch follows the parsed charging flag** instead of a list of raw state words, the same
   rule the climatisation switch already uses, so "Currently charging" reads on and "Target charge level reached"
   reads off.
@@ -98,6 +80,30 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
   had the same mix-up: it no longer stands in for the automatic window heating *setting*.
 - **Companion: the return walk recognises the 4.3.2 overview.** Its anchor tile has no text of its own, so the check
   never matched, and the walk back could press Android BACK past the overview and out of the app.
+
+### From upstream (@its-me-prash), on upstream main after 4.10.0 and not yet released there
+
+#### Added
+- **Trip and consumption figures for Car-Net cars on the volkswagen.de channel (#1313, thanks @realynot).**
+  Older Volkswagens whose data comes through the volkswagen.de channel now get their three trip-computer memories:
+  the last trip, the cumulative long-term one, and the distance since refuelling — each with distance, duration,
+  average speed and average consumption, fuel and electric separately. These are the figures the car shows on its
+  own display and the website shows online, and on these cars the EU Data Act portal does not deliver them at all.
+  @realynot captured all three from his Tiguan in one session a month ago, including the awkward cases: a downhill
+  trip where the electric consumption is **negative** because the car recovered more than it used (the website shows
+  that too, and the sign is kept), a leg driven purely on electricity where the fuel figure is simply absent, and a
+  month of individual trips that arrive in no particular order, so the newest is picked by its timestamp rather than
+  by position.
+
+#### Changed
+- **The "Volkswagen.de channel needs re-login" notice now has a Fix button that takes you straight to the login (#1717, thanks @Ra72xx).**
+  Volkswagen asks for the e-mail one-time code again every few weeks, and until now the notice about it only told you
+  what to do: open the integration's options and re-run "Add a Volkswagen.de read channel". Following that meant
+  Settings, then Devices & Services, then finding the integration, then finding the **right** entry — anyone with two
+  accounts or two cars set up separately has several, and the notice never said which — then Configure, then hunting
+  for the tick box in the full options form. Six steps before you reached the login. Selecting **Fix** now does all of
+  that for you and opens the login for the car the notice is about. The one-time code itself is unchanged: Volkswagen
+  wants it and only you have it.
 
 ## [4.10.0] - 2026-10-04 — Full release / Voll-Release
 
