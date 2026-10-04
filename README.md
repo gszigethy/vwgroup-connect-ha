@@ -1,3 +1,5 @@
+> **Fork note (gszigethy/vwgroup-connect-ha):** this fork is upstream [its-me-prash/vwgroup-connect-ha](https://github.com/its-me-prash/vwgroup-connect-ha) plus pending upstream pull requests for the Volkswagen Companion (ADB) channel — the battery tile ([docs/COMPANION_BATTERY.md](docs/COMPANION_BATTERY.md)) and the Air Conditioning tile ([docs/COMPANION_CLIMATE.md](docs/COMPANION_CLIMATE.md)). Releases here are pre-releases for testing; use upstream for everything else.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/its-me-prash/vwgroup-connect-ha/main/custom_components/vag_connect/logo.png" alt="VW Group Connect" width="180">
 </p>
