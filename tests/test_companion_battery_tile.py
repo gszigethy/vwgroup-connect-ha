@@ -168,14 +168,16 @@ class Phone:
 async def test_start_walks_to_detail_and_returns_without_claiming_vehicle_success():
     phone = Phone()
     channel = CompanionChannel(phone, VW, time_fn=time.monotonic)
-    channel._nav_cache = {"battery_soc": 100}
+    channel._nav_cache = {"battery_soc": 100, "odometer_km": 307}
     await channel.do_action("start_charging")
     tile = next(n for n in parse_ui_dump(dump("gte_overview")) if n.resource_id == "rangeTile")
     start = find_battery_control(parse_ui_dump(dump("gte_stopped")), STRINGS, "start_charging")
     assert phone.taps[:2] == [tile.tap_point, start.tap_point]
     assert len(phone.taps) == 3  # close the sheet
-    assert not channel._nav_cache
-    assert channel._last_nav_at is None
+    # Only the charge sheet's own values are dropped and re-read next poll;
+    # other paths keep their cache and cadence, so no walk of every screen.
+    assert channel._nav_cache == {"odometer_km": 307}
+    assert channel._nav_only == {"charge_detail"}
     with pytest.raises(CompanionWriteBlocked, match="between"):
         await channel.do_action("start_charging")
     assert len(phone.taps) == 3
@@ -264,3 +266,22 @@ def test_overview_is_recognised_by_its_anchor_id(name):
     from custom_components.vag_connect.companion.screen import has_anchor
 
     assert has_anchor(parse_ui_dump(dump(name)), VW)
+
+
+@pytest.mark.asyncio
+async def test_command_readback_walks_only_its_own_detail_path():
+    phone = Phone()
+    channel = CompanionChannel(phone, VW, time_fn=time.monotonic,
+                               nav_opt_ins={"charge_detail", "vehicle_health", "climate_detail"})
+    channel._last_nav_at = time.monotonic()  # cadence not due
+    channel._nav_only = {"charge_detail"}
+    walked = []
+
+    async def fake_walk(path):
+        walked.append(path[0].action)
+        return None, 0
+
+    channel._walk_to_detail = fake_walk
+    await channel._augment_via_nav({})
+    assert walked == ["open_charge_detail"]
+    assert channel._nav_only == set()

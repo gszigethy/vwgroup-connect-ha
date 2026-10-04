@@ -29,7 +29,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, AsyncIterator, Awaitable, Callable
 
-from .screen import UiNode, _rid_matches, has_anchor
+from .screen import UiNode, _rid_matches, find_node_for, has_anchor
 from .transport import CompanionTransportError
 
 if TYPE_CHECKING:
@@ -44,10 +44,16 @@ DIAL_MAX_C = 30.0  # rendered "HI"
 DIAL_STEP_C = 0.5
 _DIAL_TEXT_RE = re.compile(r"-?\d{1,2}(?:[.,]\d)?|LO|HI", re.I)
 # The app debounces dial changes by 1000 ms before it sends them.
-_DIAL_FLUSH_S = 1.6
-_DIAL_STEP_WAIT_S = 0.6
-_OUTCOME_POLLS = 8
-_OUTCOME_WAIT_S = 1.5
+_DIAL_FLUSH_S = 1.2
+# Dumps spent waiting for the screen a tap should produce. A dump already takes
+# about a second on ADB, so these poll back to back rather than sleeping.
+_SCREEN_TRIES = 5
+_OUTCOME_TRIES = 12
+# Values the climate sheet supplies; a command drops only these from the cache.
+_CLIMATE_KEYS = (
+    "climatisation_active", "climatisation_state", "window_heating_front",
+    "climate_remaining_time_min",
+)
 
 
 @dataclass
@@ -175,6 +181,8 @@ class ClimateController:
     ) -> None:
         self._ch = channel
         self._sleep = sleep
+        # True once a dump showed the overview, so the walk back can be skipped.
+        self._home = False
 
     # -- public commands ------------------------------------------------------
 
@@ -224,10 +232,8 @@ class ClimateController:
                 if neighbour is None or neighbour.tap_point is None:
                     raise self._blocked("the next temperature step is not on the dial")
                 await self._ch._t.tap(*neighbour.tap_point)
-                await self._sleep(_DIAL_STEP_WAIT_S)
-                nodes, _cleared = await self._ch._dump_and_clear_overlays(
-                    await self._ch._settle()
-                )
+                before = current
+                nodes = await self._screen(lambda n: read_dial(n)[0] not in (None, before))
                 moved, lower, higher = read_dial(nodes)
                 if moved is None or moved == current:
                     # Locked while running on cars that only take a target
@@ -252,29 +258,44 @@ class ClimateController:
 
     @contextlib.asynccontextmanager
     async def _on_sheet(self) -> AsyncIterator[list[UiNode]]:
-        """Gate, open the sheet, hand over its nodes, and always come back."""
+        """Gate, open the sheet with one tap on the tile, and always come back."""
         await self._gate()
         nav = next(
             (n for n in self._ch.preset.nav_reads if n.name == "climate_detail"), None
         )
-        if nav is None:
+        if nav is None or not nav.path:
             raise self._blocked("the climate sheet path is not mapped")
+        self._home = False
         walked = 0
         try:
             nodes, cleared = await self._ch._dump_and_clear_overlays()
             if not cleared:
                 raise self._blocked("a nag screen is up and did not clear; not tapping blind")
             if not read_sheet(nodes).present:
-                detail, walked = await self._ch._walk_to_detail(nav.path)
-                if detail is None or not read_sheet(detail).present:
+                tile = find_node_for(nodes, nav.path[0])
+                if tile is None or tile.tap_point is None:
+                    raise self._blocked("the climate tile is not on the current screen")
+                await self._ch._t.tap(*tile.tap_point)
+                walked = 1
+                nodes = await self._screen(lambda n: read_sheet(n).present)
+                if not read_sheet(nodes).present:
                     raise self._blocked("could not open the Air Conditioning sheet")
-                nodes = detail
             yield nodes
         except CompanionTransportError as err:
             raise self._blocked(str(err)) from err
         finally:
-            # The picker adds a level; the sheet may also have closed itself.
-            await self._ch._return_to_overview(max(walked, 1) + 1)
+            if not self._home:
+                # The picker adds a level; the app's own close control is used.
+                await self._ch._return_to_overview(max(walked, 1) + 1)
+
+    async def _screen(self, done: Callable[[list[UiNode]], bool]) -> list[UiNode]:
+        """Dump until the screen a tap should produce is there (bounded)."""
+        nodes: list[UiNode] = []
+        for _ in range(_SCREEN_TRIES):
+            nodes, _cleared = await self._ch._dump_and_clear_overlays()
+            if done(nodes):
+                break
+        return nodes
 
     async def _gate(self) -> None:
         """The channel's write gates, plus the climate-specific version map."""
@@ -326,8 +347,10 @@ class ClimateController:
                     if toggle.tap_point is None:
                         raise self._blocked(f"'{toggle_rid}' cannot be tapped")
                     await self._ch._t.tap(*toggle.tap_point)
-                    nodes, _cleared = await self._ch._dump_and_clear_overlays(
-                        await self._ch._settle()
+                    rid, wanted = toggle_rid, want
+                    nodes = await self._screen(
+                        lambda n: (t := _find(n, rid, checkable=True)) is not None
+                        and t.checked == wanted
                     )
                     again = _find(nodes, toggle_rid, checkable=True)
                     if again is None or again.checked != want:
@@ -342,11 +365,21 @@ class ClimateController:
             if window_heating_only:
                 raise self._blocked("this car's sheet offers no window-heating-only mode")
             return nodes
+        from .presets import coerce  # noqa: PLC0415
+
+        if not window_heating_only and coerce(
+            "clima_mode_window_heating", sheet.pick_title
+        ) is not True:
+            # Air conditioning is the selected mode: tile, Start, done. The
+            # picker opens only to switch to or from window heating alone.
+            return nodes
         # "Select mode" lists exactly [Air conditioning, Window heating], in that
         # order (ClimaViewModel.onModeChangePressed). Choose by position and
         # verify by the chosen row's own title, so no translated word is needed.
         await self._ch._t.tap(*sheet.pick.tap_point)  # type: ignore[misc]
-        picker, _cleared = await self._ch._dump_and_clear_overlays(await self._ch._settle())
+        picker = await self._screen(
+            lambda n: len([r for r in n if r.checkable and r.clickable]) == 2
+        )
         rows = [n for n in picker if n.checkable and n.clickable and n.tap_point]
         if len(rows) != 2 or read_sheet(picker).present:
             raise self._blocked("the mode picker did not show the two expected modes")
@@ -356,7 +389,7 @@ class ClimateController:
         )
         if not row.checked:
             await self._ch._t.tap(*row.tap_point)  # type: ignore[misc]
-            picker, _cleared = await self._ch._dump_and_clear_overlays(await self._ch._settle())
+            picker = await self._screen(lambda n: read_sheet(n).present)
         if not read_sheet(picker).present:
             # Already-selected row (or a picker that stays open): close it with
             # the app's own control, never Android BACK.
@@ -372,7 +405,7 @@ class ClimateController:
             if up is None:
                 raise self._blocked("could not close the mode picker")
             await self._ch._t.tap(*up.tap_point)  # type: ignore[misc]
-            picker, _cleared = await self._ch._dump_and_clear_overlays(await self._ch._settle())
+            picker = await self._screen(lambda n: read_sheet(n).present)
         sheet = read_sheet(picker)
         if not sheet.present or (row_title and sheet.pick_title != row_title):
             raise self._blocked("the requested mode is not selected on the sheet")
@@ -394,10 +427,12 @@ class ClimateController:
     async def _tap_command(self, node: UiNode) -> None:
         # Mark first so a transport failure after delivery still blocks a repeat.
         self._mark_write()
-        # A tap is not readback: drop cached detail values so the next poll
-        # reads the real state instead of re-serving the pre-command one.
-        self._ch._nav_cache.clear()
-        self._ch._last_nav_at = None
+        # A tap is not readback: drop only the climate sheet's cached values,
+        # so the overview tile (read on every poll) supplies the new state.
+        # Nothing else is invalidated, so a command never triggers a walk of
+        # every opted-in screen.
+        for key in _CLIMATE_KEYS:
+            self._ch._nav_cache.pop(key, None)
         await self._ch._t.tap(*node.tap_point)  # type: ignore[misc]
 
     async def _await_outcome(self, *, expect_running: bool) -> None:
@@ -407,20 +442,23 @@ class ClimateController:
         "air conditioning using battery?" question, an error) is left for the
         user: we never confirm a dialog that changes a vehicle setting.
         """
-        for _ in range(_OUTCOME_POLLS):
-            await self._sleep(_OUTCOME_WAIT_S)
+        nodes: list[UiNode] = []
+        for _ in range(_OUTCOME_TRIES):
             nodes, _cleared = await self._ch._dump_and_clear_overlays()
             if has_anchor(nodes, self._ch.preset):
+                self._home = True
                 return
             sheet = read_sheet(nodes)
             if sheet.present and sheet.running == expect_running:
                 return
-            if not sheet.present:
-                raise self._blocked(
-                    "the app asked for a confirmation after the tap (for example "
-                    "'air conditioning using battery?'); it is not confirmed "
-                    "automatically — answer it in the app"
-                )
+            # Neither yet: the sheet is still animating closed, or the request
+            # is in flight. Dump again; a dump itself takes about a second.
+        if not read_sheet(nodes).present:
+            raise self._blocked(
+                "the app showed another screen after the tap (for example "
+                "'air conditioning using battery?'); it is not confirmed "
+                "automatically — answer it in the app"
+            )
         raise self._blocked("the app did not confirm the request")
 
     def _mark_write(self) -> None:
