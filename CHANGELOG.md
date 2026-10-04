@@ -42,6 +42,27 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0b2] - 2026-10-04 — Faster climate commands and a charging-state fix (fork pre-release)
+
+> Pre-release from the fork [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha), after the
+> first live test of 4.11.0b1 on a Tiguan eHybrid (app 4.3.2): climate start worked and every read matched the app.
+> Charge commands and temperature changes are still untested on the car.
+
+### From the fork's pending upstream pull requests
+
+#### Changed
+- **Climate start and stop are now two taps: the climate tile, then Start or Stop.** The mode picker opens only to
+  switch to or from window-heating-only, and each step waits just for the screen it expects instead of letting the
+  whole screen settle, so commands are noticeably quicker.
+- **A command no longer walks every enabled screen afterwards.** A climate command relies on the overview's climate
+  tile, which every poll reads anyway; a charge command re-reads only the charge sheet on the next poll. Vehicle
+  Health, the map and the climate settings keep their own 15-minute cadence.
+
+#### Fixed
+- **A charging session is no longer cancelled by an unknown plug state.** The "unplugged means not charging" safeguard
+  also fired when a channel cannot see the plug (the companion never can), so "Currently charging" read as off.
+- **The window heating switch shows off while the air conditioning runs**, instead of unknown.
+
 ## [4.11.0b1] - 2026-10-04 — Companion battery and Air Conditioning tiles (fork pre-release)
 
 > Pre-release from the fork [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
