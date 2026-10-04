@@ -5709,6 +5709,9 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         client = getattr(self, "_cariad_client", None)
         if client is None:
             return True
+        supports = getattr(client, "supports_command", None)
+        if callable(supports):
+            return bool(supports(command_id))
         return hasattr(client, command_id)
 
     def command_capability_supported(
@@ -9124,4 +9127,3 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         except Exception:  # noqa: BLE001
             pass
         await self._cariad_cmd(vin, "command_wake")
-
