@@ -531,9 +531,16 @@ class TestPresetShape:
                 assert nav.opt_in, f"{preset.brand}/{nav.name} has no opt-in"
                 assert nav.back_presses >= len(nav.path) or nav.back_presses >= 1
 
-    def test_only_grounded_battery_commands_are_mapped(self) -> None:
-        # #968 idle/active Golf GTE and Tiguan captures ground these controls.
-        # Other command families stay quarantined and older versions read only.
-        assert {a.action for a in _VW.actions} == {"start_charging", "stop_charging"}
-        assert all(a.nav_read == "charge_detail" for a in _VW.actions)
-        assert all(a.app_versions == ("4.3.2",) for a in _VW.actions)
+    def test_only_grounded_commands_are_mapped(self) -> None:
+        # Charging (#968 Golf GTE / Tiguan charge sheets) and the climate sheet
+        # (#968 captures + 4.3.2 APK) are grounded; nothing else is mapped.
+        from custom_components.vag_connect.companion.climate import CLIMATE_APP_VERSIONS
+
+        charge = {a for a in _VW.actions if a.nav_read == "charge_detail"}
+        assert {a.action for a in charge} == {"start_charging", "stop_charging"}
+        assert all(a.app_versions == ("4.3.2",) for a in charge)
+        assert {a.action for a in _VW.actions} - {a.action for a in charge} == {
+            "start_climate", "stop_climate", "start_window_heating",
+            "stop_window_heating", "set_climate_temperature",
+        }
+        assert CLIMATE_APP_VERSIONS == ("4.3.2",)

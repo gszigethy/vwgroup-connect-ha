@@ -190,16 +190,16 @@ class TestWriteQuarantine:
         assert t.taps == [(100, 230)]
 
     @pytest.mark.asyncio
-    async def test_shipped_vw_quarantines_writes_but_still_reads(self) -> None:
-        # v2.26.0 — the real VW preset carries NO actions (writes quarantined
-        # until the 2-step nav is confirmed), but a verified matching version
-        # still reads AND may nav-read.
+    async def test_shipped_vw_reads_and_never_taps_a_control_off_screen(self) -> None:
+        # The real VW preset maps the climate sheet's controls; a verified
+        # version still reads, and a control that is not on the current screen
+        # is never tapped. (Climate commands run through ClimateController,
+        # which also requires the 4.3.2 build; see test_companion_climate_tile.)
         now, _ = _clock()
         t = _FakeTransport(version="4.2.1", dump=VW_SCREEN)
         ch = CompanionChannel(t, PRESETS["volkswagen"], time_fn=now)
         fields = await ch.read()
         assert fields["battery_soc"] == 74
-        assert ch.writes_enabled is False
         with pytest.raises(CompanionWriteBlocked):
             await ch.do_action("start_climate")
         assert t.taps == []
@@ -451,14 +451,15 @@ class TestCoordinatorGuards:
         assert c.command_method_available("command_flash") is False
         assert c.command_method_available("command_wake") is False
         assert c.command_method_available("command_set_target_soc") is False
-        assert c.command_method_available("command_set_climate_temperature") is False
 
     def test_b1_only_mapped_command_methods_reported_available(self) -> None:
-        # Adapter methods alone are insufficient: this battery PR maps charge
-        # commands and leaves climate quarantined for its own confirmed map.
+        # Adapter methods alone are insufficient: a command is available only
+        # when the brand preset maps its control (charging + climate sheet).
         c = self._coord(brand="volkswagen", client=self._companion_client("volkswagen"))
-        assert c.command_method_available("command_start_climate") is False
-        assert c.command_method_available("command_stop_climate") is False
+        assert c.command_method_available("command_start_climate") is True
+        assert c.command_method_available("command_stop_climate") is True
+        assert c.command_method_available("command_start_window_heating") is True
+        assert c.command_method_available("command_set_climate_temperature") is True
         assert c.command_method_available("command_start_charging") is True
         assert c.command_method_available("command_stop_charging") is True
 
@@ -473,9 +474,9 @@ class TestCoordinatorGuards:
         c = self._coord(brand="audi", client=self._companion_client("audi"))
         assert c.is_read_only() is True
 
-    def test_s1_vw_charge_map_can_expose_commands_unless_user_read_only(self) -> None:
-        # Charging is mapped; the channel still applies the command version
-        # gate and the user's read-only option remains authoritative.
+    def test_s1_vw_command_maps_can_expose_commands_unless_user_read_only(self) -> None:
+        # Charging and climate are mapped; each keeps its own version gate and
+        # the user's read-only option remains authoritative.
         c = self._coord(brand="volkswagen", client=self._companion_client("volkswagen"))
         assert c.is_read_only() is False
 

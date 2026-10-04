@@ -154,6 +154,11 @@ def _iter_field_raws(nodes: list[UiNode], sel: FieldSelector) -> Iterator[str]:
                 yield "true" if n.checked else "false"
                 break
 
+    # 0a') a control whose id is its state (e.g. ``cta_start`` / ``cta_stop``).
+    if sel.present_rid:
+        if any(_rid_matches(n.resource_id, sel.present_rid) for n in nodes):
+            yield sel.present_value
+
     # 0b) geometric — a value with no label of any kind (v4.4.0).
     if sel.centre_of_rid:
         found = centre_number(nodes, sel.centre_of_rid)
