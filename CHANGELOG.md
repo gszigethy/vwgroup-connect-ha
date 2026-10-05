@@ -42,6 +42,44 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.12.0b4] - 2026-10-05 — The car's data age, as the app shows it (fork pre-release)
+
+> Fork beta from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): 4.12.0b3 with the
+> *Last vehicle sync* sensor replaced by the time the Volkswagen app itself shows. Proposed as the replacement commit
+> in [#1735](https://github.com/its-me-prash/vwgroup-connect-ha/pull/1735).
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** this fork publishes only pre-releases. Turn on *Show beta versions* for this repository in
+> HACS, or HACS falls back to a commit download that fails (404) and the old version stays installed while HACS
+> reports the new one.
+
+### From the fork's pending upstream pull requests
+
+#### Changed
+- **Companion: the car's last-reported time now comes from the Volkswagen app (#968).** The overview's "Your vehicle:
+  … Synchronised 32 minutes ago" line is read on every poll and fills the existing **Vehicle last reported** sensor
+  of the Companion entry. That is the age of the data the app actually has, whatever made the car send it: Home
+  Assistant's *Synchronise now*, a drive, charging, the app's own background wake-ups, or someone opening the app.
+  - Because the existing sensor is filled, **Data stale** and the stale-data repair (72 h) now work on the Companion
+    channel too.
+  - Read through the app's own translation tables, so it works in any app language. The app rounds the age down;
+    the earliest time it can mean is used, so the sensor never shows fresher data than the app has, and it only
+    moves forward. Accurate to a minute for the first day, an hour up to four days, then a day.
+  - A poll that catches "Currently synchronising", or a car older than six days (the app then shows only a date),
+    keeps the last value.
+
+#### Removed
+- **The *Last vehicle sync* sensor from 4.12.0b3.** It recorded when the app accepted Home Assistant's own sync tap,
+  not whether the car answered, so it could look fresh while the data was old. The entity is left behind as
+  unavailable; delete it from *Settings → Entities*.
+
+### Installation and validation
+- Live-checked on a Tiguan eHybrid with app 4.3.2: the app said "Synchronised 15 minutes ago" at 13:15:06 UTC, read as
+  12:59:06 UTC, with the translation strings taken from the phone.
+- To test: on the car device of the Companion entry, *Vehicle last reported* should match the app's "Synchronised …
+  ago" (shown as "x minutes ago", up to a minute older). After a *Synchronise now*, it should jump to within a few
+  minutes of the sync. *Data stale* appears next to it and should be off.
+
 ## [4.12.0b3] - 2026-10-05 — Last vehicle sync sensor (fork pre-release)
 
 > Fork beta from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): 4.12.0b2 plus one
