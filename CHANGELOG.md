@@ -42,6 +42,55 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.12.0b5] - 2026-10-05 — Data age, request status, and a sync that ends the pause (fork pre-release)
+
+> Fork beta from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): 4.12.0b4 reworked
+> after testing — the Companion and EU Data Act streams now stay fully separate. Proposed as the replacement commit in
+> [#1735](https://github.com/its-me-prash/vwgroup-connect-ha/pull/1735).
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** this fork publishes only pre-releases. Turn on *Show beta versions* for this repository in
+> HACS, or HACS falls back to a commit download that fails (404) and the old version stays installed while HACS
+> reports the new one.
+
+### From the fork's pending upstream pull requests
+
+#### Changed
+- **Companion: Last vehicle sync now shows when the car last sent the app data, for any reason (#968).** The
+  overview's "Synchronised … ago" line, read on every poll, fills the **Last vehicle sync** sensor of the Companion
+  entry (the b3 entity returns, with its history). A drive, charging, the app's own wake-ups, someone opening the app
+  or Home Assistant's own sync all count. Read through the app's own translation tables, in any app language; accurate
+  to a minute for the first day, an hour up to four days, then a day.
+  - The EU Data Act entry is left alone: its *Vehicle last reported* keeps the portal's own time, so the two streams
+    can be compared side by side. (4.12.0b4 tried to fill *Vehicle last reported* from the app instead; with the same
+    car in two entries Home Assistant rejected the Companion's copy as a duplicate, so it never appeared.)
+- **The vehicle sync slider runs 0–240 min, 0 = off, and defaults to 180 min** — the same three-hour spacing the
+  Volkswagen app uses for its own automatic wake-ups. The slider's *note* attribute says so.
+- **Screen reads continue during the request-limit pause.** They never reach the car; only commands wait. Before, the
+  whole channel went quiet for 12 hours after the car refused a request.
+
+#### Added
+- **Companion: Vehicle requests sensor — available or restricted (#968).** Set by the sync flow: *available* when the
+  app accepted Synchronise now, *restricted* when it answered "Too many requests sent to the vehicle" (the car's daily
+  power budget is used up; starting the car resets it).
+  - While restricted, the Volkswagen app refuses the tap by itself — it checks the car's capability status (1010,
+    *PowerBudgetReached*) and shows its alert, then "Vehicle data unavailable", without sending anything. So each
+    scheduled sync is a free check: it closes both alerts, keeps *restricted*, and the first sync that goes through
+    after the car has been started marks *available* and ends the pause on its own. *Reset companion connection*
+    and the 12 h limit remain as fallbacks.
+
+### Installation and validation
+- Live on a Tiguan eHybrid with app 4.3.2, with the car's power budget used up: the sync was answered with both
+  alerts, recognised as *restricted*, both alerts closed and the app returned to the overview; a read during the pause
+  then reported the car's last check-in as 12:43:08 UTC.
+- To test:
+  - **Last vehicle sync** should match the app's "Synchronised … ago" (up to a minute older), while the EU entry's
+    *Vehicle last reported* keeps its own time.
+  - **Vehicle requests** shows *unknown* until the first sync after the update — 180 min after Home Assistant starts,
+    or set the slider to 5 min for one cycle. With the budget still used up it should say *restricted*; after the
+    next drive, the next sync should turn it *available*.
+  - The *Vehicle last reported* entity that 4.12.0b4 could not create needs no cleanup.
+
 ## [4.12.0b4] - 2026-10-05 — The car's data age, as the app shows it (fork pre-release)
 
 > Fork beta from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): 4.12.0b3 with the
