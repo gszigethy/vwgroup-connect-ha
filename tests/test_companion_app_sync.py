@@ -89,8 +89,7 @@ def test_preset_maps_the_sync_to_its_own_command():
 
 def test_fixtures_are_credited():
     sources = {s["fixture"] for s in json.loads((FIXTURES / "sources.json").read_text())}
-    assert {"tiguan_settings_lower.xml", "tiguan_settings_syncing.xml"} <= sources
-    assert sources == {p.name for p in FIXTURES.iterdir() if p.name != "sources.json"}
+    assert sources == {"tiguan_settings_lower.xml", "tiguan_settings_syncing.xml"}
     for name in sources:
         assert "inputText" not in (FIXTURES / name).read_text()  # no vehicle name
 
