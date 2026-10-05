@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from .presets import (
@@ -56,6 +57,7 @@ from .resources import (
     read_battery_resources,
 )
 from .app_sync import find_sync_button
+from .sync_time import find_sync_line
 from .charge_target import (
     ChargeTargetRow,
     find_charge_target_row,
@@ -142,6 +144,9 @@ class CompanionChannel:
         self._consecutive_failures: int = 0  # drives the adaptive cooldown (#16)
         self._rate_limited_until: float = 0.0  # wall-clock; persisted (ckomma #21)
         self._source_data_age_s: float | None = None  # from the app's sync line
+        # #968 — when the car last sent the app data, from the same line read
+        # through the app's own translation tables. Newest estimate wins.
+        self._seen_at: datetime | None = None
         self._live_app_version: str | None = None
         # v2.26.0 — "verified preset AND live app version matches the one it was
         # built against". Gates BOTH writes and forward-nav reads (C9); a wrong
@@ -348,6 +353,9 @@ class CompanionChannel:
         fields = read_fields(nodes, self._preset)
         if self._preset.brand == "volkswagen":
             fields.update(read_battery_resources(nodes, self._battery_strings))
+            self._note_sync_line(nodes)
+        if self._seen_at is not None:
+            fields["last_seen_at"] = self._seen_at
         # v2.26.0 (C9) — values behind a detail screen (charge target/power/time
         # on VW) are read by tapping a tile, reading, and coming BACK. Only tap
         # when it is opted in, the version gate holds, and the cadence window has
@@ -364,6 +372,22 @@ class CompanionChannel:
             for key, val in self._nav_cache.items():
                 fields.setdefault(key, val)
         return fields
+
+    def _note_sync_line(self, nodes: list[UiNode]) -> None:
+        """Turn "Synchronised … ago" into when the car last sent data.
+
+        The app rounds the age down, so the earliest time it can mean is used:
+        it never claims fresher data than the app has, and later reads only
+        move it forward, closing in on the real time from below. A screen
+        without the line (a sync in progress, a date-only line) changes nothing.
+        """
+        line = find_sync_line(nodes, self._battery_strings)
+        if line is None:
+            return
+        now = datetime.fromtimestamp(self._wall(), tz=timezone.utc).replace(microsecond=0)
+        seen = now - timedelta(seconds=line.age_s + line.precision_s)
+        if self._seen_at is None or seen > self._seen_at:
+            self._seen_at = seen
 
     async def _augment_via_nav(self, fields: dict[str, object]) -> None:
         """Fill missing nav-read targets by opening their detail screen.
