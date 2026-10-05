@@ -42,6 +42,31 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.12.0b6] - 2026-10-05 — App request status (fork pre-release)
+
+> Fork beta from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): 4.12.0b5 with the
+> request sensor renamed and its state known right after a restart. Same content as the updated
+> [#1735](https://github.com/its-me-prash/vwgroup-connect-ha/pull/1735).
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** this fork publishes only pre-releases. Turn on *Show beta versions* for this repository in
+> HACS, or HACS falls back to a commit download that fails (404) and the old version stays installed while HACS
+> reports the new one.
+
+### From the fork's pending upstream pull requests
+
+#### Changed
+- **Companion: *Vehicle requests* is now *App request status* (#968)** — *Available* or *Restricted*, in the car's
+  *Diagnostic* section. It is a new entity (`sensor.<car>_app_request_status`); delete the old
+  `sensor.<car>_vehicle_requests` from *Settings → Entities*.
+- **A request-limit pause still running after a restart shows as *Restricted* straight away**, instead of *unknown*
+  until the first sync. The sync flow still decides every change: the first sync that goes through turns it
+  *Available* and ends the pause.
+
+### Installation and validation
+- Automated regression checks cover the rename and the restored state. After updating, with the pause from today
+  still running (until 00:57 UTC), *App request status* should show *Restricted* without waiting for a sync.
+
 ## [4.12.0b5] - 2026-10-05 — Data age, request status, and a sync that ends the pause (fork pre-release)
 
 > Fork beta from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): 4.12.0b4 reworked
