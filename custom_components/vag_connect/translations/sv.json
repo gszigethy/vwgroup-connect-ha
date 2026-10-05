@@ -645,6 +645,16 @@
       "last_seen_at": {
         "name": "Fordon senast rapporterat"
       },
+      "last_vehicle_sync": {
+        "name": "Senaste fordonssynkronisering"
+      },
+      "vehicle_requests": {
+        "name": "Förfrågningar till fordonet",
+        "state": {
+          "available": "Tillgänglig",
+          "restricted": "Begränsad"
+        }
+      },
       "adblue_range_km": {
         "name": "AdBlue-räckvidd"
       },
