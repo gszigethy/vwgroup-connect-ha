@@ -42,6 +42,38 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.12.0b3] - 2026-10-05 — Last vehicle sync sensor (fork pre-release)
+
+> Fork beta from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): 4.12.0b2 plus one
+> sensor for the vehicle sync it introduced, proposed as a follow-up commit to
+> [#1735](https://github.com/its-me-prash/vwgroup-connect-ha/pull/1735).
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** this fork publishes only pre-releases. Turn on *Show beta versions* for this repository in
+> HACS, or HACS falls back to a commit download that fails (404) and the old version stays installed while HACS
+> reports the new one.
+
+### From the fork's pending upstream pull requests
+
+#### Added
+- **Companion: Last vehicle sync sensor (#968).** A new diagnostic sensor on the car shows when the Volkswagen app
+  last accepted one of Home Assistant's own **Synchronise now** taps, as an ISO 8601 UTC timestamp (for example
+  `2026-10-05T10:27:12+00:00`; the dashboard shows it as "x minutes ago").
+  - It changes only when the vehicle sync flow runs and the app confirms it started syncing. Screen reads (the poll
+    interval), a sync the app was already running, and a refused sync (request limit, other app version, the
+    60 s command gap) leave it unchanged.
+  - The time is stored with the entry, so it keeps its value over a Home Assistant restart.
+  - It appears wherever the *Vehicle sync interval* slider does: Companion entries for Volkswagen, outside Read-only
+    Mode.
+
+### Installation and validation
+- After updating, the sensor shows *unknown* until the first sync of this version, which comes one *Vehicle sync
+  interval* after Home Assistant starts (60 min by default). To see it sooner, lower the slider to 5 min for one
+  cycle, then set it back.
+- Check that the sensor's time matches the moment the app's overview starts showing "Synchronised … ago" counting up
+  from zero, and that it does not move on ordinary polls.
+- Automated regression checks cover the stamping rules and restart persistence; the sensor has not yet run on the car.
+
 ## [4.12.0b2] - 2026-10-05 — Ask the car for fresh data on a timer (fork pre-release)
 
 > Fork beta from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): 4.12.0b1 plus one
