@@ -651,6 +651,9 @@
       "last_seen_at": {
         "name": "Kjøretøy sist rapportert"
       },
+      "last_vehicle_sync": {
+        "name": "Siste synkronisering av bil"
+      },
       "adblue_range_km": {
         "name": "AdBlue-rekkevidde"
       },

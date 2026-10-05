@@ -645,6 +645,9 @@
       "last_seen_at": {
         "name": "Voertuig laatst gemeld"
       },
+      "last_vehicle_sync": {
+        "name": "Laatste voertuigsynchronisatie"
+      },
       "adblue_range_km": {
         "name": "AdBlue bereik"
       },

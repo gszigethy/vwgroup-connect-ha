@@ -651,6 +651,9 @@
       "last_seen_at": {
         "name": "Veicolo ultimo report"
       },
+      "last_vehicle_sync": {
+        "name": "Ultima sincronizzazione del veicolo"
+      },
       "adblue_range_km": {
         "name": "Autonomia AdBlue"
       },

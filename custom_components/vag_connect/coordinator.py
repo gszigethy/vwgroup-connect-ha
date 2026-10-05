@@ -8264,6 +8264,38 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 if self._started:
                     await self.async_request_refresh()
 
+    def companion_last_vehicle_sync(self) -> datetime | None:
+        """#968 — when our own "Synchronise now" was last accepted, or None."""
+        from .const import CONF_COMPANION_LAST_VEHICLE_SYNC  # noqa: PLC0415
+
+        raw = self.entry.data.get(CONF_COMPANION_LAST_VEHICLE_SYNC)
+        if not isinstance(raw, str):
+            return None
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+    def _record_companion_vehicle_sync(self) -> None:
+        """Stamp a sync the app accepted (not a sync it was already running).
+
+        Persisted in entry.data, so the sensor keeps its value over a restart,
+        and pushed to the entities at once rather than on the next poll.
+        """
+        from .const import CONF_COMPANION_LAST_VEHICLE_SYNC  # noqa: PLC0415
+
+        stamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        try:
+            _self_update_entry(
+                self, data={**self.entry.data, CONF_COMPANION_LAST_VEHICLE_SYNC: stamp}
+            )
+        except Exception:  # noqa: BLE001 - bookkeeping must not fail the sync
+            return
+        notify = getattr(self, "async_update_listeners", None)
+        if callable(notify):
+            notify()
+
     async def async_companion_sync_vehicle(self) -> bool:
         """#968 — one "Synchronise now"; True if the app is now syncing.
 
@@ -8284,6 +8316,8 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             return False
         finally:
             self._persist_companion_rate_limit()
+        if started:
+            self._record_companion_vehicle_sync()
         _LOGGER.debug(
             "VW Group Connect: companion vehicle sync %s",
             "requested" if started else "already running in the app",

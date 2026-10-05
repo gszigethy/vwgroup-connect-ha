@@ -443,10 +443,9 @@ def _companion_can_sync(coordinator: VagConnectCoordinator, entry: ConfigEntry) 
     """True for a companion entry whose brand preset maps "Synchronise now"."""
     if not coordinator.is_companion():
         return False
-    from .companion.presets import PRESETS  # noqa: PLC0415
+    from .companion.app_sync import preset_can_sync  # noqa: PLC0415
 
-    preset = PRESETS.get(str(entry.data.get(CONF_BRAND, "")).lower())
-    return preset is not None and any(a.action == "sync_vehicle" for a in preset.actions)
+    return preset_can_sync(str(entry.data.get(CONF_BRAND, "")))
 
 
 # Shown on the slider's more-info dialog; the app's own warning is not on screen.

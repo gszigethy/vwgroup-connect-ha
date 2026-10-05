@@ -645,6 +645,9 @@
       "last_seen_at": {
         "name": "Fordon senast rapporterat"
       },
+      "last_vehicle_sync": {
+        "name": "Senaste fordonssynkronisering"
+      },
       "adblue_range_km": {
         "name": "AdBlue-räckvidd"
       },
