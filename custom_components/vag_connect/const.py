@@ -89,10 +89,6 @@ DEFAULT_COMPANION_APP_SYNC_INTERVAL  = 60
 MIN_COMPANION_APP_SYNC_INTERVAL      = 5
 MAX_COMPANION_APP_SYNC_INTERVAL      = 240
 COMPANION_APP_SYNC_STEP              = 5
-# When the companion's own "Synchronise now" was last accepted by the app (ISO
-# 8601 UTC). Kept in entry.data so the Last vehicle sync sensor survives a
-# restart; screen reads never touch it.
-CONF_COMPANION_LAST_VEHICLE_SYNC     = "companion_last_vehicle_sync"
 # v2.17.5 (#759) — optional per-VIN S-PIN overrides: {vin: spin}. When a
 # vehicle has no entry here the shared CONF_SPIN is used, so existing
 # single-S-PIN setups are unchanged. Set via the Options flow.

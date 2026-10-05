@@ -651,9 +651,6 @@
       "last_seen_at": {
         "name": "Ajoneuvo viimeksi raportoinut"
       },
-      "last_vehicle_sync": {
-        "name": "Ajoneuvon viimeisin synkronointi"
-      },
       "adblue_range_km": {
         "name": "AdBlue-toimintamatka"
       },

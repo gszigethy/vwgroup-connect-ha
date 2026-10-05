@@ -12,7 +12,6 @@ based on the user's unit system preference.
 """
 import logging
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -4622,32 +4621,6 @@ class VagWindowPositionSensor(VagConnectEntity, SensorEntity):
         return val if isinstance(val, (int, float)) and not isinstance(val, bool) else None
 
 
-class VagLastVehicleSyncSensor(VagConnectEntity, SensorEntity):
-    """#968 — when the companion's own "Synchronise now" was last accepted.
-
-    Stamped only by the vehicle sync flow, when the app confirms it started a
-    sync; screen reads and a sync the app was already running leave it alone.
-    A TIMESTAMP, so its state is ISO 8601 UTC.
-    """
-
-    _attr_device_class = SensorDeviceClass.TIMESTAMP
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_translation_key = "last_vehicle_sync"
-    _attr_icon = "mdi:car-clock"
-
-    def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
-        super().__init__(coordinator, vin, "last_vehicle_sync")
-
-    @property
-    def available(self) -> bool:
-        # A sync time stays true while the car is offline or a poll fails.
-        return True
-
-    @property
-    def native_value(self) -> datetime | None:
-        return self.coordinator.companion_last_vehicle_sync()
-
-
 # b13 — platinum parallel-updates rule: the coordinator's background poll
 # loop owns every API request, so entity updates need no throttling. HA reads
 # this MODULE-level constant (an entity attr is a no-op).
@@ -4677,14 +4650,6 @@ async def async_setup_entry(
         CONF_HIDE_EMPTY_ENTITIES,
         entry.data.get(CONF_HIDE_EMPTY_ENTITIES, True),
     ))
-    # #968 — the Last vehicle sync sensor goes with the sync slider: a companion
-    # entry whose preset maps "Synchronise now", outside Read-only Mode.
-    from .companion.app_sync import preset_can_sync  # noqa: PLC0415
-    syncs_vehicle = (
-        coordinator.is_companion()
-        and not coordinator.is_read_only()
-        and preset_can_sync(brand)
-    )
 
     def _build_for_vin(vin: str, vehicle: dict) -> list:
         entities: list = []
@@ -4768,8 +4733,6 @@ async def async_setup_entry(
         # Per-window opening position (%), self-gating on populated slots.
         for window_id in vehicle.get("windows_position", {}):
             entities.append(VagWindowPositionSensor(coordinator, vin, window_id))
-        if syncs_vehicle:
-            entities.append(VagLastVehicleSyncSensor(coordinator, vin))
         return entities
 
     register_dynamic_spawner(entry, coordinator, async_add_entities, _build_for_vin)
