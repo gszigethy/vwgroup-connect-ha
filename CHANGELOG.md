@@ -42,6 +42,41 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.12.0b2] - 2026-10-05 — Ask the car for fresh data on a timer (fork pre-release)
+
+> Fork beta from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): 4.12.0b1 plus one
+> new Companion (ADB) feature, proposed for upstream separately from the battery and climate pull requests.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** this fork publishes only pre-releases. Turn on *Show beta versions* for this repository in
+> HACS, or HACS falls back to a commit download that fails (404) and the old version stays installed while HACS
+> reports the new one.
+
+### From the fork's pending upstream pull requests
+
+#### Added
+- **Companion: ask the car for fresh data on a timer (#968).** A new *Vehicle sync interval* slider on the
+  *VW Group Connect Settings* device (5–240 min in 5 min steps, default 60 min) makes Home Assistant open the
+  Volkswagen app's vehicle Settings, scroll to *Vehicle data* and tap **Synchronise now**, then read the app again
+  three minutes later, once the car has answered. The existing *Poll interval* slider is unchanged and still only
+  re-reads the app screen; the two run side by side.
+  - ⚠️ **Each sync wakes the car.** Syncing too often can make the car's battery protection kick in, and the app then
+    stays in failsafe mode until the car is next started. The slider's *note* attribute says so.
+  - The button is found by its own id, never by position or text, so *Delete vehicle* just below it can never be hit,
+    and the app's language does not matter.
+  - A sync the app is already running is not tapped again. A sync passes the same gates as a command: app 4.3.2 only,
+    paused while the car's request limit is reached, at least 60 s after another command, and never in Read-only Mode.
+  - The first sync after a Home Assistant restart waits a full interval, so a restart never wakes the car by itself.
+    A slider change applies within a minute, without a reload.
+  - Only Companion entries whose app mapping knows the button get the slider (Volkswagen today).
+
+### Installation and validation
+- Validated live on a Tiguan eHybrid with app 4.3.2: tapping *Synchronise now* turned the button disabled and showed
+  "Synchronising with vehicle ..."; the overview went from "Synchronised 32 minutes ago" to "4 minutes ago". The
+  integration's own walk was then dry-run on the same phone with the final tap withheld.
+- To test: after updating, find *Vehicle sync interval* on the *VW Group Connect Settings* device of the Companion
+  entry. Leave it at 60 min, or lower it briefly and watch *Last update* and the app's "Synchronised … ago" line.
+
 ## [4.12.0b1] - 2026-10-05 — Rebased onto upstream 4.11.0 (fork pre-release)
 
 > Fork beta from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha), based on
