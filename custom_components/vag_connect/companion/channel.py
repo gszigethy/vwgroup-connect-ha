@@ -392,7 +392,13 @@ class CompanionChannel:
 
     @property
     def request_state(self) -> str | None:
-        """What the vehicle sync flow last found (#968), or None."""
+        """What the vehicle sync flow last found (#968), or None.
+
+        Before the first sync of this session, a request-limit pause restored
+        from the last run already says the car is restricted.
+        """
+        if self._request_state is None and self._is_rate_limited():
+            return REQUESTS_RESTRICTED
         return self._request_state
 
     def _is_alert(self, nodes: list[UiNode]) -> bool:

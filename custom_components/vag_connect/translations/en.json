@@ -654,8 +654,8 @@
       "last_vehicle_sync": {
         "name": "Last vehicle sync"
       },
-      "vehicle_requests": {
-        "name": "Vehicle requests",
+      "app_request_status": {
+        "name": "App request status",
         "state": {
           "available": "Available",
           "restricted": "Restricted"

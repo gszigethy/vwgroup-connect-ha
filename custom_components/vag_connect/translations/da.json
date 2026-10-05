@@ -654,8 +654,8 @@
       "last_vehicle_sync": {
         "name": "Seneste synkronisering af bil"
       },
-      "vehicle_requests": {
-        "name": "Anmodninger til bilen",
+      "app_request_status": {
+        "name": "Appens anmodningsstatus",
         "state": {
           "available": "Tilgængelig",
           "restricted": "Begrænset"

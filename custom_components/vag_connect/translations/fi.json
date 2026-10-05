@@ -654,8 +654,8 @@
       "last_vehicle_sync": {
         "name": "Ajoneuvon viimeisin synkronointi"
       },
-      "vehicle_requests": {
-        "name": "Ajoneuvopyynnöt",
+      "app_request_status": {
+        "name": "Sovelluksen pyyntöjen tila",
         "state": {
           "available": "Käytettävissä",
           "restricted": "Rajoitettu"

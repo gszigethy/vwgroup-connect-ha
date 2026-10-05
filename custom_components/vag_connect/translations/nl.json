@@ -648,8 +648,8 @@
       "last_vehicle_sync": {
         "name": "Laatste voertuigsynchronisatie"
       },
-      "vehicle_requests": {
-        "name": "Verzoeken aan voertuig",
+      "app_request_status": {
+        "name": "Status app-verzoeken",
         "state": {
           "available": "Beschikbaar",
           "restricted": "Beperkt"

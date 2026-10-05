@@ -4652,23 +4652,24 @@ class VagLastVehicleSyncSensor(VagConnectEntity, SensorEntity):
         return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
 
 
-class VagVehicleRequestsSensor(VagConnectEntity, SensorEntity):
-    """#968 — whether the car takes remote requests, as the sync flow found.
+class VagAppRequestStatusSensor(VagConnectEntity, SensorEntity):
+    """#968 — whether the app can send requests to the car, as the sync found.
 
     "available" when the app accepted Synchronise now, "restricted" when it
     answered with the car's power-budget alert (start the car to reset it).
-    Unknown until the first sync of this entry.
+    A pause still running from the last run shows as restricted until the
+    first sync; unknown before any sync of this entry.
     """
 
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = ["available", "restricted"]
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_translation_key = "vehicle_requests"
+    _attr_translation_key = "app_request_status"
     _attr_icon = "mdi:car-connected"
     _stay_available_on_poll_failure = True
 
     def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
-        super().__init__(coordinator, vin, "vehicle_requests")
+        super().__init__(coordinator, vin, "app_request_status")
 
     @property
     def native_value(self) -> str | None:
@@ -4706,7 +4707,7 @@ async def async_setup_entry(
         entry.data.get(CONF_HIDE_EMPTY_ENTITIES, True),
     ))
     # #968 — the companion's own sync sensors. Last vehicle sync is a plain read
-    # (any Volkswagen companion entry); Vehicle requests goes with the sync
+    # (any Volkswagen companion entry); App request status goes with the sync
     # slider (the preset maps "Synchronise now", outside Read-only Mode).
     from .companion.app_sync import preset_can_sync  # noqa: PLC0415
     reads_sync_line = coordinator.is_companion() and brand == "volkswagen"
@@ -4801,7 +4802,7 @@ async def async_setup_entry(
         if reads_sync_line:
             entities.append(VagLastVehicleSyncSensor(coordinator, vin))
         if syncs_vehicle:
-            entities.append(VagVehicleRequestsSensor(coordinator, vin))
+            entities.append(VagAppRequestStatusSensor(coordinator, vin))
         return entities
 
     register_dynamic_spawner(entry, coordinator, async_add_entities, _build_for_vin)

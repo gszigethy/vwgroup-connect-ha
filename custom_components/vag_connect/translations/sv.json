@@ -648,8 +648,8 @@
       "last_vehicle_sync": {
         "name": "Senaste fordonssynkronisering"
       },
-      "vehicle_requests": {
-        "name": "Förfrågningar till fordonet",
+      "app_request_status": {
+        "name": "Appens förfrågningsstatus",
         "state": {
           "available": "Tillgänglig",
           "restricted": "Begränsad"

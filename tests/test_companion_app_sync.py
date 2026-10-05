@@ -624,12 +624,12 @@ def test_last_vehicle_sync_ignores_the_cloud_last_seen_at():
 @pytest.mark.parametrize(("state", "shown"), [
     ("available", "available"), ("restricted", "restricted"), (None, None), ("odd", None),
 ])
-def test_vehicle_requests_sensor(state, shown):
+def test_app_request_status_sensor(state, shown):
     from homeassistant.components.sensor import SensorDeviceClass
 
-    from custom_components.vag_connect.sensor import VagVehicleRequestsSensor
+    from custom_components.vag_connect.sensor import VagAppRequestStatusSensor
 
-    sensor = _sensor(VagVehicleRequestsSensor, {"companion_request_state": state})
+    sensor = _sensor(VagAppRequestStatusSensor, {"companion_request_state": state})
     assert sensor.device_class == SensorDeviceClass.ENUM
     assert sensor.options == ["available", "restricted"]
     assert sensor.native_value == shown and sensor.available
@@ -644,3 +644,21 @@ async def test_the_request_state_reaches_vehicle_data():
         await client.command_sync_vehicle(client._vin)
     data = await client.get_status(client._vin)
     assert data.companion_request_state == "restricted"
+
+
+def test_a_restored_pause_reads_as_restricted_until_the_first_sync():
+    clock = [1_700_000_000.0]
+    channel = CompanionChannel(SyncPhone(), VW, time_fn=time.monotonic, wall_clock_fn=lambda: clock[0])
+    assert channel.request_state is None
+    channel.restore_rate_limit(clock[0] + 3600)
+    assert channel.request_state == "restricted"
+    clock[0] += 3601  # the pause ran out with no sync yet
+    assert channel.request_state is None
+
+
+@pytest.mark.asyncio
+async def test_the_first_sync_overrides_a_restored_pause():
+    channel = channel_for(SyncPhone())
+    channel.restore_rate_limit(time.time() + 3600)
+    assert await channel.sync_vehicle() is True
+    assert channel.request_state == "available" and not channel._is_rate_limited()

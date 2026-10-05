@@ -8257,7 +8257,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         restart never wakes the car on its own, and turning the slider from 0
         back on starts a fresh interval.
 
-        Every attempt is followed by a screen read, so the Vehicle requests
+        Every attempt is followed by a screen read, so the App request status
         sensor shows its outcome: after an accepted sync once the car has had
         time to answer, otherwise straight away.
         """

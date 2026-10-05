@@ -648,8 +648,8 @@
       "last_vehicle_sync": {
         "name": "Poslední synchronizace vozidla"
       },
-      "vehicle_requests": {
-        "name": "Požadavky na vozidlo",
+      "app_request_status": {
+        "name": "Stav požadavků aplikace",
         "state": {
           "available": "Dostupné",
           "restricted": "Omezené"

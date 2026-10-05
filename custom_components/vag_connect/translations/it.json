@@ -654,8 +654,8 @@
       "last_vehicle_sync": {
         "name": "Ultima sincronizzazione del veicolo"
       },
-      "vehicle_requests": {
-        "name": "Richieste al veicolo",
+      "app_request_status": {
+        "name": "Stato richieste dell'app",
         "state": {
           "available": "Disponibile",
           "restricted": "Limitato"
