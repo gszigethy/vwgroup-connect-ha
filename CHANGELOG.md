@@ -42,6 +42,29 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.12.0b1] - 2026-10-05 — Rebased onto upstream 4.11.0 (fork pre-release)
+
+> Fork beta from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha), based on
+> [upstream v4.11.0](https://github.com/its-me-prash/vwgroup-connect-ha/releases/tag/v4.11.0).
+> Credit for the integration and upstream release belongs to Prash Balan (@its-me-prash) and upstream contributors.
+
+### From upstream
+- Rebased onto the released 4.11.0 tag, including the upstream app-atlas refresh. Upstream's trip figures
+  (#1313, @realynot) and re-login Fix button (#1717, @Ra72xx) remain included; they were already present in beta 4.
+
+### Fork changes
+- Retains the battery and climate Companion features and fixes from betas 1–4. Evidence credits remain in those
+  notes: @plainmad's Golf GTE, @kgroshert's ID.4 and e-up!, and @gszigethy's Tiguan eHybrid (#968, #1684).
+- Rebased the battery and climate proposal branches independently onto upstream 4.11.0.
+- Release links now point to this fork and comparisons include beta versions.
+- The unfinished restricted-overview draft is excluded. This beta adds no new vehicle commands.
+
+### Installation and validation
+- In HACS, use this fork as the custom Integration repository and enable **Show beta versions**. The HA domain
+  remains `vag_connect`, so this updates the existing installation. Version 4.12.0b1 sorts after stable 4.11.0.
+- Automated regression checks cover the rebase; no vehicle commands or Home Assistant changes were made for this release.
+
+
 ## [4.11.0b4] - 2026-10-04 — The car's request limit, named (fork pre-release)
 
 > Pre-release from the fork [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha), after the
@@ -160,6 +183,31 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
   for the tick box in the full options form. Six steps before you reached the login. Selecting **Fix** now does all of
   that for you and opens the login for the car the notice is about. The one-time code itself is unchanged: Volkswagen
   wants it and only you have it.
+
+## [4.11.0] - 2026-10-04 — Trip figures and a Fix button / Fahrtdaten und ein Fix-Knopf
+
+### Added
+- **Trip and consumption figures for Car-Net cars on the volkswagen.de channel (#1313, thanks @realynot).**
+  Older Volkswagens whose data comes through the volkswagen.de channel now get their three trip-computer memories:
+  the last trip, the cumulative long-term one, and the distance since refuelling — each with distance, duration,
+  average speed and average consumption, fuel and electric separately. These are the figures the car shows on its
+  own display and the website shows online, and on these cars the EU Data Act portal does not deliver them at all.
+  @realynot captured all three from his Tiguan in one session a month ago, including the awkward cases: a downhill
+  trip where the electric consumption is **negative** because the car recovered more than it used (the website shows
+  that too, and the sign is kept), a leg driven purely on electricity where the fuel figure is simply absent, and a
+  month of individual trips that arrive in no particular order, so the newest is picked by its timestamp rather than
+  by position.
+
+### Changed
+- **The "Volkswagen.de channel needs re-login" notice now has a Fix button that takes you straight to the login (#1717, thanks @Ra72xx).**
+  Volkswagen asks for the e-mail one-time code again every few weeks, and until now the notice about it only told you
+  what to do: open the integration's options and re-run "Add a Volkswagen.de read channel". Following that meant
+  Settings, then Devices & Services, then finding the integration, then finding the **right** entry — anyone with two
+  accounts or two cars set up separately has several, and the notice never said which — then Configure, then hunting
+  for the tick box in the full options form. Six steps before you reached the login. Selecting **Fix** now does all of
+  that for you and opens the login for the car the notice is about. The one-time code itself is unchanged: Volkswagen
+  wants it and only you have it.
+
 
 ## [4.10.0] - 2026-10-04 — Full release / Voll-Release
 

@@ -62,7 +62,7 @@ jobs:
           # All previous semver versions, newest first. Date is captured
           # from the `## [X.Y.Z] - YYYY-MM-DD` header when present.
           all_entries = re.findall(
-              r"## \[(\d+\.\d+\.\d+)\](?:\s*-\s*(\d{4}-\d{2}-\d{2}))?",
+              r"## \[(\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)\](?:\s*-\s*(\d{4}-\d{2}-\d{2}))?",
               changelog,
           )
           versions_only = [v for v, _ in all_entries]
@@ -71,7 +71,7 @@ jobs:
           # Last 3 prior versions for the "Recent releases" pointer
           recent_prior = [(v, d) for v, d in all_entries if v != version][:3]
 
-          repo = "its-me-prash/vwgroup-connect-ha"
+          repo = os.environ["GITHUB_REPOSITORY"]
 
           lines: list[str] = []
 
@@ -120,9 +120,9 @@ jobs:
           # ── Installation / Update ────────────────────────────────────────
           lines.append("## Installation / Update")
           lines.append("")
-          lines.append("**HACS users:** the update notification appears automatically within ~6 hours of the release.")
+          lines.append("**HACS users:** enable Show beta versions for this fork custom Integration repository, then select the new beta.")
           lines.append("")
-          lines.append("**HACS-User:** Der Update-Hinweis erscheint automatisch innerhalb von ~6 Stunden nach dem Release.")
+          lines.append("**HACS-User:** Beta-Versionen für dieses Fork-Repository aktivieren und die neue Beta auswählen.")
           lines.append("")
           lines.append("**Manual install / Manuelle Installation:**")
           lines.append("")
