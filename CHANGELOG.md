@@ -42,6 +42,31 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.12.0b7] - 2026-10-05 — Battery level during the request-limit pause (fork pre-release)
+
+> Fork beta from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): 4.12.0b6 with the
+> battery level kept current while the car refuses requests. Same content as the updated
+> [#1735](https://github.com/its-me-prash/vwgroup-connect-ha/pull/1735).
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** this fork publishes only pre-releases. Turn on *Show beta versions* for this repository in
+> HACS, or HACS falls back to a commit download that fails (404) and the old version stays installed while HACS
+> reports the new one.
+
+### From the fork's pending upstream pull requests
+
+#### Fixed
+- **Companion: the battery level no longer freezes during the request-limit pause (#968).** On app 4.3.2 the
+  overview's range tile reads out only the ranges; "Battery 77 %" is drawn but left out of what the app exposes, so
+  the battery level is read from the charge sheet behind the tile. That walk was skipped while the pause ran, so the
+  battery level stayed at its last value while the electric range kept falling. Opening the sheet is app navigation,
+  not a request to the car, so it now runs during the pause too (charge target, power and remaining time with it). A
+  walk that meets the limit alert still stops there, and commands still wait.
+
+### Installation and validation
+- Automated regression checks use the captured Tiguan overview and charge sheet. After updating, with the pause from
+  today still running (until 00:57 UTC), *Battery level* should follow the app within one 15-minute charge-sheet read.
+
 ## [4.12.0b6] - 2026-10-05 — App request status (fork pre-release)
 
 > Fork beta from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): 4.12.0b5 with the
