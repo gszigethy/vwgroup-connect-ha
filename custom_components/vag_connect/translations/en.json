@@ -1983,6 +1983,9 @@
       },
       "scan_interval": {
         "name": "Poll interval"
+      },
+      "app_sync_interval": {
+        "name": "Vehicle sync interval"
       }
     },
     "button": {

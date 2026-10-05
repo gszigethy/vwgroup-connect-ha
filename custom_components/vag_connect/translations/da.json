@@ -1983,6 +1983,9 @@
       },
       "scan_interval": {
         "name": "Pollingsinterval"
+      },
+      "app_sync_interval": {
+        "name": "Interval for synkronisering af bil"
       }
     },
     "button": {

@@ -1983,6 +1983,9 @@
       },
       "scan_interval": {
         "name": "Abfrageintervall"
+      },
+      "app_sync_interval": {
+        "name": "Fahrzeug-Synchronisierungsintervall"
       }
     },
     "button": {
