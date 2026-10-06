@@ -64,11 +64,10 @@ _CLIMA_KEYS = (
     CLIMA_MODE_AC, CLIMA_MODE_WINDOW_HEATING, CLIMA_ZONES, CLIMA_ZONES_SEVERAL,
     *CLIMA_ZONE_KEYS,
 )
-# Charging switches on vehicle Settings, read into the values the EU Data Act
-# portal reports for the same settings (MAX_CHARGE_CURRENT_AC_*, AUTO_UNLOCK_AC_*).
+# Switches on vehicle Settings, read into the field the VW cloud parser fills
+# for the same setting (vw_eu: autoUnlockPlugWhenCharged).
 SETTINGS_SWITCHES = {
-    "vehiclesettingsscreen_reducedchargingspeed": ("max_charge_current_ac", "REDUCED", "MAXIMUM"),
-    "vehiclesettingsscreen_automaticplugunlock": ("auto_unlock_charge_port", "PERMANENT", "OFF"),
+    "vehiclesettingsscreen_automaticplugunlock": ("auto_unlock_when_charged", True, False),
 }
 _SINGLE_KEYS = frozenset({
     "acc_common_hint_details", "acc_vehicle_tab_label_settings", *_LIMIT_KEYS,
@@ -497,7 +496,7 @@ def _read_zones(nodes: list[UiNode], resources: StringResources) -> dict[str, ob
 
 
 def read_settings_resources(nodes: list[UiNode], resources: StringResources) -> dict[str, object]:
-    """The charging switches on vehicle Settings, by the app's own labels.
+    """Switches on vehicle Settings, by the app's own labels.
 
     A switch row is the checkable node whose bounds hold the label; its
     ``checked`` attribute is the setting. Read only: nothing here is tapped.
