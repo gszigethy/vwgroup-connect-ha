@@ -278,7 +278,7 @@ async def test_command_readback_walks_only_its_own_detail_path():
     channel._nav_only = {"charge_detail"}
     walked = []
 
-    async def fake_walk(path):
+    async def fake_walk(path, here=None):
         walked.append(path[0].action)
         return None, 0
 
@@ -286,3 +286,25 @@ async def test_command_readback_walks_only_its_own_detail_path():
     await channel._augment_via_nav({})
     assert walked == ["open_charge_detail"]
     assert channel._nav_only == set()
+
+
+@pytest.mark.asyncio
+async def test_climate_sheet_and_its_settings_are_read_on_one_walk():
+    channel = CompanionChannel(Phone(), VW, time_fn=time.monotonic,
+                               nav_opt_ins={"climate_detail", "climate_settings"})
+    sheet = parse_ui_dump('<hierarchy><node text="Air Conditioning" bounds="[0,0][10,10]"/></hierarchy>')
+    walks, backs = [], []
+
+    async def fake_walk(path, here=None):
+        walks.append(([s.action for s in path], here))
+        return (sheet if here is None else []), len(path)
+
+    async def fake_back(presses=1):
+        backs.append(presses)
+
+    channel._walk_to_detail = fake_walk
+    channel._return_to_overview = fake_back
+    await channel._augment_via_nav({})
+    # The tile is tapped once; Settings continues from the sheet just read.
+    assert walks == [(["open_climate_detail"], None), (["open_climate_settings"], sheet)]
+    assert backs == [2]
