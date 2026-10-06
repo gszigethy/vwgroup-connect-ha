@@ -39,7 +39,7 @@ itself as `<label>. <value>. <hint>`.
 | Vehicle (lock) | `Vehicle. Locked. Open details` | `doors_locked` → Doors Locked | `acc_vehicle_tab_label_lock_unlock_vehicle`, `…_state_locked/_unlocked` | Mapped by EN/DE regex; by keys in PR #11 |
 | Horn and Turn Signals | `Horn and Turn Signals. Open details` | — | — | Not mapped (a command surface; never opened live) |
 | Departure times | `Departure times. Open details` | — | — | See Departure times |
-| Driving data | `Driving data. Last driven: 3.0 kilometres. Average consumption: 0 litres per 100 kilometres. Open details` | — | `acc_vehicle_tab_value_driving_data_distance_consumption_km/_miles` | Decision D3 |
+| Driving data | `Driving data. Last driven: 3.0 kilometres. Average consumption: 0 litres per 100 kilometres. Open details` | — | `acc_vehicle_tab_label_driving_data` | See Driving data |
 | Vehicle Health Report | `Vehicle Health Report. Open details` | — | — | See Vehicle Health Report |
 | Your vehicle | `Your vehicle: <model>. Synchronised 4 hours 4 minutes ago` | `companion_app_synced_at` → Last vehicle sync | `SYNC_*` | Mapped |
 
@@ -55,7 +55,7 @@ Tap the range tile; close with *Close sheet*.
 | `rangeArcBatterySoc` | `Charging status. Battery charge level: 83 per cent. Target charge level reached` | `battery_soc`, `charging_state`, `is_charging` | Mapped |
 | Charging details | `Charging details. Target charge level: 80 per cent` | `target_soc` | Mapped |
 | Power, speed, time | ID.4: 10 kW, 270 min | `charging_power_kw`, `charging_rate_kmh`, `remaining_charge_time_min` | Mapped |
-| Charging method | `Charging method. Immediate charging. Change charging method` | `vw_eu` field `charge_mode` | Decision D2 |
+| Charging method | `Charging method. Immediate charging. Change charging method` | `charge_mode` → Charging Mode (read-only sensor) | PR #13 |
 | Start/Stop charging | CTA | `command_start/stop_charging` | Mapped (command) |
 
 ## Air Conditioning sheet and Settings (nav reads `climate_detail`, `climate_settings`)
@@ -75,27 +75,35 @@ boot. Nothing beyond the overview tile to read.
 
 ## Departure times
 
-Three timers. Each has a time (`07:25 AM`), a recurrence (`Weekdays`,
-`Saturday`) and a `checkable` switch (all off on the Tiguan). The climate
-target is in the description (`… chosen temperature of 22.0°C`). The charging
-section needs charging locations set in the car.
+Nav read `departure_times` (opt-in, PR #15). Three timers. Each has a time
+(`07:25 AM`), a recurrence (`Weekdays`, `Saturday`) and a `checkable` switch
+(all off on the Tiguan). The climate target is in the description (`… chosen
+temperature of 22.0°C`). Without timer data the app shows only the section
+headers and `departure_timer_subscreen_climadeactivated_footer`. The charging
+section needs charging locations set in the car; its preferred charging times
+go with the charge mode *Charge at preferred times*.
 
 | Value | Field → entity | Status |
 |---|---|---|
-| Timer on/off | `departure_timer_N_enabled` → Departure Timer N Enabled | Shown as *off* from the model default without being read; PR #10 makes them unknown. Reading them: Decision D1 |
-| Timer time | `departure_timer_N_time` | Decision D1 |
+| Timer on/off | `departure_timer_N_enabled` → Departure Timer N Enabled | Unknown unless read (PR #10); read from the switch's `checked` state (PR #15) |
+| Timer time | `departure_timer_N_time` | 24-hour `HH:MM` (PR #15) |
+| Enabled count | `departure_timer_enabled_count` | When all three rows are on screen (PR #15) |
 
 ## Driving data
 
-| Section | Values |
-|---|---|
-| Last single trip | date, time, distance, consumption (kWh/100 km and l/100 km), average speed, driving time |
-| From charging or refuelling | the same set |
-| Month | average consumption |
+Nav read `driving_data` (opt-in, PR #16). The trip cards sit in a sideways
+carousel; the second is drawn clipped (labels, no values) until one sideways
+swipe.
 
-Keys: `volkswagen_acc_cat_snowshoe_rts_*` (`distanceDrivenLabel`,
-`averageSpeedLabel`, `drivingTimeLabel`, `lastSingleTripLabel`). The `vw_eu`
-fields `last_trip_*` and `refuel_trip_*` exist. Decision D3.
+| Card | Values | Fields | Status |
+|---|---|---|---|
+| Last single trip | date, time, distance, consumption (kWh/100 km and l/100 km), average speed, driving time | `last_trip_*` | PR #16 (not date/time) |
+| From charging or refuelling | the same set | `refuel_trip_*` | PR #16 (not date/time) |
+| Last long-haul trip | the same set | — | Not mapped |
+| Month | average consumption | — | Not mapped |
+
+Keys: `volkswagen_acc_cat_snowshoe_rts_*` labels and `volkswagen_cat_snowshoe_rts_unit*`
+units; durations by `duration_hours` / `duration_minutes`.
 
 ## Vehicle Health Report (nav read `vehicle_health`)
 
@@ -105,7 +113,7 @@ fields `last_trip_*` and `refuel_trip_*` exist. Decision D3.
 | Next service | `711 days / 29,700 km` | `71 days / 12,100 mi` | `service_due_in_days`, `service_km` | `…_subhead_nextinspection` | Days mapped; distance in PR #8 |
 | Next oil service | — | `71 days / 1,500 mi` | `oil_service_due_in_days`, `oil_service_km` | `…_subhead_oil_service` | Days mapped; distance in PR #8 |
 | AdBlue range | — | — | `adblue_range_km` | `…_subhead_adblue_level` | PR #8 (no dump yet) |
-| Warning categories | `No issues found` + 7 categories | same | — | `screen_vehiclehealth_overview_*` | Decision D4 |
+| Warning header and categories | `No issues found` + 7 categories | same | `warning_active`, `warning_count`, `warning_messages` | `screen_vehiclehealth_overview_*` | PR #14 |
 
 ## Vehicle Settings (nav read `vehicle_settings`)
 
@@ -135,19 +143,19 @@ fields `last_trip_*` and `refuel_trip_*` exist. Decision D3.
 
 ## Stale entities on the companion entry
 
-These are registered but nothing in the current companion code feeds them:
+Three registered entities nothing in the current companion code fed were
+removed from the HA registry on 2026-10-06: `sensor.<car>_vehicle_requests`
+(left from the dropped betas), `sensor.<car>_vehicle_status`
+(`vehicle_state`) and `binary_sensor.<car>_rear_window_heating`
+(`window_heating_back`).
 
-- `sensor.<car>_vehicle_requests`: the key no longer exists in the code (left
-  from the dropped betas).
-- `sensor.<car>_vehicle_status` (`vehicle_state`).
-- `binary_sensor.<car>_rear_window_heating` (`window_heating_back`).
+## Decisions (resolved 2026-10-06)
 
-## Decisions
-
-- **D1, departure times:** read the three timers (switch state and time) from the Departure times screen as
-  a new opt-in nav read, or leave them hidden (PR #10).
-- **D2, charge mode:** the `vw_eu` field `charge_mode` only feeds the charge-mode select, which needs a command
-  the companion lacks. Reading it shows nothing unless a read-only charge-mode sensor is added.
-- **D3, driving data:** a new opt-in nav read for last trip / since refuel into `last_trip_*` / `refuel_trip_*`.
-- **D4, health warnings:** *No issues found* vs *Issues found* (+ which category) as a sensor.
-- **D5, stale entities:** remove the three stale registry entries above.
+- **D1, departure times:** a new opt-in nav read (PR #15).
+- **D2, charge mode:** read into `charge_mode` with a read-only sensor (PR #13).
+  In the APK the charging method is set per charging location; *Charge at
+  preferred times* charges only inside that location's preferred times,
+  which are set in the infotainment.
+- **D3, driving data:** a new opt-in nav read (PR #16).
+- **D4, health warnings:** read into the warning fields (PR #14).
+- **D5, stale entities:** removed.
