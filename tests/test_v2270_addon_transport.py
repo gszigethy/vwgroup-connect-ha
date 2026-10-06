@@ -160,8 +160,9 @@ class TestInheritedBehaviour:
         asyncio.run(t.connect())
         assert "<hierarchy" in asyncio.run(t.dump_ui())
         posts = [c for c in sess.calls if c[0] == "POST"]
-        assert len(posts) == 3  # rm, uiautomator dump, cat
-        assert b"uiautomator dump" in posts[1][2]["data"]
+        assert len(posts) == 1  # rm, uiautomator dump and cat in one shell call
+        body = posts[0][2]["data"]
+        assert body.index(b"rm -f") < body.index(b"uiautomator dump") < body.index(b"cat ")
 
     def test_a_failed_dump_is_still_honest(self) -> None:
         """The stale-dump guard is inherited too: no hierarchy means no data,

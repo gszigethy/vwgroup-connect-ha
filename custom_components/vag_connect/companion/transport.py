@@ -133,9 +133,13 @@ class NetworkAdbTransport:
         # would parse a frozen screen as if it were live, the connector
         # manufacturing its own stale value. Removing it first turns a failed
         # dump into an honest no-data (empty cat, guard raises) instead.
-        await self.shell(f"rm -f {_DUMP_PATH}", timeout_s)
-        await self.shell(f"uiautomator dump {_DUMP_PATH}", timeout_s)
-        xml = await self.shell(f"cat {_DUMP_PATH}", timeout_s)
+        # One shell round trip for all three steps; the dump itself (~1.5 s,
+        # uiautomator waits for the UI to go idle) is the cost that remains.
+        xml = await self.shell(
+            f"rm -f {_DUMP_PATH}; uiautomator dump {_DUMP_PATH} >/dev/null; "
+            f"cat {_DUMP_PATH}",
+            timeout_s,
+        )
         if "<hierarchy" not in xml:
             raise CompanionTransportError(
                 "uiautomator returned no screen dump; the phone may be asleep, "
@@ -211,7 +215,9 @@ class NetworkAdbTransport:
 
     async def tap(self, x: int, y: int, timeout_s: float = 10.0) -> None:
         await self.shell(f"input tap {int(x)} {int(y)}", timeout_s)
-        await asyncio.sleep(0.6)
+        # Short: every tap is followed by a dump, and uiautomator itself waits
+        # for the UI to go idle before it reads the tree.
+        await asyncio.sleep(0.25)
 
     # v2.26.0 — reliability primitives adapted from the prior-art ADB projects.
 
@@ -258,7 +264,7 @@ class NetworkAdbTransport:
         overlay recovery is safe to run even on the unverified read-only brands.
         """
         await self.shell("input keyevent 4", timeout_s)  # KEYCODE_BACK
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.25)
 
     async def is_foreground(self, package: str, timeout_s: float = 10.0) -> bool:
         """True if ``package`` is the frontmost app.

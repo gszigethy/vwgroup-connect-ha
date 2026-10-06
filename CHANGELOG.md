@@ -42,6 +42,25 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0-3] - 2026-10-06 — Faster phone navigation
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.11.0** plus fork release **3**, on top of 4.11.0-2.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a regular release — select `v4.11.0-3`, download, and restart Home Assistant.
+
+### Changed / Geändert
+- **Companion: walks through the app take fewer screen dumps.** Between two steps of a walk, the first dump that
+  already shows the next step's control (with no overlay up) ends the wait; the screen a walk reads its values from
+  still gets the full two-dump settle. A uiautomator dump costs about 1.5 s, so this saves roughly that much per
+  intermediate step.
+- **Companion: one ADB shell call per screen dump.** Removing the old file, dumping and reading it back now run in a
+  single shell command instead of three, in the same order, so a failed dump still yields no data rather than the
+  previous screen.
+- **Companion: shorter fixed waits after a tap (0.6 → 0.25 s) and after BACK (0.5 → 0.25 s).** A dump always follows,
+  and uiautomator waits for the UI to go idle before it reads the tree.
+
 ## [4.11.0-2] - 2026-10-06 — Air Conditioning read by the app's own labels
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream

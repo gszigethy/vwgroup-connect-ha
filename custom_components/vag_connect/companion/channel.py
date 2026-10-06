@@ -500,7 +500,7 @@ class CompanionChannel:
         # What the previous step already settled, so a step never dumps a
         # screen its predecessor just finished reading.
         pending: str | None = None
-        for step in steps:
+        for index, step in enumerate(steps):
             nodes, cleared = await self._dump_and_clear_overlays(pending)
             pending = None
             if not cleared:
@@ -513,11 +513,7 @@ class CompanionChannel:
                 # fold. Scroll once, then look again; a control that is still
                 # absent stops the walk as usual.
                 nodes = await self._scroll_up(nodes)
-            node = find_node_for(nodes, step)
-            if step.action == "open_charge_detail" and node is None:
-                node = find_battery_tile(nodes, self._app_strings)
-            if step.action == "open_vehicle_settings" and node is None:
-                node = find_settings_entry(nodes, self._app_strings)
+            node = self._step_node(nodes, step)
             point = tap_point_for(node, step.tap_fraction) if node is not None else None
             if point is None:
                 _LOGGER.debug(
@@ -531,7 +527,16 @@ class CompanionChannel:
             # A Compose screen renders in stages, so the tree right after a tap
             # is routinely half-built. Wait for it to stop changing before the
             # next step reads it, or a step lands on a screen that has moved.
-            pending = await self._settle()
+            # Between steps, the next control being drawn is settled enough;
+            # the last screen is read, so it gets the full settle.
+            ready: Callable[[list[UiNode]], bool] | None = None
+            if index + 1 < len(steps):
+                following = steps[index + 1]
+
+                def ready(n: list[UiNode], s: ActionSelector = following) -> bool:
+                    return self._step_node(n, s) is not None
+
+            pending = await self._settle(ready)
         detail, cleared = await self._dump_and_clear_overlays(pending)
         return (detail if cleared else None), taps
 
@@ -561,8 +566,22 @@ class CompanionChannel:
         scrolled, cleared = await self._dump_and_clear_overlays()
         return scrolled if cleared else nodes
 
-    async def _settle(self) -> str | None:
+    def _step_node(self, nodes: list[UiNode], step: "ActionSelector") -> UiNode | None:
+        node = find_node_for(nodes, step)
+        if step.action == "open_charge_detail" and node is None:
+            node = find_battery_tile(nodes, self._app_strings)
+        if step.action == "open_vehicle_settings" and node is None:
+            node = find_settings_entry(nodes, self._app_strings)
+        return node
+
+    async def _settle(
+        self, ready: Callable[[list[UiNode]], bool] | None = None
+    ) -> str | None:
         """Dump until the tree stops changing, and hand the result back.
+
+        ``ready`` ends the wait after the first dump that satisfies it (with
+        no overlay up), saving the confirming dump when the screen a caller
+        needs is already drawn.
 
         Returns the settled XML so the caller can read the screen it just
         waited for instead of dumping it a third time. That matters on ADB,
@@ -578,6 +597,10 @@ class CompanionChannel:
                 return previous
             if current == previous:
                 return current
+            if ready is not None:
+                nodes = parse_ui_dump(current)
+                if find_overlay(nodes, self._preset) is None and ready(nodes):
+                    return current
             previous = current
         return previous
 
