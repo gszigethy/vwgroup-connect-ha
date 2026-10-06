@@ -64,9 +64,18 @@ _CLIMA_KEYS = (
     CLIMA_MODE_AC, CLIMA_MODE_WINDOW_HEATING, CLIMA_ZONES, CLIMA_ZONES_SEVERAL,
     *CLIMA_ZONE_KEYS,
 )
+# Overview tiles narrate "<label>. <value>. <hint>" (Vehicle. Locked. Open details).
+TILE_LOCK = "acc_vehicle_tab_label_lock_unlock_vehicle"
+TILE_LOCKED = "acc_vehicle_tab_value_lock_unlock_vehicle_state_locked"
+TILE_UNLOCKED = "acc_vehicle_tab_value_lock_unlock_vehicle_state_unlocked"
+TILE_CLIMA = "acc_vehicle_tab_clima_tile_label"
+TILE_CLIMA_ON = "acc_vehicle_tab_clima_tile_value_all_clima_on"
+TILE_CLIMA_OFF = "acc_vehicle_tab_clima_tile_value_all_clima_off"
+_TILE_KEYS = (TILE_LOCK, TILE_LOCKED, TILE_UNLOCKED, TILE_CLIMA, TILE_CLIMA_ON, TILE_CLIMA_OFF)
 _SINGLE_KEYS = frozenset({
     "acc_common_hint_details", "acc_vehicle_tab_label_settings", *_LIMIT_KEYS,
     SYNC_LAST_UPDATE, SYNC_JUST_NOW, SYNC_TOO_OLD, DATA_UNAVAILABLE, *_CLIMA_KEYS,
+    *_TILE_KEYS,
 })
 # Android's plural quantity attributes (``android:^attr-private`` ids).
 _QUANTITIES = {
@@ -487,3 +496,26 @@ def _read_zones(nodes: list[UiNode], resources: StringResources) -> dict[str, ob
             if match and match.lastindex and match.group(1) == "2":
                 return {"climate_zone_front_left": True, "climate_zone_front_right": True}
     return {}
+
+
+def read_overview_resources(nodes: list[UiNode], resources: StringResources) -> dict[str, object]:
+    """The lock and climate tiles of the overview, by the app's own labels.
+
+    Only a value the app names exactly is taken: "Is being locked" and the
+    climate tile's "information not available" leave the field to the
+    preset's selectors, as does a language whose labels could not be read.
+    """
+    out: dict[str, object] = {}
+    lock, locked, unlocked = (_labels(resources, k) for k in (TILE_LOCK, TILE_LOCKED, TILE_UNLOCKED))
+    clima, clima_on, clima_off = (_labels(resources, k) for k in (TILE_CLIMA, TILE_CLIMA_ON, TILE_CLIMA_OFF))
+    for node in nodes:
+        parts = [p.strip().casefold() for p in node.content_desc.split(". ")]
+        if len(parts) < 2:
+            continue
+        label, value = parts[0], parts[1].rstrip(".")
+        if label in lock and value in locked | unlocked:
+            out["doors_locked"] = value in locked
+        elif label in clima and value in clima_on | clima_off:
+            out["climatisation_active"] = value in clima_on
+            out["climatisation_state"] = node.content_desc.split(". ")[1].strip().rstrip(".")
+    return out
