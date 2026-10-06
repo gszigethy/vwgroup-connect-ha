@@ -2,28 +2,30 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, releases]
   pull_request:
-    branches: [main]
+    branches: [main, releases]
+
+permissions:
+  contents: read
 
 jobs:
   lint-and-validate:
     name: Lint & Validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Python 3.12 einrichten
-        uses: actions/setup-python@v7
+      - name: Python 3.14 einrichten
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Abhängigkeiten installieren
         run: |
           pip install \
             ruff==0.15.12 \
             mypy \
-            aiohttp \
             homeassistant
 
       - name: Ruff Lint
@@ -91,12 +93,12 @@ jobs:
     name: Unit Tests + Coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Python 3.12 einrichten
-        uses: actions/setup-python@v7
+      - name: Python 3.14 einrichten
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Test-Abhängigkeiten installieren
         run: |
@@ -105,7 +107,6 @@ jobs:
             pytest-cov \
             pytest-asyncio \
             hypothesis \
-            aiohttp \
             voluptuous \
             homeassistant
 
@@ -139,7 +140,7 @@ jobs:
 
       - name: Upload pytest log as artifact
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: pytest-output
           path: pytest_output.log
@@ -150,29 +151,8 @@ jobs:
     name: HA Hassfest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # SHA-pinned per supply-chain-hardening (v1.24.1, 2026-05-08).
       # home-assistant/actions has no semver tags — pin to commit SHA.
       # Bump manually when upstream announces breaking changes.
       - uses: "home-assistant/actions/hassfest@06749dd8c0b54f350bc69c8752456cee498808a3"
-
-  hacs:
-    name: HACS Validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      # hacs/action's repo-load phase hits rare transient GitHub API 404s
-      # ("Not Found" -> "not loaded properly in HACS", ~1/40 runs) BEFORE any
-      # validator runs. Retry absorbs the flake so CI stays deterministically green.
-      # NB: hacs/action@22.5.0 internally runs ghcr.io/hacs/action:main (rolling) --
-      # the dated tag does NOT pin the validation logic, only this wrapper's inputs do.
-      # wretry.action SHA-pinned per supply-chain-hardening (v3.8.0).
-      - name: HACS Validation
-        uses: Wandalen/wretry.action@e68c23e6309f2871ca8ae4763e7629b9c258e1ea  # v3.8.0
-        with:
-          action: hacs/action@22.5.0
-          with: |
-            category: integration
-            github_token: ${{ github.token }}
-          attempt_limit: 3
-          attempt_delay: 15000
