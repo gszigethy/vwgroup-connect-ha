@@ -10,7 +10,7 @@ import struct
 import pytest
 from hypothesis import given, strategies as st
 
-from custom_components.vag_connect.companion.resources import extract_battery_strings
+from custom_components.vag_connect.companion.resources import extract_app_strings
 from custom_components.vag_connect.companion.transport import NetworkAdbTransport
 
 KEY = "acc_vehicle_tab_range_tile_value_petrol_level"
@@ -50,12 +50,12 @@ def table(text="Fuel level: %s per cent", utf8=True, flags=0):
 @pytest.mark.parametrize("flags", [0, 1, 2])
 def test_resource_table_encodings_and_offset_formats(utf8, flags):
     label = "É" * 80 + " %s"
-    assert extract_battery_strings(table(label, utf8, flags)) == {KEY: {label}}
+    assert extract_app_strings(table(label, utf8, flags)) == {KEY: {label}}
 
 
 @given(st.binary(max_size=1024))
 def test_arbitrary_resource_bytes_never_raise(data):
-    assert isinstance(extract_battery_strings(data), dict)
+    assert isinstance(extract_app_strings(data), dict)
 
 
 @pytest.mark.asyncio

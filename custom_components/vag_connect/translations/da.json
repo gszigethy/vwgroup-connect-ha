@@ -1099,6 +1099,13 @@
       "climate_mode": {
         "name": "Klimatilstand"
       },
+      "climate_start_mode": {
+        "name": "Klima startmodus",
+        "state": {
+          "air_conditioning": "Klimaanlæg",
+          "window_heating": "Rudeopvarmning"
+        }
+      },
       "active_target_soc": {
         "name": "Aktivt lademål"
       },

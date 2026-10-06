@@ -15,7 +15,7 @@ from custom_components.vag_connect.companion.channel import CompanionChannel, Co
 from custom_components.vag_connect.companion.client import CompanionClient
 from custom_components.vag_connect.companion.presets import PRESETS
 from custom_components.vag_connect.companion.resources import (
-    extract_battery_strings,
+    extract_app_strings,
     find_battery_control,
     find_battery_tile,
     read_battery_resources,
@@ -27,11 +27,11 @@ from custom_components.vag_connect.switch import VagChargingSwitch
 FIXTURES = Path(__file__).parent / "fixtures" / "companion_battery"
 VW = PRESETS["volkswagen"]
 CHARGE = next(nav for nav in VW.nav_reads if nav.name == "charge_detail")
-STRINGS = {k: set(v) for k, v in json.loads((FIXTURES / "vw_432_resources.json").read_text()).items()}
+STRINGS = {k: set(v) for k, v in json.loads((FIXTURES / "vw_432_resources.json").read_text(encoding="utf-8")).items()}
 
 
 def dump(name: str) -> str:
-    return (FIXTURES / (name + ".xml")).read_text()
+    return (FIXTURES / (name + ".xml")).read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(("name", "expected"), [
@@ -107,7 +107,7 @@ def test_target_reached_button_is_disabled_despite_compose_enabled_flag():
 
 @pytest.mark.parametrize(("active", "state", "expected"), [
     (True, "Currently charging", True), (False, "charging", False),
-    (None, "conservationCharging", True),
+    (None, "conservationCharging", True), (False, "conservationCharging", True),
 ])
 def test_ha_charging_switch_uses_explicit_state_with_legacy_fallback(active, state, expected):
     switch = VagChargingSwitch.__new__(VagChargingSwitch)
@@ -126,7 +126,7 @@ def test_translated_tile_requires_details_hint_not_detail_arc():
 
 @pytest.mark.parametrize("data", [b"", b"garbage", b"\x02\x00\x0c\x00\xff\xff\xff\xff"])
 def test_bad_resource_table_fails_closed(data):
-    assert extract_battery_strings(data) == {}
+    assert extract_app_strings(data) == {}
 
 
 class Phone:

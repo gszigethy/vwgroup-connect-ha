@@ -183,7 +183,7 @@ class NetworkAdbTransport:
         import re  # noqa: PLC0415
         import shlex  # noqa: PLC0415
 
-        from .resources import extract_battery_strings  # noqa: PLC0415
+        from .resources import extract_app_strings  # noqa: PLC0415
 
         out: dict[str, set[str]] = {}
         paths = await self.shell(f"pm path {shlex.quote(package)}")
@@ -202,7 +202,7 @@ class NetworkAdbTransport:
                     data = table.read(16 * 1024 * 1024 + 1)
                 if len(data) > 16 * 1024 * 1024:
                     continue
-                strings = await asyncio.to_thread(extract_battery_strings, data)
+                strings = await asyncio.to_thread(extract_app_strings, data)
                 for key, values in strings.items():
                     out.setdefault(key, set()).update(values)
             except (ValueError, OSError, EOFError):

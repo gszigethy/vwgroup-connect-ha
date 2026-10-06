@@ -56,6 +56,7 @@ from .resources import (
     find_request_limit,
     find_settings_entry,
     read_battery_resources,
+    read_climate_resources,
 )
 from .app_sync import find_sync_button
 from .sync_time import find_sync_line
@@ -171,7 +172,7 @@ class CompanionChannel:
         # the next poll; the other opted-in paths keep their own cadence.
         self._nav_only: set[str] = set()
         self._screen_lock = asyncio.Lock()
-        self._battery_strings: dict[str, set[str]] = {}
+        self._app_strings: dict[str, set[str]] = {}
         self._strings_version: str | None = None
         self._strings_at: float | None = None
 
@@ -371,7 +372,7 @@ class CompanionChannel:
         self._source_data_age_s = find_sync_age(nodes, self._preset)
         fields = read_fields(nodes, self._preset)
         if self._preset.brand == "volkswagen":
-            fields.update(read_battery_resources(nodes, self._battery_strings))
+            fields.update(read_battery_resources(nodes, self._app_strings))
             self._note_sync_line(nodes)
         if self._seen_at is not None:
             fields["companion_app_synced_at"] = self._seen_at
@@ -409,7 +410,7 @@ class CompanionChannel:
         On 4.3.2 a refused request shows both, one after the other, each as its
         own dialog window that BACK closes.
         """
-        return self._limit_on_screen(nodes) or find_app_alert(nodes, self._battery_strings)
+        return self._limit_on_screen(nodes) or find_app_alert(nodes, self._app_strings)
 
     async def _close_dialogs(self, nodes: list[UiNode]) -> tuple[list[UiNode], bool]:
         """BACK past the app's alerts; (nodes, True) once none is left."""
@@ -428,7 +429,7 @@ class CompanionChannel:
         move it forward, closing in on the real time from below. A screen
         without the line (a sync in progress, a date-only line) changes nothing.
         """
-        line = find_sync_line(nodes, self._battery_strings)
+        line = find_sync_line(nodes, self._app_strings)
         if line is None:
             return
         now = datetime.fromtimestamp(self._wall(), tz=timezone.utc).replace(microsecond=0)
@@ -461,7 +462,11 @@ class CompanionChannel:
                 if detail is not None:
                     values = read_selectors(detail, nav.values)
                     if self._preset.brand == "volkswagen" and nav.name == "charge_detail":
-                        values.update(read_battery_resources(detail, self._battery_strings))
+                        values.update(read_battery_resources(detail, self._app_strings))
+                    if self._preset.brand == "volkswagen" and nav.name in (
+                        "climate_detail", "climate_settings",
+                    ):
+                        values.update(read_climate_resources(detail, self._app_strings))
                     for key, val in values.items():
                         # #1552 — a fresh detail-screen value wins over a stale
                         # overview value for the same key (direct assign, not
@@ -510,9 +515,9 @@ class CompanionChannel:
                 nodes = await self._scroll_up(nodes)
             node = find_node_for(nodes, step)
             if step.action == "open_charge_detail" and node is None:
-                node = find_battery_tile(nodes, self._battery_strings)
+                node = find_battery_tile(nodes, self._app_strings)
             if step.action == "open_vehicle_settings" and node is None:
-                node = find_settings_entry(nodes, self._battery_strings)
+                node = find_settings_entry(nodes, self._app_strings)
             point = tap_point_for(node, step.tap_fraction) if node is not None else None
             if point is None:
                 _LOGGER.debug(
@@ -655,7 +660,7 @@ class CompanionChannel:
         """The app's request-limit alert or banner, in any installed language."""
         return (
             find_rate_limit_banner(nodes, self._preset) is not None
-            or find_request_limit(nodes, self._battery_strings)
+            or find_request_limit(nodes, self._app_strings)
         )
 
     async def _refresh_version_gate(self) -> None:
@@ -675,9 +680,9 @@ class CompanionChannel:
         ):
             self._strings_at = self._now()
             self._strings_version = self._live_app_version
-            self._battery_strings = {}
+            self._app_strings = {}
             try:
-                self._battery_strings = await getter(self._preset.package)
+                self._app_strings = await getter(self._preset.package)
             except CompanionTransportError:
                 _LOGGER.debug("companion: app translation resources unavailable")
 
@@ -750,8 +755,8 @@ class CompanionChannel:
             if self._limit_on_screen(nodes):
                 self._trip_rate_limit()
                 raise CompanionWriteBlocked(_LIMIT_REASON)
-            if self._battery_strings and action in ("start_charging", "stop_charging"):
-                node = find_battery_control(nodes, self._battery_strings, action)
+            if self._app_strings and action in ("start_charging", "stop_charging"):
+                node = find_battery_control(nodes, self._app_strings, action)
             else:
                 node = find_action_node(nodes, self._preset, action)
                 # The Compose enabled flag stays true even for a disabled CTA

@@ -34,13 +34,13 @@ from custom_components.vag_connect.coordinator import VagConnectCoordinator
 FIXTURES = Path(__file__).parent / "fixtures" / "companion_app_sync"
 BATTERY = Path(__file__).parent / "fixtures" / "companion_battery"
 VW = PRESETS["volkswagen"]
-STRINGS = {k: set(v) for k, v in json.loads((BATTERY / "vw_432_resources.json").read_text()).items()}
+STRINGS = {k: set(v) for k, v in json.loads((BATTERY / "vw_432_resources.json").read_text(encoding="utf-8")).items()}
 SYNC_SPEC = next(a for a in VW.actions if a.action == "sync_vehicle")
 
 
 def dump(name: str) -> str:
     path = FIXTURES / (name + ".xml")
-    return (path if path.exists() else BATTERY / (name + ".xml")).read_text()
+    return (path if path.exists() else BATTERY / (name + ".xml")).read_text(encoding="utf-8")
 
 
 def nodes(name: str):
@@ -89,11 +89,11 @@ def test_preset_maps_the_sync_to_its_own_command():
 
 
 def test_fixtures_are_credited():
-    sources = {s["fixture"] for s in json.loads((FIXTURES / "sources.json").read_text())}
+    sources = {s["fixture"] for s in json.loads((FIXTURES / "sources.json").read_text(encoding="utf-8"))}
     assert {"tiguan_settings_lower.xml", "tiguan_settings_syncing.xml"} <= sources
     assert sources == {p.name for p in FIXTURES.iterdir() if p.name != "sources.json"}
     for name in sources:
-        assert "inputText" not in (FIXTURES / name).read_text()  # no vehicle name
+        assert "inputText" not in (FIXTURES / name).read_text(encoding="utf-8")  # no vehicle name
 
 
 # ── the walk ──────────────────────────────────────────────────────────────────
@@ -464,7 +464,7 @@ class BudgetPhone(SyncPhone):
 
     async def dump_ui(self):
         if self.alerts:
-            return (FIXTURES / f"{self.alerts[0]}.xml").read_text()
+            return (FIXTURES / f"{self.alerts[0]}.xml").read_text(encoding="utf-8")
         return await super().dump_ui()
 
     async def tap(self, x, y):
@@ -533,10 +533,10 @@ def test_known_alerts_are_recognised_through_the_app_tables():
     from custom_components.vag_connect.companion.resources import find_app_alert
 
     for name in ("alert_power_budget", "alert_vehicle_data_unavailable"):
-        assert find_app_alert(parse_ui_dump((FIXTURES / f"{name}.xml").read_text()), {})
+        assert find_app_alert(parse_ui_dump((FIXTURES / f"{name}.xml").read_text(encoding="utf-8")), {})
     assert not find_app_alert(nodes("tiguan_settings_lower"), {})
     french = {"dialog_error_vehicledata_notavailable_headline": {"Données du véhicule indisponibles"}}
-    alert = (FIXTURES / "alert_vehicle_data_unavailable.xml").read_text()
+    alert = (FIXTURES / "alert_vehicle_data_unavailable.xml").read_text(encoding="utf-8")
     assert find_app_alert(parse_ui_dump(alert.replace("Vehicle data unavailable", "Données du véhicule indisponibles")), french)
 
 
@@ -701,7 +701,7 @@ def test_the_overview_tile_does_not_narrate_the_battery_level():
     # 4.3.2 draws "Battery 77 %" on the tile but leaves it out of the tile's
     # accessibility sentence, so the charge sheet is the only place to read it.
     channel = CompanionChannel(TilePhone(), VW, time_fn=time.monotonic)
-    channel._battery_strings = STRINGS
+    channel._app_strings = STRINGS
     from custom_components.vag_connect.companion.resources import read_battery_resources
     from custom_components.vag_connect.companion.screen import read_fields
 

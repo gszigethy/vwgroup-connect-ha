@@ -1671,6 +1671,10 @@ class VehicleData:
     # (``climatisationSettings.value.climatisationMode``, "comfort" in the
     # wild). Read-only diagnostic; None for cars that don't ship it.
     climate_mode: str | None = None
+    # What the companion app's Start will start (VW 4.3.2 "Select mode"):
+    # "air_conditioning" or "window_heating". A local choice in the app, so
+    # read-only here; None where the sheet has no mode picker.
+    climate_start_mode: str | None = None
 
     # v1.14.0 (#24) — Trip Statistics from CARIAD-BFF
     # ``GET /vehicle/v1/vehicles/{vin}/tripstatistics?type={shortTerm|longTerm}``.

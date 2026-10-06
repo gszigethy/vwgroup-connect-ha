@@ -108,7 +108,7 @@ def test_settings_path_is_its_own_opt_in():
 
 
 def test_fixture_sources_cover_every_fixture():
-    sources = json.loads((FIXTURES / "sources.json").read_text())
+    sources = json.loads((FIXTURES / "sources.json").read_text(encoding="utf-8"))
     listed = {s["fixture"] for s in sources}
     assert listed == {p.name for p in FIXTURES.glob("*.xml")}
     for s in sources:

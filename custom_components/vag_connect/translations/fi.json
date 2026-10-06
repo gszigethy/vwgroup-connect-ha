@@ -1099,6 +1099,13 @@
       "climate_mode": {
         "name": "Ilmastointitila"
       },
+      "climate_start_mode": {
+        "name": "Ilmastoinnin käynnistystila",
+        "state": {
+          "air_conditioning": "Ilmastointi",
+          "window_heating": "Lasinlämmitys"
+        }
+      },
       "active_target_soc": {
         "name": "Aktiivinen lataustavoite"
       },

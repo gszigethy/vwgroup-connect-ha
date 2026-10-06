@@ -106,5 +106,50 @@
   ],
   "dialog_maxrequest_bff_error_headline": [
     "Request limit reached"
+  ],
+  "clima_temperature_low": [
+    "LO"
+  ],
+  "clima_temperature_high": [
+    "HI"
+  ],
+  "air_conditioning_screen_active": [
+    "Active"
+  ],
+  "common_activated": [
+    "Activated"
+  ],
+  "vehiclescreen_airconditioning_deactivated": [
+    "Off"
+  ],
+  "common_automatic_abbreviation": [
+    "Autom."
+  ],
+  "duration_minutes": [
+    "%s min"
+  ],
+  "common_airconditioning": [
+    "Air Conditioning"
+  ],
+  "window_heating_abbreviation": [
+    "Window heating"
+  ],
+  "common_airconditionedzones": [
+    "Zones"
+  ],
+  "vehiclesettingsscreen_airconditionedzones_options_multiplezones": [
+    "%s zones"
+  ],
+  "vehiclesettingsscreen_airconditionedzones_options_driverszone": [
+    "Front left"
+  ],
+  "vehiclesettingsscreen_airconditionedzones_options_passengerzone": [
+    "Front right"
+  ],
+  "vehiclesettingsscreen_airconditionedzones_options_leftrearseatzone": [
+    "Rear left"
+  ],
+  "vehiclesettingsscreen_airconditionedzones_options_rightrearseatzone": [
+    "Rear right"
   ]
 }
