@@ -264,7 +264,7 @@
           "test_cohort": "Help improve VW Group Connect (opt-in test cohort)",
           "vwde_cred_relogin": "Volkswagen.de: re-login with your stored password when the web session dies",
           "remove_vweu_twoway": "Remove VW EU Two-Way (revert to the previous channel)",
-          "companion_read_vehicle_health": "Companion: read odometer and service from Vehicle Health (navigates the app)",
+          "companion_read_vehicle_health": "Companion: read odometer, service and warnings from Vehicle Health (navigates the app)",
           "companion_read_climate_detail": "Companion: read target and outside temperature (navigates the app)",
           "companion_read_climate_settings": "Companion: read climate settings — climate at unlock, automatic window heating, zones (navigates the app)",
           "companion_read_parking_position": "Companion: read parking position from the app's share link (navigates the app)",
