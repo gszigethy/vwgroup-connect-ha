@@ -286,3 +286,11 @@ async def test_command_readback_walks_only_its_own_detail_path():
     await channel._augment_via_nav({})
     assert walked == ["open_charge_detail"]
     assert channel._nav_only == set()
+
+
+def test_overview_while_charging_reports_a_state_not_the_tile_narration():
+    nodes = parse_ui_dump(dump("tiguan_overview"))
+    fields = read_fields(nodes, VW)
+    fields.update(read_battery_resources(nodes, STRINGS))
+    assert fields["charging_state"] == "Currently charging"
+    assert fields["is_charging"] is True
