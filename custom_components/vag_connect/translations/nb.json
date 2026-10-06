@@ -1604,6 +1604,17 @@
       },
       "alarm_reason": {
         "name": "Alarmårsak"
+      },
+      "companion_charge_mode": {
+        "name": "Lademodus",
+        "state": {
+          "manual": "Manuell",
+          "timer": "Tidsur",
+          "preferred_charging_times": "Foretrukne ladetider",
+          "only_own_current": "Kun egen strøm",
+          "immediate_discharging": "Lad ut nå",
+          "timer_charging_climatization": "Timerlading med klimaanlegg"
+        }
       }
     },
     "binary_sensor": {

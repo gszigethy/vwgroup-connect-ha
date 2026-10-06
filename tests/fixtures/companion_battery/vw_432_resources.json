@@ -151,5 +151,29 @@
   ],
   "vehiclesettingsscreen_airconditionedzones_options_rightrearseatzone": [
     "Rear right"
+  ],
+  "acc_range_modal_label_charge_mode": [
+    "Charging method"
+  ],
+  "acc_range_modal_value_charge_mode_immediate_charging": [
+    "Immediate charging"
+  ],
+  "acc_range_modal_value_charge_mode_departure_time": [
+    "Charge for departure time"
+  ],
+  "acc_range_modal_value_charge_mode_departure_time_charge_air_condition": [
+    "Charge/air condition for departure"
+  ],
+  "acc_range_modal_value_charge_mode_preferred_times": [
+    "Charge at preferred times"
+  ],
+  "acc_range_modal_value_charge_mode_solar_power": [
+    "Charge using solar power"
+  ],
+  "acc_range_modal_value_charge_mode_discharge": [
+    "Discharge"
+  ],
+  "acc_range_modal_value_charge_mode_bidirectional_charging": [
+    "Bidirectional charging"
   ]
 }
