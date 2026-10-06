@@ -57,6 +57,7 @@ from .resources import (
     find_settings_entry,
     read_battery_resources,
     read_climate_resources,
+    read_health_resources,
 )
 from .app_sync import find_sync_button
 from .sync_time import find_sync_line
@@ -463,6 +464,8 @@ class CompanionChannel:
                     values = read_selectors(detail, nav.values)
                     if self._preset.brand == "volkswagen" and nav.name == "charge_detail":
                         values.update(read_battery_resources(detail, self._app_strings))
+                    if self._preset.brand == "volkswagen" and nav.name == "vehicle_health":
+                        values.update(read_health_resources(detail, self._app_strings))
                     if self._preset.brand == "volkswagen" and nav.name in (
                         "climate_detail", "climate_settings",
                     ):
