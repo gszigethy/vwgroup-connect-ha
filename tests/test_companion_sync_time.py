@@ -16,7 +16,7 @@ import pytest
 
 from custom_components.vag_connect.companion.channel import CompanionChannel
 from custom_components.vag_connect.companion.presets import PRESETS
-from custom_components.vag_connect.companion.resources import extract_battery_strings
+from custom_components.vag_connect.companion.resources import extract_app_strings
 from custom_components.vag_connect.companion.screen import parse_ui_dump
 from custom_components.vag_connect.companion.sync_time import (
     SyncAge,
@@ -25,8 +25,8 @@ from custom_components.vag_connect.companion.sync_time import (
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "companion_app_sync"
-STRINGS = {k: set(v) for k, v in json.loads((FIXTURES / "vw_432_sync_strings.json").read_text()).items()}
-OVERVIEW = (FIXTURES / "tiguan_overview_synchronised.xml").read_text()
+STRINGS = {k: set(v) for k, v in json.loads((FIXTURES / "vw_432_sync_strings.json").read_text(encoding="utf-8")).items()}
+OVERVIEW = (FIXTURES / "tiguan_overview_synchronised.xml").read_text(encoding="utf-8")
 LINE = "Your vehicle: Tiguan. Synchronised 32 minutes ago"
 M, H, D = 60, 3600, 86400
 
@@ -121,7 +121,7 @@ def _plural_table(name, forms):
 def test_plural_bags_are_read_per_quantity():
     table = _plural_table("duration_minutes_long_pluralised", [
         (0x01000005, "Zero minutes"), (0x01000006, "One minute"), (0x01000004, "%s minutes")])
-    assert extract_battery_strings(table) == {
+    assert extract_app_strings(table) == {
         "duration_minutes_long_pluralised#zero": {"Zero minutes"},
         "duration_minutes_long_pluralised#one": {"One minute"},
         "duration_minutes_long_pluralised#other": {"%s minutes"},
@@ -130,7 +130,7 @@ def test_plural_bags_are_read_per_quantity():
 
 def test_unrelated_plurals_are_ignored():
     table = _plural_table("some_other_plural", [(0x01000004, "%s things")])
-    assert extract_battery_strings(table) == {}
+    assert extract_app_strings(table) == {}
 
 
 # ── the channel: earliest time, forward only ──────────────────────────────────

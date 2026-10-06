@@ -26,7 +26,7 @@ from custom_components.vag_connect.companion.screen import parse_ui_dump
 
 FIXTURES = Path(__file__).parent / "fixtures" / "companion_battery"
 VW = PRESETS["volkswagen"]
-STRINGS = {k: set(v) for k, v in json.loads((FIXTURES / "vw_432_resources.json").read_text()).items()}
+STRINGS = {k: set(v) for k, v in json.loads((FIXTURES / "vw_432_resources.json").read_text(encoding="utf-8")).items()}
 
 # The slider's real track on the live phone at three display densities: the
 # GradientSlider's own bounds from ``dumpsys activity top``, less Material's
@@ -40,7 +40,7 @@ TRUE_TRACK = {
 
 
 def dump(name: str) -> str:
-    return (FIXTURES / (name + ".xml")).read_text()
+    return (FIXTURES / (name + ".xml")).read_text(encoding="utf-8")
 
 
 def slider_value(x: float, track: tuple[float, float, float]) -> int:
@@ -333,7 +333,7 @@ def test_number_entity_offers_exactly_the_slider_steps():
 
 
 def test_fixtures_are_credited():
-    sources = {s["fixture"] for s in json.loads((FIXTURES / "sources.json").read_text())}
+    sources = {s["fixture"] for s in json.loads((FIXTURES / "sources.json").read_text(encoding="utf-8"))}
     for name in [*TRUE_TRACK, "tiguan_overview_settings"]:
         assert name + ".xml" in sources
     for name in TRUE_TRACK:
@@ -364,5 +364,5 @@ def test_request_limit_alert_is_recognised_in_any_installed_language():
     assert not find_request_limit(nodes, STRINGS)
     assert find_request_limit(nodes, {"alert_daily_power_budget_title": {"Trop de demandes envoyées au véhicule"}})
     channel = channel_for(SettingsPhone())
-    channel._battery_strings = {"dialog_maxrequests_headline": {"Trop de demandes envoyées au véhicule"}}
+    channel._app_strings = {"dialog_maxrequests_headline": {"Trop de demandes envoyées au véhicule"}}
     assert channel._limit_on_screen(nodes)

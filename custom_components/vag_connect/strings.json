@@ -1273,6 +1273,13 @@
       "climate_mode": {
         "name": "Climate mode"
       },
+      "climate_start_mode": {
+        "name": "Climate Start Mode",
+        "state": {
+          "air_conditioning": "Air conditioning",
+          "window_heating": "Window heating"
+        }
+      },
       "active_target_soc": {
         "name": "Active charge target"
       },

@@ -13,9 +13,14 @@ What the app does, from the installed 4.3.2 APK and the #968 captures:
 * The Mk8 toggles (``air_conditioning_toggle`` / ``window_heating_toggle``) and
   the mode picker (``clima_air_conditioning_pick`` → "Select mode") only choose
   WHAT Start starts. Changing them sends nothing to the car.
-* The temperature dial is a pager of 15.5 (LO) … 30.0 (HI) °C in 0.5 steps.
+* The temperature dial is a pager of 15.5 (LO) … 30.0 (HI) °C in 0.5 steps;
+  the app has no Fahrenheit dial (ClimaSettingsMapper sends "celsius").
   Tapping a neighbouring number scrolls one step; the app sends the new target
-  to the car 1 s after the dial stops (debounced), idle or running.
+  to the car 1 s after the dial stops (debounced), idle or running. In the
+  window-heating mode the dial is drawn but disabled.
+* Labels are matched against the installed app's own translations
+  (``resources.py``); the German/English patterns are only the fallback when
+  the tables cannot be read.
 
 Every step is read back from the screen before the next one, and a command
 never confirms anything the app did not show. A tap is not a vehicle result:
@@ -29,6 +34,12 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, AsyncIterator, Awaitable, Callable
 
+from .resources import (
+    StringResources,
+    climate_function_state,
+    climate_mode_is_window_heating,
+    dial_labels,
+)
 from .screen import UiNode, _rid_matches, find_node_for, find_rate_limit_banner, has_anchor
 from .transport import CompanionTransportError
 
@@ -42,7 +53,7 @@ CLIMATE_APP_VERSIONS: tuple[str, ...] = ("4.3.2",)
 DIAL_MIN_C = 15.5  # rendered "LO"
 DIAL_MAX_C = 30.0  # rendered "HI"
 DIAL_STEP_C = 0.5
-_DIAL_TEXT_RE = re.compile(r"-?\d{1,2}(?:[.,]\d)?|LO|HI", re.I)
+_DIAL_NUMBER_RE = re.compile(r"-?\d{1,3}(?:[.,]\d)?")
 # The app debounces dial changes by 1000 ms before it sends them.
 _DIAL_FLUSH_S = 1.2
 # Dumps spent waiting for the screen a tap should produce. A dump already takes
@@ -124,21 +135,21 @@ def read_sheet(nodes: list[UiNode]) -> ClimaSheet:
     return sheet
 
 
-def dial_value(raw: str) -> float | None:
-    """One dial label as °C: "21.5", "22", "LO" (15.5) or "HI" (30.0)."""
+def dial_value(raw: str, resources: StringResources | None = None) -> float | None:
+    """One dial label: "21.5", "22", "LO" (15.5) or "HI" (30.0), translated."""
     text = raw.strip()
-    if text.upper() == "LO":
+    low, high = dial_labels(resources or {})
+    if text.casefold() in low:
         return DIAL_MIN_C
-    if text.upper() == "HI":
+    if text.casefold() in high:
         return DIAL_MAX_C
-    try:
-        return float(text.replace(",", "."))
-    except ValueError:
+    if not _DIAL_NUMBER_RE.fullmatch(text):
         return None
+    return float(text.replace(",", "."))
 
 
 def read_dial(
-    nodes: list[UiNode],
+    nodes: list[UiNode], resources: StringResources | None = None,
 ) -> tuple[float | None, UiNode | None, UiNode | None]:
     """(centre value, left neighbour, right neighbour) of the temperature dial.
 
@@ -153,8 +164,8 @@ def read_dial(
     labels = sorted(
         (
             n for n in nodes
-            if n.text and n.bounds and _DIAL_TEXT_RE.fullmatch(n.text.strip())
-            and _inside(n, dial.bounds) and dial_value(n.text) is not None
+            if n.text and n.bounds and _inside(n, dial.bounds)
+            and dial_value(n.text, resources) is not None
         ),
         key=lambda n: (n.bounds[0] + n.bounds[2]) / 2,  # type: ignore[index]
     )
@@ -164,7 +175,7 @@ def read_dial(
     i = labels.index(centre)
     lower = labels[i - 1] if i > 0 else None
     higher = labels[i + 1] if i + 1 < len(labels) else None
-    return dial_value(centre.text), lower, higher
+    return dial_value(centre.text, resources), lower, higher
 
 
 def snap_temperature(temp_c: float) -> float:
@@ -227,10 +238,24 @@ class ClimateController:
     async def set_temperature(self, temp_c: float) -> float:
         """Step the dial to ``temp_c`` (snapped to the app's 0.5 grid) and read it back."""
         target = snap_temperature(temp_c)
+        strings = self._strings
         async with self._on_sheet() as nodes:
-            current, lower, higher = read_dial(nodes)
+            sheet = read_sheet(nodes)
+            if sheet.pick_title and climate_mode_is_window_heating(sheet.pick_title, strings):
+                raise self._blocked(
+                    "the app disables the temperature dial in the window heating "
+                    "mode; select air conditioning in the app first"
+                )
+            current, lower, higher = read_dial(nodes, strings)
             if current is None:
                 raise self._blocked("could not read the temperature dial")
+            if not DIAL_MIN_C <= current <= DIAL_MAX_C:
+                # Not the °C dial this walk is mapped for (a Fahrenheit build,
+                # a changed layout): refuse before the first tap.
+                raise self._blocked(
+                    f"the dial shows {current:g}, outside the {DIAL_MIN_C:g}-"
+                    f"{DIAL_MAX_C:g} °C range this integration knows; not changing it"
+                )
             if current == target:
                 return target
             self._mark_write()
@@ -240,12 +265,20 @@ class ClimateController:
                     raise self._blocked("the next temperature step is not on the dial")
                 await self._ch._t.tap(*neighbour.tap_point)
                 before = current
-                nodes = await self._screen(lambda n: read_dial(n)[0] not in (None, before))
-                moved, lower, higher = read_dial(nodes)
+                nodes = await self._screen(
+                    lambda n: read_dial(n, strings)[0] not in (None, before)
+                )
+                moved, lower, higher = read_dial(nodes, strings)
                 if moved is None or moved == current:
                     # Locked while running on cars that only take a target
                     # temperature at start (GetIsTemperatureControlDisabled).
                     raise self._blocked("the temperature dial did not move")
+                if abs(target - moved) >= abs(target - current):
+                    # One step the wrong way is the most a misread dial costs.
+                    raise self._blocked(
+                        f"the dial moved from {current:g} to {moved:g} °C, away from "
+                        f"{target:g} °C; stopped"
+                    )
                 current = moved
                 if current == target:
                     break
@@ -255,11 +288,15 @@ class ClimateController:
             # the new target itself, then confirm the dial still shows it.
             await self._sleep(_DIAL_FLUSH_S)
             nodes, _cleared = await self._ch._dump_and_clear_overlays()
-            final, _lower, _higher = read_dial(nodes)
+            final, _lower, _higher = read_dial(nodes, strings)
             if final != target:
                 raise self._blocked(f"the dial reads {final} °C after the change, not {target} °C")
             self._ch._nav_cache["target_temperature"] = target
             return target
+
+    @property
+    def _strings(self) -> StringResources:
+        return getattr(self._ch, "_app_strings", None) or {}
 
     # -- the sheet ------------------------------------------------------------
 
@@ -372,10 +409,8 @@ class ClimateController:
             if window_heating_only:
                 raise self._blocked("this car's sheet offers no window-heating-only mode")
             return nodes
-        from .presets import coerce  # noqa: PLC0415
-
-        if not window_heating_only and coerce(
-            "clima_mode_window_heating", sheet.pick_title
+        if not window_heating_only and climate_mode_is_window_heating(
+            sheet.pick_title, self._strings
         ) is not True:
             # Air conditioning is the selected mode: tile, Start, done. The
             # picker opens only to switch to or from window heating alone.
@@ -420,16 +455,14 @@ class ClimateController:
 
     def _ac_running(self, nodes: list[UiNode], sheet: ClimaSheet) -> bool:
         """While running, is it air conditioning (not window heating alone)?"""
-        from .presets import coerce  # noqa: PLC0415
-
         desc = _find(nodes, "air_conditioning_description")
         if desc is not None:
-            return coerce("clima_function_state", desc.text) is True
+            return climate_function_state(desc.text, self._strings) is True
         # Pick layout. The automatic-window-heating row is only drawn beside the
         # air conditioning mode; otherwise the row's title names the mode.
         if _find(nodes, "window_heating_title") is not None:
             return True
-        return coerce("clima_mode_window_heating", sheet.pick_title) is not True
+        return climate_mode_is_window_heating(sheet.pick_title, self._strings) is not True
 
     async def _tap_command(self, node: UiNode) -> None:
         # Mark first so a transport failure after delivery still blocks a repeat.

@@ -42,6 +42,35 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0-2] - 2026-10-06 — Air Conditioning read by the app's own labels
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.11.0** plus fork release **2**, on top of 4.11.0-1.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a regular release — select `v4.11.0-2`, download, and restart Home Assistant.
+
+### Changed / Geändert
+- **Companion: the Volkswagen Air Conditioning sheet is read by the installed app's own translations (#968).** The
+  function rows (Active / Off / Autom.), the remaining minutes, the mode row and the dial's LO / HI labels are matched
+  against the app's string table, as the battery tile already is. The German/English patterns stay as the fallback
+  when the table cannot be read.
+- **Companion: the temperature dial refuses what it cannot be sure of.** A dial reading outside 15.5–30 °C (for
+  example a Fahrenheit build) is never tapped; a step that moves away from the target stops the walk after one step;
+  in the window heating mode, where the app disables the dial, the change is refused with a clear reason.
+
+### Added / Hinzugefügt
+- **Climate Start Mode** sensor: what the app's Start starts — *Air conditioning* or *Window heating*.
+- **Climate zones from the Air Conditioning Settings sheet:** *Climate Zone Front Left* / *Front Right* (and a rear
+  zone when the app names one). Read-only like the other climate settings; the app sends settings only on an explicit
+  Save, which this integration never taps. "2 zones" is read as both front zones; more than two stays unknown.
+
+### Fixed / Behoben
+- **Charging switch during conservation charging.** Cloud connections that set `is_charging` false while the car
+  conservation-charges showed the switch off while the power sensor and the evcc export said charging. Conservation
+  charging is now checked first.
+- Tests read their fixtures as UTF-8, so the German dumps also pass on Windows.
+
 ## [4.11.0-1] - 2026-10-06 — First fork release, based on upstream 4.11.0
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha). Versioning:

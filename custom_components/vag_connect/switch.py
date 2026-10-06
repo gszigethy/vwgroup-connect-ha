@@ -173,10 +173,14 @@ class VagChargingSwitch(VagConnectEntity, SwitchEntity):
         # the source of truth; the raw state list is only a fallback for a
         # channel that leaves it unset ("Currently charging" or "Target charge
         # level reached" on the companion would otherwise read wrongly).
+        # Conservation charging is charging even where a cloud parser sets
+        # is_charging False for it, as the power sensor and evcc export do.
+        state = self._vehicle.get("charging_state")
+        if str(state).lower() == "conservationcharging":
+            return True
         active = self._vehicle.get("is_charging")
         if active is not None:
             return bool(active)
-        state = self._vehicle.get("charging_state")
         if state is None:
             return None
         return str(state).lower() in ("charging", "conservationcharging")

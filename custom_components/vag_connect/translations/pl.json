@@ -1099,6 +1099,13 @@
       "climate_mode": {
         "name": "Tryb klimatyzacji"
       },
+      "climate_start_mode": {
+        "name": "Tryb uruchamiania klimatyzacji",
+        "state": {
+          "air_conditioning": "Klimatyzacja",
+          "window_heating": "Ogrzewanie szyb"
+        }
+      },
       "active_target_soc": {
         "name": "Aktywny cel ładowania"
       },

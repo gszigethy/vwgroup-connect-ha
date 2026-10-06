@@ -3460,6 +3460,16 @@ SENSOR_DESCRIPTIONS: tuple[VagSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
     ),
+    # Companion (VW app): the Air Conditioning sheet's mode, i.e. what Start
+    # starts. In the window heating mode the app disables the temperature dial.
+    VagSensorDescription(
+        key="climate_start_mode",
+        translation_key="climate_start_mode",
+        data_key="climate_start_mode",
+        icon="mdi:air-conditioner",
+        device_class=SensorDeviceClass.ENUM,
+        options=["air_conditioning", "window_heating"],
+    ),
 
     # v2.15.3 (#518) — EU-Data-Act charging-detail string family. All LOW,
     # diagnostic, disabled-by-default. Data-present gated (see
@@ -4282,6 +4292,7 @@ _DATA_PRESENT_REQUIRED: frozenset[str] = frozenset({
     # v2.16.2 (#671) — climatisationMode readback (data-present gated so
     # cars that don't ship the field never get a phantom "unknown" entity).
     "climate_mode",
+    "climate_start_mode",
     # v2.1.0 — Skoda climate-ready-at (Scout #186/#188). Field is
     # only populated during active climate run; gating prevents a
     # phantom "unknown" entity for non-Skoda + idle climates.

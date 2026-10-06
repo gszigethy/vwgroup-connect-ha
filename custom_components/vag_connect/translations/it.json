@@ -1099,6 +1099,13 @@
       "climate_mode": {
         "name": "Modalità clima"
       },
+      "climate_start_mode": {
+        "name": "Modalità di avvio climatizzazione",
+        "state": {
+          "air_conditioning": "Climatizzazione",
+          "window_heating": "Riscaldamento cristalli"
+        }
+      },
       "active_target_soc": {
         "name": "Obiettivo di ricarica attivo"
       },

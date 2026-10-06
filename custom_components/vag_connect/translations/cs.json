@@ -1099,6 +1099,13 @@
       "climate_mode": {
         "name": "Režim klimatizace"
       },
+      "climate_start_mode": {
+        "name": "Režim spuštění klimatizace",
+        "state": {
+          "air_conditioning": "Klimatizace",
+          "window_heating": "Vyhřívání oken"
+        }
+      },
       "active_target_soc": {
         "name": "Aktivní cíl nabíjení"
       },

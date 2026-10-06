@@ -1,6 +1,6 @@
 # Copyright 2026 Prash Balan (@its-me-prash) — GNU AGPL v3.0-or-later
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Read battery and Settings labels from the installed app's compiled translation tables.
+"""Read battery, climate and Settings labels from the installed app's compiled translation tables.
 
 Resource names are stable across locales; their values come from the phone,
 not a translated word list. Only simple string entries are read. No APK code,
@@ -38,9 +38,35 @@ SYNC_PLURALS = (
     "duration_hours_long_pluralised",
     "duration_days_long_pluralised",
 )
+# The Air Conditioning sheet, its mode picker and its Settings sheet, as the
+# 4.3.2 APK builds them (ClimaViewModel, ClimaItemsMapper, ModeSelection).
+CLIMA_LOW = "clima_temperature_low"  # the dial's "LO" (15.5)
+CLIMA_HIGH = "clima_temperature_high"  # the dial's "HI" (30.0)
+CLIMA_ACTIVE = ("air_conditioning_screen_active", "common_activated")
+CLIMA_OFF = "vehiclescreen_airconditioning_deactivated"
+CLIMA_AUTOMATIC = "common_automatic_abbreviation"
+CLIMA_MINUTES = "duration_minutes"  # " • %s min" after an active function
+# The mode picker's two rows, which the sheet's mode row also shows as title.
+CLIMA_MODE_AC = "common_airconditioning"
+CLIMA_MODE_WINDOW_HEATING = "window_heating_abbreviation"
+# The Settings sheet's Zones row and the values it shows: one zone by name,
+# "%s zones" for several, nothing for none (ClimaItemsMapper.b).
+CLIMA_ZONES = "common_airconditionedzones"
+CLIMA_ZONES_SEVERAL = "vehiclesettingsscreen_airconditionedzones_options_multiplezones"
+CLIMA_ZONE_KEYS = {
+    "vehiclesettingsscreen_airconditionedzones_options_driverszone": "climate_zone_front_left",
+    "vehiclesettingsscreen_airconditionedzones_options_passengerzone": "climate_zone_front_right",
+    "vehiclesettingsscreen_airconditionedzones_options_leftrearseatzone": "climate_zone_rear_left",
+    "vehiclesettingsscreen_airconditionedzones_options_rightrearseatzone": "climate_zone_rear_right",
+}
+_CLIMA_KEYS = (
+    CLIMA_LOW, CLIMA_HIGH, *CLIMA_ACTIVE, CLIMA_OFF, CLIMA_AUTOMATIC, CLIMA_MINUTES,
+    CLIMA_MODE_AC, CLIMA_MODE_WINDOW_HEATING, CLIMA_ZONES, CLIMA_ZONES_SEVERAL,
+    *CLIMA_ZONE_KEYS,
+)
 _SINGLE_KEYS = frozenset({
     "acc_common_hint_details", "acc_vehicle_tab_label_settings", *_LIMIT_KEYS,
-    SYNC_LAST_UPDATE, SYNC_JUST_NOW, SYNC_TOO_OLD, DATA_UNAVAILABLE,
+    SYNC_LAST_UPDATE, SYNC_JUST_NOW, SYNC_TOO_OLD, DATA_UNAVAILABLE, *_CLIMA_KEYS,
 })
 # Android's plural quantity attributes (``android:^attr-private`` ids).
 _QUANTITIES = {
@@ -97,7 +123,7 @@ def _read_plural(
         item += 12
 
 
-def extract_battery_strings(data: bytes) -> StringResources:
+def extract_app_strings(data: bytes) -> StringResources:
     """Decode the small relevant subset of Android's resources.arsc format.
 
     A malformed/unsupported table returns no labels. Complex entries (styles,
@@ -309,3 +335,155 @@ def find_app_alert(nodes: list[UiNode], resources: StringResources) -> bool:
         text.strip().casefold() in titles
         for node in nodes for text in (node.text, node.content_desc) if text
     )
+
+
+def _labels(resources: StringResources, *keys: str) -> set[str]:
+    return {
+        label.strip().casefold()
+        for key in keys for label in resources.get(key, ()) if label.strip()
+    }
+
+
+def climate_function_state(text: str, resources: StringResources) -> bool | None:
+    """A climate function row: "Active", "Active • 10 min", "Activated" or "Off".
+
+    "Autom." is the automatic setting, not a state, so it stays unknown. Falls
+    back to the German/English patterns when the tables could not be read.
+    """
+    value = text.strip().casefold()
+    active = _labels(resources, *CLIMA_ACTIVE)
+    off = _labels(resources, CLIMA_OFF)
+    if not active and not off:
+        fallback = coerce("clima_function_state", text)
+        return fallback if isinstance(fallback, bool) else None
+    if value in off:
+        return False
+    if any(value == label or value.startswith(label + " ") for label in active):
+        return True
+    return None
+
+
+def climate_mode_is_window_heating(title: str, resources: StringResources) -> bool | None:
+    """The mode row's title: True for window heating alone, False for AC."""
+    value = title.strip().casefold()
+    if not resources.get(CLIMA_MODE_WINDOW_HEATING):
+        fallback = coerce("clima_mode_window_heating", title)
+        return fallback if isinstance(fallback, bool) else None
+    if value in _labels(resources, CLIMA_MODE_WINDOW_HEATING):
+        return True
+    if value in _labels(resources, CLIMA_MODE_AC):
+        return False
+    return None
+
+
+def dial_labels(resources: StringResources) -> tuple[set[str], set[str]]:
+    """The dial's translated "LO" and "HI" labels, the APK defaults included."""
+    return _labels(resources, CLIMA_LOW) | {"lo"}, _labels(resources, CLIMA_HIGH) | {"hi"}
+
+
+def _inside(node: UiNode, box: tuple[int, int, int, int]) -> bool:
+    if node.bounds is None:
+        return False
+    left, top, right, bottom = box
+    n_left, n_top, n_right, n_bottom = node.bounds
+    return left <= n_left <= n_right <= right and top <= n_top <= n_bottom <= bottom
+
+
+def _rid(node: UiNode) -> str:
+    return node.resource_id.split("/")[-1]
+
+
+def read_climate_resources(nodes: list[UiNode], resources: StringResources) -> dict[str, object]:
+    """The Air Conditioning sheet and its Settings sheet, by the app's own labels.
+
+    Controls are found by resource-id as before; only their text is matched
+    against the installed app's translations instead of a word list. Returns
+    only what the screen proves, so the preset's selectors stay the fallback.
+    """
+    out: dict[str, object] = {}
+    if not resources:
+        return out
+    running = any(_rid(n) == "cta_stop" for n in nodes)
+    idle = any(_rid(n) == "cta_start" for n in nodes)
+    by_rid = {_rid(n): n for n in reversed(nodes) if n.resource_id}
+    automatic = _labels(resources, CLIMA_AUTOMATIC)
+    for rid, target in (
+        ("air_conditioning_description", "climatisation_active"),
+        ("window_heating_description", "window_heating_front"),
+    ):
+        node = by_rid.get(rid)
+        if node is None or not node.text:
+            continue
+        state = climate_function_state(node.text, resources)
+        if state is not None:
+            out[target] = state
+        if target == "window_heating_front" and node.text.strip().casefold() in automatic:
+            out["window_heating_enabled"] = True
+    # The mode row (pick layout) names what Start starts. Window heating alone
+    # means air conditioning is off and the window heating is what runs.
+    pick = by_rid.get("clima_air_conditioning_pick")
+    if pick is not None and pick.bounds is not None:
+        title = next(
+            (n.text for n in nodes if _rid(n) == "title" and n.text and _inside(n, pick.bounds)),
+            "",
+        )
+        mode = climate_mode_is_window_heating(title, resources) if title else None
+        if mode is not None:
+            out["climate_start_mode"] = "window_heating" if mode else "air_conditioning"
+            if mode:
+                out["climatisation_active"] = False
+                if running or idle:
+                    out["window_heating_front"] = running
+    if idle:
+        out["climate_remaining_time_min"] = 0
+    else:
+        for pattern in _patterns(resources, CLIMA_MINUTES):
+            for rid in ("air_conditioning_description", "description", "clima_time_remaining"):
+                node = by_rid.get(rid)
+                match = pattern.search(node.text) if node is not None and node.text else None
+                if match and match.lastindex:
+                    out["climate_remaining_time_min"] = int(match.group(1))
+                    break
+            if "climate_remaining_time_min" in out:
+                break
+    out.update(_read_zones(nodes, resources))
+    return out
+
+
+def _read_zones(nodes: list[UiNode], resources: StringResources) -> dict[str, object]:
+    """The Settings sheet's Zones row: "Front left", "2 zones" or empty.
+
+    The value is the text on the title's own line, right of it. One zone by
+    name is exact for the front pair; a rear zone is reported only when the row
+    names it. "%s zones" does not say which: "2 zones" is read as both front
+    zones (the only pair a front-zone car has), more is left unknown.
+    """
+    titles = _labels(resources, CLIMA_ZONES)
+    label = next(
+        (n for n in nodes if n.text and n.text.strip().casefold() in titles and n.bounds),
+        None,
+    )
+    if label is None or label.bounds is None:
+        return {}
+    _left, top, right, bottom = label.bounds
+    values = [
+        n.text.strip() for n in nodes
+        if n is not label and n.text and n.text.strip() and n.bounds
+        and n.bounds[0] >= right and n.bounds[1] < bottom and n.bounds[3] > top
+    ]
+    if not values:
+        # The app shows nothing beside the title when no zone is on.
+        return {"climate_zone_front_left": False, "climate_zone_front_right": False}
+    for value in values:
+        for key, target in CLIMA_ZONE_KEYS.items():
+            if value.casefold() in _labels(resources, key):
+                out: dict[str, object] = {
+                    "climate_zone_front_left": False, "climate_zone_front_right": False,
+                }
+                out[target] = True
+                return out
+        for pattern in _patterns(resources, CLIMA_ZONES_SEVERAL):
+            match = pattern.fullmatch(value)
+            if match and match.lastindex and match.group(1) == "2":
+                return {"climate_zone_front_left": True, "climate_zone_front_right": True}
+    return {}
