@@ -151,5 +151,11 @@
   ],
   "vehiclesettingsscreen_airconditionedzones_options_rightrearseatzone": [
     "Rear right"
+  ],
+  "vehiclesettingsscreen_reducedchargingspeed": [
+    "Reduced AC charging current"
+  ],
+  "vehiclesettingsscreen_automaticplugunlock": [
+    "Automatically release AC connector"
   ]
 }

@@ -138,6 +138,9 @@ class NavReadSelector:
     steps: tuple[ActionSelector, ...] = ()  # ordered taps, overview → detail
     back_presses: int = 1
     opt_in: str = "charge_detail"
+    # Values a resource reader supplies from this screen besides ``values``;
+    # counted when deciding whether the screen still has something to give.
+    resource_targets: tuple[str, ...] = ()
 
     @property
     def path(self) -> tuple[ActionSelector, ...]:
@@ -627,6 +630,7 @@ _VW = BrandPreset(
             ),
             back_presses=1,
             opt_in="vehicle_health",
+            resource_targets=("max_charge_current_ac", "auto_unlock_charge_port"),
         ),
         NavReadSelector(
             name="climate_detail",

@@ -64,9 +64,16 @@ _CLIMA_KEYS = (
     CLIMA_MODE_AC, CLIMA_MODE_WINDOW_HEATING, CLIMA_ZONES, CLIMA_ZONES_SEVERAL,
     *CLIMA_ZONE_KEYS,
 )
+# Charging switches on vehicle Settings, read into the values the EU Data Act
+# portal reports for the same settings (MAX_CHARGE_CURRENT_AC_*, AUTO_UNLOCK_AC_*).
+SETTINGS_SWITCHES = {
+    "vehiclesettingsscreen_reducedchargingspeed": ("max_charge_current_ac", "REDUCED", "MAXIMUM"),
+    "vehiclesettingsscreen_automaticplugunlock": ("auto_unlock_charge_port", "PERMANENT", "OFF"),
+}
 _SINGLE_KEYS = frozenset({
     "acc_common_hint_details", "acc_vehicle_tab_label_settings", *_LIMIT_KEYS,
     SYNC_LAST_UPDATE, SYNC_JUST_NOW, SYNC_TOO_OLD, DATA_UNAVAILABLE, *_CLIMA_KEYS,
+    *SETTINGS_SWITCHES,
 })
 # Android's plural quantity attributes (``android:^attr-private`` ids).
 _QUANTITIES = {
@@ -487,3 +494,22 @@ def _read_zones(nodes: list[UiNode], resources: StringResources) -> dict[str, ob
             if match and match.lastindex and match.group(1) == "2":
                 return {"climate_zone_front_left": True, "climate_zone_front_right": True}
     return {}
+
+
+def read_settings_resources(nodes: list[UiNode], resources: StringResources) -> dict[str, object]:
+    """The charging switches on vehicle Settings, by the app's own labels.
+
+    A switch row is the checkable node whose bounds hold the label; its
+    ``checked`` attribute is the setting. Read only: nothing here is tapped.
+    """
+    out: dict[str, object] = {}
+    switches = [n for n in nodes if n.checkable and n.bounds is not None]
+    for key, (target, on, off) in SETTINGS_SWITCHES.items():
+        labels = _labels(resources, key)
+        label = next((n for n in nodes if n.text and n.text.strip().casefold() in labels), None)
+        if label is None:
+            continue
+        row = next((n for n in switches if _inside(label, n.bounds)), None)  # type: ignore[arg-type]
+        if row is not None:
+            out[target] = on if row.checked else off
+    return out

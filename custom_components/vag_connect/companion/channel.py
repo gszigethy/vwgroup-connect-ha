@@ -57,6 +57,7 @@ from .resources import (
     find_settings_entry,
     read_battery_resources,
     read_climate_resources,
+    read_settings_resources,
 )
 from .app_sync import find_sync_button
 from .sync_time import find_sync_line
@@ -454,7 +455,8 @@ class CompanionChannel:
                 continue  # this path's own opt-in is off
             if only and nav.name not in only:
                 continue  # a command's readback re-reads its own path only
-            if all(fields.get(v.target) is not None for v in nav.values):
+            targets = [v.target for v in nav.values] + list(nav.resource_targets)
+            if all(fields.get(t) is not None for t in targets):
                 continue  # nothing to fetch from this detail
             walked = 0
             try:
@@ -463,6 +465,8 @@ class CompanionChannel:
                     values = read_selectors(detail, nav.values)
                     if self._preset.brand == "volkswagen" and nav.name == "charge_detail":
                         values.update(read_battery_resources(detail, self._app_strings))
+                    if self._preset.brand == "volkswagen" and nav.name == "vehicle_settings":
+                        values.update(read_settings_resources(detail, self._app_strings))
                     if self._preset.brand == "volkswagen" and nav.name in (
                         "climate_detail", "climate_settings",
                     ):
