@@ -42,6 +42,12 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+### Changed / Geändert
+- **Companion: the climate sheet and its Settings are read on one walk.** A nav read whose path continues another's
+  (Air Conditioning sheet, then its Settings row) is read on the same trip: the tile is tapped once, the sheet is
+  read, Settings opens from there, and the walk backs out once. Before, each read started from the overview, so the
+  tile opened twice per poll.
+
 ## [4.11.0-3] - 2026-10-06 — Faster phone navigation
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
