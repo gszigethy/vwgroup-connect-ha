@@ -354,7 +354,8 @@ def climate_function_state(text: str, resources: StringResources) -> bool | None
     active = _labels(resources, *CLIMA_ACTIVE)
     off = _labels(resources, CLIMA_OFF)
     if not active and not off:
-        return coerce("clima_function_state", text)
+        fallback = coerce("clima_function_state", text)
+        return fallback if isinstance(fallback, bool) else None
     if value in off:
         return False
     if any(value == label or value.startswith(label + " ") for label in active):
@@ -366,7 +367,8 @@ def climate_mode_is_window_heating(title: str, resources: StringResources) -> bo
     """The mode row's title: True for window heating alone, False for AC."""
     value = title.strip().casefold()
     if not resources.get(CLIMA_MODE_WINDOW_HEATING):
-        return coerce("clima_mode_window_heating", title)
+        fallback = coerce("clima_mode_window_heating", title)
+        return fallback if isinstance(fallback, bool) else None
     if value in _labels(resources, CLIMA_MODE_WINDOW_HEATING):
         return True
     if value in _labels(resources, CLIMA_MODE_AC):
