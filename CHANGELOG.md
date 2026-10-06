@@ -42,6 +42,25 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0-1] - 2026-10-06 — First fork release, based on upstream 4.11.0
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha). Versioning:
+> `{upstream release}-{fork release}` — upstream **4.11.0** plus fork release **1**.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Content:** identical to 4.12.0b7, which is running in the maintainer's Home Assistant. The 4.12.0b8–b10
+> pre-releases are not part of this release.
+>
+> **Installing with HACS:** this is a regular release — select `v4.11.0-1`, download, and restart Home Assistant.
+
+### Included / Enthalten
+- Companion (ADB): Volkswagen battery tile and charging controls, charge limit from vehicle Settings (#968, #1684).
+- Companion: Volkswagen Air Conditioning tile, settings and controls (#968).
+- Companion: the car's request-limit alert recognised in any app language (#968).
+- Companion: vehicle sync interval slider, *Last vehicle sync*, *App request status*, sync probe through the
+  request-limit pause (#968).
+- Companion: battery level kept current during the request-limit pause (4.12.0b7).
+
 ## [4.12.0b7] - 2026-10-05 — Battery level during the request-limit pause (fork pre-release)
 
 > Fork beta from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): 4.12.0b6 with the
