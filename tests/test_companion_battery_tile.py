@@ -286,3 +286,15 @@ async def test_command_readback_walks_only_its_own_detail_path():
     await channel._augment_via_nav({})
     assert walked == ["open_charge_detail"]
     assert channel._nav_only == set()
+
+
+@pytest.mark.asyncio
+async def test_departure_timers_are_unknown_not_off():
+    # No companion screen supplies them; "off" would be a value nobody read.
+    client = CompanionClient(brand="volkswagen", vin="VIN", host="unused", port=5555,
+                             adbkey_path="unused", time_fn=time.monotonic)
+    client._channel = CompanionChannel(Phone(), VW, time_fn=time.monotonic)
+    data = await client.get_status("VIN")
+    assert data.departure_timer_1_enabled is None
+    assert data.departure_timer_2_enabled is None
+    assert data.departure_timer_3_enabled is None
