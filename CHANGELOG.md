@@ -42,6 +42,24 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0-7] - 2026-10-07 — Force vehicle refresh button
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.11.0** plus fork release **7**, on top of 4.11.0-6.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a regular release — select `v4.11.0-7`, download, and restart Home Assistant.
+
+### Added / Hinzugefügt
+- **Companion: Force vehicle refresh button.** Taps vehicle Settings → *Synchronise now* in the app, so the car sends
+  fresh data, then re-reads the app once the car has had time to answer (3 minutes). A refused sync (the car's request
+  limit, button not found) is read at once so *App request status* shows why, and the press fails with an error. Shown
+  where the App sync interval slider is: a companion entry whose preset maps the sync, outside Read-only Mode. Each
+  press wakes the car. (#25)
+
+### Other / Sonstiges
+- Release notes are English only and no longer carry a diff against the previous release. (#24)
+
 ## [4.11.0-6] - 2026-10-07 — Vehicle Health and Settings read by the app's own labels
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
