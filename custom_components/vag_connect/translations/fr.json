@@ -239,7 +239,6 @@
           "fuel_tank_capacity": "Capacité du réservoir (litres, pour % carburant)",
           "enable_reverse_geocoding": "Géocodage inverse (adresse de stationnement)",
           "read_only_mode": "Mode lecture seule",
-          "companion_read_charge_detail": "Companion : lire l'objectif de charge (navigue dans l'application)",
           "companion_wake_sleep": "Companion : réveiller l'écran pour interroger, puis le rendormir",
           "companion_close_app": "Companion : fermer l'app auto après chaque lecture",
           "force_ppe_climate": "Climate Audi PPE/PPC (Q6/A6 e-tron, RS e-tron GT Facelift, A3 2024+ PHEV)",
@@ -264,10 +263,6 @@
           "vwde_cred_relogin": "Volkswagen.de : se reconnecter avec le mot de passe enregistré quand la session web expire",
           "vweu_device_grant": "Ajouter VW EU bidirectionnel — commandes + lectures en direct (BÊTA)",
           "remove_vweu_twoway": "Supprimer VW EU bidirectionnel (revenir au canal précédent)",
-          "companion_read_vehicle_health": "Companion : lire le kilométrage et l'entretien dans l'état du véhicule (navigue dans l'app)",
-          "companion_read_climate_detail": "Companion : lire la température de consigne et extérieure (navigue dans l'app)",
-          "companion_read_climate_settings": "Companion : lire les réglages de climatisation – climatisation au déverrouillage, dégivrage automatique des vitres, zones (navigue dans l'app)",
-          "companion_read_parking_position": "Companion : lire la position de stationnement depuis le lien de partage de l'app (navigue dans l'app)",
           "skoda_official_api_key": "Clé API officielle Škoda — ajoute l'API officielle du constructeur comme source de données en direct (et bascule)",
           "clear_skoda_official_key": "Effacer la clé API officielle Škoda enregistrée (une nouvelle est créée automatiquement si votre connexion le permet)",
           "skoda_official_mode": "Mode de source de l'API officielle Škoda"
@@ -277,7 +272,6 @@
           "spin": "S-PIN pour le verrouillage des portes.",
           "enable_reverse_geocoding": "Envoie le GPS de stationnement à OpenStreetMap Nominatim pour obtenir rue/ville. Désactivé par défaut (confidentialité).",
           "read_only_mode": "Lorsqu'activé, seuls les capteurs d'état sont créés — pas d'interrupteurs, boutons, verrous, climat ou curseurs qui envoient des commandes. Utile si vous voulez la télémétrie véhicule sans risque d'actionnement accidentel. Rechargez l'intégration après activation.",
-          "companion_read_charge_detail": "Companion (ADB) uniquement. Lit aussi l'objectif de charge, la puissance et le temps restant qui se trouvent derrière l'écran de détail de la charge. Pour y accéder, l'application est PILOTÉE par appuis (environ toutes les 15 minutes) : n'activez cette option qu'après avoir vérifié que cela fonctionne sur votre téléphone. Désactivé par défaut. Rechargez l'intégration après activation.",
           "companion_wake_sleep": "Companion (ADB) uniquement. Réveille l'écran du téléphone avant chaque interrogation et le rendort ensuite, pour qu'un téléphone verrouillé ou en veille affiche l'application pendant la lecture sans rester allumé en permanence. Désactivé par défaut. Rechargez l'intégration après activation.",
           "companion_close_app": "Companion (ADB) uniquement. Force l'arrêt (ferme) de l'app auto après chaque relève, pour que la lecture suivante la relance à neuf au lieu de lire un écran mis en cache. Utile sur les appareils où l'app fige ses valeurs entre deux relèves. Désactivé par défaut — un redémarrage à froid est plus lent. Rechargez après modification.",
           "force_ppe_climate": "Audi uniquement. Force le nouveau format de payload PPE/PPC (climatisationMode obligatoire, targetTemperature omis) au démarrage du climat. À activer uniquement si vous possédez une Q6 e-tron, A6 e-tron, RS e-tron GT Facelift ou A3 2024+ PHEV — sinon l'API renvoie 400. Rechargez l'intégration après activation.",
@@ -1604,6 +1598,17 @@
       },
       "alarm_reason": {
         "name": "Cause de l'alarme"
+      },
+      "companion_charge_mode": {
+        "name": "Mode de charge",
+        "state": {
+          "manual": "Manuel",
+          "timer": "Minuterie",
+          "preferred_charging_times": "Heures de charge préférées",
+          "only_own_current": "Autoconsommation uniquement",
+          "immediate_discharging": "Décharger maintenant",
+          "timer_charging_climatization": "Charge programmée avec climatisation"
+        }
       }
     },
     "binary_sensor": {
@@ -1968,6 +1973,27 @@
       },
       "active_ventilation_switch": {
         "name": "Ventilation active"
+      },
+      "companion_read_charge_detail": {
+        "name": "Lire le détail de recharge"
+      },
+      "companion_read_vehicle_health": {
+        "name": "Lire l'état du véhicule et les réglages"
+      },
+      "companion_read_climate_detail": {
+        "name": "Lire le détail de climatisation"
+      },
+      "companion_read_climate_settings": {
+        "name": "Lire les réglages de climatisation"
+      },
+      "companion_read_departure_times": {
+        "name": "Lire les heures de départ"
+      },
+      "companion_read_driving_data": {
+        "name": "Lire les données de conduite"
+      },
+      "companion_read_parking_position": {
+        "name": "Lire la position de stationnement"
       }
     },
     "number": {

@@ -1,0 +1,8 @@
+[
+  {
+    "fixture": "tiguan_departure.xml",
+    "contributor": "gszigethy",
+    "original_file": "07-departure.xml",
+    "note": "Local read-only ADB capture of the Departure times screen, 2026-10-06, @gszigethy (Tiguan eHybrid, app 4.3.2, English, 12-hour clock). Nothing tapped on the screen."
+  }
+]

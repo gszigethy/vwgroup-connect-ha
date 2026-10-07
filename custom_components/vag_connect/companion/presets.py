@@ -138,6 +138,9 @@ class NavReadSelector:
     steps: tuple[ActionSelector, ...] = ()  # ordered taps, overview → detail
     back_presses: int = 1
     opt_in: str = "charge_detail"
+    # Values a resource reader supplies from this screen besides ``values``;
+    # counted when deciding whether the screen still has something to give.
+    resource_targets: tuple[str, ...] = ()
 
     @property
     def path(self) -> tuple[ActionSelector, ...]:
@@ -804,6 +807,48 @@ _VW = BrandPreset(
             opt_in="climate_settings",
         ),
         NavReadSelector(
+            name="driving_data",
+            # The overview's Driving data tile. Its trip cards sit side by
+            # side in a carousel: "Last single trip" first, then "From
+            # charging or refuelling". ``read_driving_data`` reads them by the
+            # app's own labels and units, swiping the carousel (sideways only,
+            # never a pull-to-refresh) to bring the second card on screen.
+            steps=(
+                ActionSelector(
+                    action="open_driving_data",
+                    content_desc_re=r"^(?:Driving\s*data|Fahrdaten)\b",
+                    scroll_first=True,
+                ),
+            ),
+            values=(),
+            back_presses=1,
+            opt_in="driving_data",
+            resource_targets=(
+                "last_trip_distance_km", "last_trip_duration_min", "last_trip_avg_speed_kmh",
+                "refuel_trip_distance_km", "refuel_trip_duration_min", "refuel_trip_avg_speed_kmh",
+            ),
+        ),
+        NavReadSelector(
+            name="departure_times",
+            # The overview's Departure times tile. Each timer row shows its
+            # time and a switch whose ``checked`` state is the timer's on/off;
+            # the switches are read, never tapped. ``read_departure_timers``
+            # does the reading, by layout rather than words.
+            steps=(
+                ActionSelector(
+                    action="open_departure_times",
+                    content_desc_re=r"^(?:Departure\s*times|Abfahrtszeiten)\b",
+                    scroll_first=True,
+                ),
+            ),
+            values=(),
+            back_presses=1,
+            opt_in="departure_times",
+            resource_targets=tuple(
+                f"departure_timer_{i}_{part}" for i in (1, 2, 3) for part in ("enabled", "time")
+            ),
+        ),
+        NavReadSelector(
             name="parking_position",
             # #923 / #968 — a VW EU car read through the EU Data Act portal has
             # NO position data point, and the app draws the parked car as a map
@@ -879,6 +924,7 @@ _VW = BrandPreset(
         ActionSelector(action="up", resource_id="vwd_navigation_button"),
         ActionSelector(action="up", resource_id="vehicleHealthBack"),
         ActionSelector(action="up", resource_id="climatisationSettingsLeading"),
+        ActionSelector(action="up", resource_id="catRemoteTripStatisticsBack"),
         # #968 (plainmad, live 4.3.2 dump) — the charge detail is a bottom
         # sheet, and its way out is a described Close control rather than any
         # of the ids above.

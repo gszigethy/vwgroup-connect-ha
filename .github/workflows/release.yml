@@ -27,13 +27,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Version aus manifest.json lesen
+      - name: Read version from manifest.json
         id: version
         run: |
           VERSION=$(python3 -c "import json; print(json.load(open('custom_components/vag_connect/manifest.json'))['version'])")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Tag mit manifest.json abgleichen
+      - name: Validate tag against manifest.json
         run: |
           TAG="${GITHUB_REF#refs/tags/v}"
           MANIFEST="${{ steps.version.outputs.version }}"
@@ -42,7 +42,7 @@ jobs:
             exit 1
           fi
 
-      - name: Release-Notes generieren
+      - name: Generate release notes
         id: notes
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -54,15 +54,16 @@ jobs:
           changelog = open("CHANGELOG.md").read()
 
           # Extract this version's section verbatim — keep all subheadings
-          # and bilingual EN/DE content as written in CHANGELOG.md.
+          # as written in CHANGELOG.md.
           pattern = rf"## \[{re.escape(version)}\][^\n]*\n(.*?)(?=\n## \[|\Z)"
           match = re.search(pattern, changelog, re.DOTALL)
           changelog_section = match.group(1).strip() if match else ""
 
-          # All previous semver versions, newest first. Date is captured
+          # All previous versions (semver, PEP 440 pre-releases and fork
+          # releases like 4.11.0-5), newest first. Date is captured
           # from the `## [X.Y.Z] - YYYY-MM-DD` header when present.
           all_entries = re.findall(
-              r"## \[(\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)\](?:\s*-\s*(\d{4}-\d{2}-\d{2}))?",
+              r"## \[(\d+\.\d+\.\d+(?:(?:a|b|rc)\d+|-\d+)?)\](?:\s*-\s*(\d{4}-\d{2}-\d{2}))?",
               changelog,
           )
           versions_only = [v for v, _ in all_entries]
@@ -82,7 +83,7 @@ jobs:
           lines.append("")
 
           # ── What changed in this release ─────────────────────────────────
-          lines.append("## What's new in this release / Was ist neu in diesem Release")
+          lines.append("## What's new in this release")
           lines.append("")
           if changelog_section:
               lines.append(changelog_section)
@@ -93,60 +94,52 @@ jobs:
 
           # ── Compare against previous version ─────────────────────────────
           if prev_version:
-              lines.append(f"## Full diff vs v{prev_version} / Kompletter Diff zu v{prev_version}")
+              lines.append(f"## Full diff vs v{prev_version}")
               lines.append("")
               compare_url = f"https://github.com/{repo}/compare/v{prev_version}...v{version}"
               lines.append(f"Every commit, file and code change between the two versions:")
-              lines.append(f"Jeder Commit, jede Datei und jede Code-Änderung zwischen beiden Versionen:")
               lines.append("")
               lines.append(f"➜ **{compare_url}**")
               lines.append("")
 
           # ── Recent releases pointer ──────────────────────────────────────
           if recent_prior:
-              lines.append("## Recent releases / Letzte Releases")
+              lines.append("## Recent releases")
               lines.append("")
               lines.append("If you're upgrading from an older version, also read these notes:")
-              lines.append("")
-              lines.append("Wenn du von einer älteren Version updatest, lies auch diese Release-Notes:")
               lines.append("")
               for v, d in recent_prior:
                   date_part = f" · {d}" if d else ""
                   lines.append(f"- [v{v}](https://github.com/{repo}/releases/tag/v{v}){date_part}")
               lines.append("")
-              lines.append(f"Full history: [CHANGELOG.md](https://github.com/{repo}/blob/main/CHANGELOG.md)")
+              lines.append(f"Full history: [CHANGELOG.md](https://github.com/{repo}/blob/v{version}/CHANGELOG.md)")
               lines.append("")
 
           # ── Installation / Update ────────────────────────────────────────
           lines.append("## Installation / Update")
           lines.append("")
-          lines.append("**HACS users:** enable Show beta versions for this fork custom Integration repository, then select the new beta.")
+          lines.append("**HACS users:** open VW Group Connect in HACS, select Redownload, pick this version, then restart Home Assistant.")
           lines.append("")
-          lines.append("**HACS-User:** Beta-Versionen für dieses Fork-Repository aktivieren und die neue Beta auswählen.")
+          lines.append("**Manual install:**")
           lines.append("")
-          lines.append("**Manual install / Manuelle Installation:**")
-          lines.append("")
-          lines.append("1. Download `vag_connect.zip` from this release / `vag_connect.zip` aus diesem Release herunterladen")
-          lines.append("2. Unzip and copy `custom_components/vag_connect/` to your HA `config/custom_components/` folder, replacing any older copy / Entpacken und den Ordner `custom_components/vag_connect/` in dein HA `config/custom_components/` kopieren — alten Ordner ersetzen")
-          lines.append("3. Restart Home Assistant / Home Assistant neu starten")
+          lines.append("1. Download `vag_connect.zip` from this release")
+          lines.append("2. Unzip and copy `custom_components/vag_connect/` to your HA `config/custom_components/` folder, replacing any older copy")
+          lines.append("3. Restart Home Assistant")
           lines.append("")
 
           # ── Brand support ────────────────────────────────────────────────
-          lines.append("## Supported brands / Unterstützte Marken")
+          lines.append("## Supported brands")
           lines.append("")
           lines.append("Volkswagen EU · Audi · Škoda · SEAT · CUPRA · Volkswagen US/CA (Beta) · Porsche (Beta)")
           lines.append("")
 
           # ── Reporting issues ─────────────────────────────────────────────
-          lines.append("## Found a bug? / Bug gefunden?")
+          lines.append("## Found a bug?")
           lines.append("")
           lines.append(f"Open an issue with the bug-report template: https://github.com/{repo}/issues/new/choose")
           lines.append("")
-          lines.append(f"Bug-Report-Template: https://github.com/{repo}/issues/new/choose")
-          lines.append("")
           lines.append("Please mask your VIN to the last 6 characters and remove email/tokens/GPS before posting.")
           lines.append("")
-          lines.append("Bitte VIN auf die letzten 6 Zeichen kürzen und Email/Tokens/GPS vor dem Posten entfernen.")
 
           notes = "\n".join(lines)
           with open("/tmp/release_notes.md", "w") as f:
@@ -154,14 +147,14 @@ jobs:
           print(notes)
           PYTHON
 
-      - name: Integration ZIP bauen
+      - name: Build integration ZIP
         run: |
           cd custom_components
           zip -r ../vag_connect.zip vag_connect/ \
             -x "**/__pycache__/*" "**/*.pyc" "**/.mypy_cache/*"
           echo "ZIP size: $(du -sh ../vag_connect.zip | cut -f1)"
 
-      - name: GitHub Release erstellen
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3
         with:
           files: vag_connect.zip
