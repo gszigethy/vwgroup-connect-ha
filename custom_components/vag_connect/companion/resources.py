@@ -72,11 +72,44 @@ TILE_CLIMA = "acc_vehicle_tab_clima_tile_label"
 TILE_CLIMA_ON = "acc_vehicle_tab_clima_tile_value_all_clima_on"
 TILE_CLIMA_OFF = "acc_vehicle_tab_clima_tile_value_all_clima_off"
 _TILE_KEYS = (TILE_LOCK, TILE_LOCKED, TILE_UNLOCKED, TILE_CLIMA, TILE_CLIMA_ON, TILE_CLIMA_OFF)
+# The Driving data screen (the app's "snowshoe" trip statistics): the overview
+# tile, the two trip cards' titles, their row labels and the units the values
+# carry. The cyclic card is titled by drivetrain; every spelling is accepted.
+DRIVING_TILE = "acc_vehicle_tab_label_driving_data"
+_RTS = "volkswagen_acc_cat_snowshoe_rts_"
+_RTS_UNIT = "volkswagen_cat_snowshoe_rts_"
+TRIP_CARDS = {
+    "last_trip": (_RTS + "lastSingleTripLabel", _RTS_UNIT + "lastSingleTripTileTitle"),
+    "refuel_trip": (
+        _RTS + "cyclicTripsScreenheaderLabelHybrid", _RTS + "cyclicTripsScreenheaderEV",
+        _RTS + "cyclicTripsScreenheaderCombustion", _RTS_UNIT + "cyclicTripsHybrid",
+        _RTS_UNIT + "cyclicTripsEV", _RTS_UNIT + "cyclicTripsCombustion",
+    ),
+}
+TRIP_ROWS = {
+    _RTS + "distanceDrivenLabel": "distance",
+    _RTS + "consumptionLabel": "consumption",
+    _RTS + "averageSpeedLabel": "speed",
+    _RTS + "drivingTimeLabel": "time",
+}
+TRIP_UNITS = {
+    _RTS_UNIT + "unitKm": ("distance", 1.0),
+    _RTS_UNIT + "unitMiles": ("distance", 1.609344),
+    _RTS_UNIT + "speedKmh": ("speed", 1.0),
+    _RTS_UNIT + "speedMph": ("speed", 1.609344),
+    _RTS_UNIT + "unitKwhPer100Km": ("electric", 1.0),
+    _RTS_UNIT + "unitLiterPer100Km": ("fuel", 1.0),
+}
+DURATION_HOURS = "duration_hours"
+_TRIP_KEYS = (
+    DRIVING_TILE, *(k for keys in TRIP_CARDS.values() for k in keys), *TRIP_ROWS,
+    *TRIP_UNITS, DURATION_HOURS,
+)
 # Overview tiles opened by a nav read, by their translated label.
 DEPARTURE_TILE = "acc_vehicle_tab_label_departure_times"
 _SINGLE_KEYS = frozenset({
     "acc_common_hint_details", "acc_vehicle_tab_label_settings", *_LIMIT_KEYS,
-    DEPARTURE_TILE,
+    DEPARTURE_TILE, *_TRIP_KEYS,
     SYNC_LAST_UPDATE, SYNC_JUST_NOW, SYNC_TOO_OLD, DATA_UNAVAILABLE, *_CLIMA_KEYS,
     *_TILE_KEYS,
 })
@@ -422,6 +455,130 @@ def read_departure_timers(nodes: list[UiNode]) -> dict[str, object]:
     if len(rows) >= 3:
         out["departure_timer_enabled_count"] = sum(1 for _top, on, _time in rows[:3] if on)
     return out
+
+
+_TRIP_VALUE_RE = re.compile(r"^\W*?(\d[\d.,\u00a0\u202f ]*?)\s*([^\d\s.,].*)$")
+
+
+def _trip_number(raw: str) -> float | None:
+    """ "1,234.5", "1.234,5", "16,5", "299": one separator followed by three
+    digits groups thousands, any other last separator is the decimal mark."""
+    digits = re.sub(r"[\s\u00a0\u202f]", "", raw)
+    marks = [i for i, c in enumerate(digits) if c in ".,"]
+    if marks and not (len(marks) == 1 and len(digits) - marks[0] - 1 == 3):
+        whole = re.sub(r"[.,]", "", digits[:marks[-1]])
+        digits = whole + "." + digits[marks[-1] + 1:]
+    else:
+        digits = re.sub(r"[.,]", "", digits)
+    try:
+        return float(digits)
+    except ValueError:
+        return None
+
+
+def _trip_cards(
+    nodes: list[UiNode], resources: StringResources,
+) -> list[tuple[str, tuple[int, int, int, int]]]:
+    """(card prefix, card box) for each trip card title on screen."""
+    cards = []
+    for prefix, keys in TRIP_CARDS.items():
+        titles = _labels(resources, *keys)
+        for title in nodes:
+            if title.bounds is None or title.text.strip().casefold() not in titles:
+                continue
+            box = min(
+                (n.bounds for n in nodes if n.clickable and n.bounds is not None
+                 and _inside(title, n.bounds)),
+                key=lambda b: (b[2] - b[0]) * (b[3] - b[1]),
+                default=None,
+            )
+            if box is not None:
+                cards.append((prefix, box))
+    return cards
+
+
+def trip_carousel_row(
+    nodes: list[UiNode], resources: StringResources,
+) -> tuple[int, int, int, int] | None:
+    """The band the trip cards share, to swipe sideways in; None without both."""
+    boxes = [box for _prefix, box in _trip_cards(nodes, resources)]
+    if len(boxes) < 2:
+        return None
+    left = min(b[0] for b in boxes)
+    right = max(b[2] for b in boxes)
+    return left, max(b[1] for b in boxes), right, min(b[3] for b in boxes)
+
+
+def read_driving_data(nodes: list[UiNode], resources: StringResources) -> dict[str, object]:
+    """The trip cards' rows into the VW cloud's ``last_trip_*`` / ``refuel_trip_*``.
+
+    Each row label is followed, to its right, by its value text (consumption
+    by one line per energy). Values are kept only when their unit is one of the
+    app's own: distance and speed in km or miles (miles converted), consumption
+    in kWh/100 km or l/100 km. A card clipped at the screen edge shows its
+    labels without values and gives nothing.
+    """
+    out: dict[str, object] = {}
+    row_labels = {
+        label: row for key, row in TRIP_ROWS.items() for label in _labels(resources, key)
+    }
+    units = {
+        label: spec for key, spec in TRIP_UNITS.items() for label in _labels(resources, key)
+    }
+    hours = _patterns(resources, DURATION_HOURS)
+    minutes = _patterns(resources, CLIMA_MINUTES)
+    for prefix, box in _trip_cards(nodes, resources):
+        inside = [n for n in nodes if n.text.strip() and n.bounds is not None and _inside(n, box)]
+        labels = sorted(
+            ((n.bounds, row_labels[n.text.strip().casefold()]) for n in inside
+             if n.bounds is not None and n.text.strip().casefold() in row_labels),
+        )
+        for index, (label_box, row) in enumerate(labels):
+            below = labels[index + 1][0][1] if index + 1 < len(labels) else box[3]
+            texts = [
+                n.text.strip() for n in inside
+                if n.bounds is not None and n.bounds[0] >= label_box[2]
+                and label_box[1] <= n.bounds[1] < below
+            ]
+            for text in texts:
+                if row == "time":
+                    total = _trip_duration(text, hours, minutes)
+                    if total is not None:
+                        out[f"{prefix}_duration_min"] = total
+                    continue
+                match = _TRIP_VALUE_RE.match(text)
+                spec = units.get(match.group(2).strip().casefold()) if match else None
+                number = _trip_number(match.group(1)) if match else None
+                if spec is None or number is None:
+                    continue
+                kind, factor = spec
+                if row == "distance" and kind == "distance":
+                    out[f"{prefix}_distance_km"] = round(number * factor, 1)
+                elif row == "speed" and kind == "speed":
+                    out[f"{prefix}_avg_speed_kmh"] = round(number * factor, 1)
+                elif row == "consumption" and kind == "electric":
+                    out[f"{prefix}_avg_electric_consumption_kwh_100km"] = number
+                elif row == "consumption" and kind == "fuel":
+                    out[f"{prefix}_avg_fuel_consumption_l_100km"] = number
+    return out
+
+
+def _trip_duration(
+    text: str, hours: list[re.Pattern[str]], minutes: list[re.Pattern[str]],
+) -> int | None:
+    """ "10 h 59 min", "12 min", "2 h" by the app's own duration templates."""
+    found_h = next((m for p in hours if (m := p.search(text))), None)
+    found_m = next((m for p in minutes if (m := p.search(text))), None)
+    if found_h is None and found_m is None:
+        return None
+    total = 0
+    for match, scale in ((found_h, 60), (found_m, 1)):
+        if match is not None and match.lastindex:
+            value = _trip_number(match.group(1))
+            if value is None:
+                return None
+            total += int(value) * scale
+    return total
 
 
 def find_request_limit(nodes: list[UiNode], resources: StringResources) -> bool:

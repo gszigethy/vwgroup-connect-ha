@@ -2022,6 +2022,9 @@
       "companion_read_departure_times": {
         "name": "Read departure times"
       },
+      "companion_read_driving_data": {
+        "name": "Read driving data"
+      },
       "companion_read_parking_position": {
         "name": "Read parking position"
       }

@@ -1989,6 +1989,9 @@
       "companion_read_departure_times": {
         "name": "Abfahrtszeiten lesen"
       },
+      "companion_read_driving_data": {
+        "name": "Fahrdaten lesen"
+      },
       "companion_read_parking_position": {
         "name": "Parkposition lesen"
       }

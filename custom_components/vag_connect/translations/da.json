@@ -1989,6 +1989,9 @@
       "companion_read_departure_times": {
         "name": "Læs afgangstider"
       },
+      "companion_read_driving_data": {
+        "name": "Læs kørselsdata"
+      },
       "companion_read_parking_position": {
         "name": "Læs parkeringsposition"
       }
