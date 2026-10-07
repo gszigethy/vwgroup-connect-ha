@@ -278,7 +278,7 @@ async def test_command_readback_walks_only_its_own_detail_path():
     channel._nav_only = {"charge_detail"}
     walked = []
 
-    async def fake_walk(path):
+    async def fake_walk(path, here=None):
         walked.append(path[0].action)
         return None, 0
 
@@ -317,3 +317,97 @@ async def test_settings_walk_runs_for_its_switches_when_the_limit_is_known():
     await channel._augment_via_nav({"target_soc": 80, "odometer_km": 1, "service_due_in_days": 1,
                                     "oil_service_due_in_days": 1})
     assert walked == ["open_vehicle_settings"]
+
+
+@pytest.mark.asyncio
+async def test_departure_timers_are_unknown_not_off():
+    # Without the departure-times read "off" would be a value nobody read.
+    client = CompanionClient(brand="volkswagen", vin="VIN", host="unused", port=5555,
+                             adbkey_path="unused", time_fn=time.monotonic)
+    client._channel = CompanionChannel(Phone(), VW, time_fn=time.monotonic)
+    data = await client.get_status("VIN")
+    assert data.departure_timer_1_enabled is None
+    assert data.departure_timer_2_enabled is None
+    assert data.departure_timer_3_enabled is None
+
+
+def test_charge_mode_is_read_from_the_charging_method_row():
+    # @gszigethy Tiguan: "Charging method. Immediate charging. Change charging
+    # method"; Immediate charging is the APK's ChargeModes "manual".
+    out = read_battery_resources(parse_ui_dump(dump("tiguan_target_reached")), STRINGS)
+    assert out["charge_mode"] == "manual"
+
+
+def test_charge_mode_uses_the_installed_language():
+    # @kgroshert ID.4 (German): "Ladeverfahren. Sofortladen. Ladeverfahren ändern".
+    german = {
+        "acc_range_modal_label_charge_mode": {"Ladeverfahren"},
+        "acc_range_modal_value_charge_mode_immediate_charging": {"Sofortladen"},
+    }
+    out = read_battery_resources(parse_ui_dump(dump("id4_charging")), german)
+    assert out["charge_mode"] == "manual"
+
+
+@pytest.mark.parametrize(("label", "wire"), [
+    ("Charge at preferred times", "preferredChargingTimes"),
+    ("Charge for departure time", "timer"),
+    ("Charge/air condition for departure", "timerChargingWithClimatisation"),
+    ("Charge using solar power", "onlyOwnCurrent"),
+    ("Something new", None),
+])
+def test_charge_mode_labels_map_to_the_cloud_values(label, wire):
+    from custom_components.vag_connect.companion.resources import read_charge_mode
+
+    xml = (
+        '<hierarchy><node text="" resource-id="" content-desc="Charging method. '
+        f'{label}. Change charging method" bounds="[0,0][10,10]"/></hierarchy>'
+    )
+    assert read_charge_mode(parse_ui_dump(xml), STRINGS) == wire
+
+
+@pytest.mark.parametrize(("raw", "shown"), [
+    ("manual", "manual"), ("preferredChargingTimes", "preferred_charging_times"),
+    ("timerChargingWithClimatisation", "timer_charging_climatization"), (None, None),
+])
+def test_companion_charge_mode_sensor_shows_the_select_options(raw, shown):
+    from unittest.mock import MagicMock
+
+    from custom_components.vag_connect.sensor import VagCompanionChargeModeSensor
+
+    vin = "WVWZZZAUZFW805377"
+    sensor = VagCompanionChargeModeSensor.__new__(VagCompanionChargeModeSensor)
+    sensor._vin = vin
+    sensor.coordinator = MagicMock()
+    sensor.coordinator.data = {vin: {"vin": vin, "charge_mode": raw}}
+    assert sensor.native_value == shown
+    assert "manual" in sensor.options
+
+
+def test_overview_while_charging_reports_a_state_not_the_tile_narration():
+    nodes = parse_ui_dump(dump("tiguan_overview"))
+    fields = read_fields(nodes, VW)
+    fields.update(read_battery_resources(nodes, STRINGS))
+    assert fields["charging_state"] == "Currently charging"
+    assert fields["is_charging"] is True
+
+
+@pytest.mark.asyncio
+async def test_climate_sheet_and_its_settings_are_read_on_one_walk():
+    channel = CompanionChannel(Phone(), VW, time_fn=time.monotonic,
+                               nav_opt_ins={"climate_detail", "climate_settings"})
+    sheet = parse_ui_dump('<hierarchy><node text="Air Conditioning" bounds="[0,0][10,10]"/></hierarchy>')
+    walks, backs = [], []
+
+    async def fake_walk(path, here=None):
+        walks.append(([s.action for s in path], here))
+        return (sheet if here is None else []), len(path)
+
+    async def fake_back(presses=1):
+        backs.append(presses)
+
+    channel._walk_to_detail = fake_walk
+    channel._return_to_overview = fake_back
+    await channel._augment_via_nav({})
+    # The tile is tapped once; Settings continues from the sheet just read.
+    assert walks == [(["open_climate_detail"], None), (["open_climate_settings"], sheet)]
+    assert backs == [2]

@@ -239,7 +239,6 @@
           "fuel_tank_capacity": "Objem nádrže (litry, pro % paliva)",
           "enable_reverse_geocoding": "Reverzní geokódování (adresa parkování)",
           "read_only_mode": "Režim jen pro čtení",
-          "companion_read_charge_detail": "Companion: číst cíl nabíjení (naviguje v aplikaci)",
           "companion_wake_sleep": "Companion: probudit displej k dotazu, poté uspat",
           "companion_close_app": "Companion: zavřít aplikaci auta po každém čtení",
           "force_ppe_climate": "Audi PPE/PPC klima-tělo (Q6/A6 e-tron, RS e-tron GT Facelift, A3 2024+ PHEV)",
@@ -264,10 +263,6 @@
           "vwde_cred_relogin": "Volkswagen.de: při vypršení webové relace se znovu přihlásit uloženým heslem",
           "vweu_device_grant": "Přidat VW EU Two-Way — příkazy + živé čtení dat (BETA)",
           "remove_vweu_twoway": "Odebrat VW EU Two-Way (návrat k předchozímu kanálu)",
-          "companion_read_vehicle_health": "Companion: číst stav tachometru a servis ze stavu vozidla (naviguje v aplikaci)",
-          "companion_read_climate_detail": "Companion: číst cílovou a venkovní teplotu (naviguje v aplikaci)",
-          "companion_read_climate_settings": "Companion: číst nastavení klimatizace – klimatizace při odemknutí, automatické vyhřívání oken, zóny (prochází aplikací)",
-          "companion_read_parking_position": "Companion: číst pozici parkování z odkazu pro sdílení v aplikaci (naviguje v aplikaci)",
           "skoda_official_api_key": "Oficiální klíč API Škoda — přidá oficiální API výrobce jako živý zdroj dat (a zálohu)",
           "clear_skoda_official_key": "Vymazat uložený oficiální klíč API Škoda (nový se vytvoří automaticky, pokud to vaše přihlášení podporuje)",
           "skoda_official_mode": "Režim zdroje oficiálního API Škoda"
@@ -277,7 +272,6 @@
           "spin": "S-PIN pro zamykání dveří.",
           "enable_reverse_geocoding": "Odesílá GPS parkování do OpenStreetMap Nominatim pro získání ulice/města. Výchozí: vypnuto (soukromí).",
           "read_only_mode": "Když je povoleno, vytváří se pouze stavové senzory — žádné spínače, tlačítka, zámky, klima ani posuvníky odesílající příkazy. Užitečné, pokud chcete telemetrii vozidla bez rizika náhodného spuštění. Po přepnutí znovu načtěte integraci.",
-          "companion_read_charge_detail": "Pouze companion (ADB). Načítá navíc cíl nabíjení, výkon a zbývající čas, které jsou skryté za obrazovkou s detailem nabíjení. Kvůli tomu KLEPÁ do aplikace, aby se tam dostala (asi každých 15 minut), proto to zapínejte až po ověření, že postup na vašem telefonu funguje. Výchozí: vypnuto. Po přepnutí znovu načtěte integraci.",
           "companion_wake_sleep": "Pouze companion (ADB). Před každým dotazem probudí displej telefonu a poté ho zase uspí, takže zamčený nebo spící telefon během čtení zobrazí aplikaci, aniž by displej svítil trvale. Výchozí: vypnuto. Po přepnutí znovu načtěte integraci.",
           "companion_close_app": "Pouze Companion (ADB). Po každém dotazu vynuceně ukončí (zavře) aplikaci auta, takže další čtení ji spustí znovu načisto místo čtení obrazovky ponechané v mezipaměti. Pomáhá na zařízeních, kde aplikace mezi čteními zamrzne své hodnoty. Výchozí: vypnuto — studený start je pomalejší. Po přepnutí znovu načtěte.",
           "force_ppe_climate": "Pouze Audi. Vynucuje nový PPE/PPC formát těla (climatisationMode povinný, targetTemperature vynechaný) při startu klimatizace. Zapnout pouze pokud vlastníš Q6 e-tron, A6 e-tron, RS e-tron GT Facelift nebo A3 2024+ PHEV — jinak API vrátí 400. Po zapnutí znovu načti integraci.",
@@ -1604,6 +1598,17 @@
       },
       "alarm_reason": {
         "name": "Důvod alarmu"
+      },
+      "companion_charge_mode": {
+        "name": "Režim nabíjení",
+        "state": {
+          "manual": "Ruční",
+          "timer": "Časovač",
+          "preferred_charging_times": "Preferované časy nabíjení",
+          "only_own_current": "Pouze vlastní energie",
+          "immediate_discharging": "Vybít nyní",
+          "timer_charging_climatization": "Časované nabíjení s klimatizací"
+        }
       }
     },
     "binary_sensor": {
@@ -1968,6 +1973,27 @@
       },
       "active_ventilation_switch": {
         "name": "Aktivní větrání"
+      },
+      "companion_read_charge_detail": {
+        "name": "Číst detail nabíjení"
+      },
+      "companion_read_vehicle_health": {
+        "name": "Číst stav vozidla a nastavení"
+      },
+      "companion_read_climate_detail": {
+        "name": "Číst detail klimatizace"
+      },
+      "companion_read_climate_settings": {
+        "name": "Číst nastavení klimatizace"
+      },
+      "companion_read_departure_times": {
+        "name": "Číst časy odjezdu"
+      },
+      "companion_read_driving_data": {
+        "name": "Číst jízdní data"
+      },
+      "companion_read_parking_position": {
+        "name": "Číst parkovací polohu"
       }
     },
     "number": {
