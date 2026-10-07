@@ -42,6 +42,28 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0-8] - 2026-10-07 — VW app 4.6.4, ADB reconnect
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.11.0** plus fork release **8**, on top of 4.11.0-7.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a regular release — select `v4.11.0-8`, download, and restart Home Assistant.
+
+### Added / Hinzugefügt
+- **Companion: VW app 4.6.4.** The Play Store update to 4.6.4 turned off every tap (detail reads, Synchronise now,
+  commands) because the preset only knew 4.3.2. A live regression on the Tiguan read the overview, charge sheet,
+  Vehicle Health, vehicle Settings (Synchronise now found), climate sheet and settings, driving data, departure times
+  and parking position the same as on 4.3.2, so 4.6.4 is accepted. (#28)
+- **Companion: Google Maps consent and rating prompt.** The Google Maps consent that 4.6.4 shows again on the Map tab
+  blocked the parking read; it is now agreed with its *Agree* button. The app's rating prompt (thumbs down / thumbs
+  up) is closed with BACK, so the app is never rated. (#29)
+
+### Fixed / Behoben
+- **Companion: the ADB connection reconnects after it breaks.** A broken connection ("Broken pipe") still looked
+  connected, so every poll and Refresh Data press failed and the values went stale until Home Assistant restarted.
+  It is now dropped and reopened on the next read. (#27)
+
 ## [4.11.0-7] - 2026-10-07 — Force vehicle refresh button
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
