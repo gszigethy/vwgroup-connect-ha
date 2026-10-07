@@ -288,6 +288,18 @@ async def test_command_readback_walks_only_its_own_detail_path():
     assert channel._nav_only == set()
 
 
+@pytest.mark.asyncio
+async def test_departure_timers_are_unknown_not_off():
+    # Without the departure-times read "off" would be a value nobody read.
+    client = CompanionClient(brand="volkswagen", vin="VIN", host="unused", port=5555,
+                             adbkey_path="unused", time_fn=time.monotonic)
+    client._channel = CompanionChannel(Phone(), VW, time_fn=time.monotonic)
+    data = await client.get_status("VIN")
+    assert data.departure_timer_1_enabled is None
+    assert data.departure_timer_2_enabled is None
+    assert data.departure_timer_3_enabled is None
+
+
 def test_charge_mode_is_read_from_the_charging_method_row():
     # @gszigethy Tiguan: "Charging method. Immediate charging. Change charging
     # method"; Immediate charging is the APK's ChargeModes "manual".
