@@ -77,6 +77,10 @@ HEALTH_ROWS = {
     "screen_vehiclehealth_subhead_oil_service": ("oil_service_km", "oil_service_due_in_days"),
     "screen_vehiclehealth_subhead_adblue_level": ("adblue_range_km", None),
 }
+# The report's warning header ("No issues found" / "Issues found") and its
+# categories, each a row tagged ``warningName<Category>`` in the 4.3.2 APK.
+HEALTH_NO_ISSUES = "screen_vehiclehealth_overview_no_issues"
+HEALTH_ISSUES = "screen_vehiclehealth_overview_issues_found_generic"
 # Overview tiles narrate "<label>. <value>. <hint>" (Vehicle. Locked. Open details).
 TILE_LOCK = "acc_vehicle_tab_label_lock_unlock_vehicle"
 TILE_LOCKED = "acc_vehicle_tab_value_lock_unlock_vehicle_state_locked"
@@ -124,7 +128,7 @@ _SINGLE_KEYS = frozenset({
     "acc_common_hint_details", "acc_vehicle_tab_label_settings", *_LIMIT_KEYS,
     DEPARTURE_TILE, *_TRIP_KEYS,
     SYNC_LAST_UPDATE, SYNC_JUST_NOW, SYNC_TOO_OLD, DATA_UNAVAILABLE, *_CLIMA_KEYS,
-    *HEALTH_ROWS, *SETTINGS_SWITCHES,
+    *HEALTH_ROWS, HEALTH_NO_ISSUES, HEALTH_ISSUES, *SETTINGS_SWITCHES,
     *_TILE_KEYS,
 })
 # Android's plural quantity attributes (``android:^attr-private`` ids).
@@ -822,6 +826,40 @@ def read_health_resources(nodes: list[UiNode], resources: StringResources) -> di
                 match = _DAYS_RE.match(part)
                 if match and int(match.group(1)) <= 3650:
                     out[days_target] = int(match.group(1))
+    out.update(_read_health_warnings(nodes, resources))
+    return out
+
+
+def _read_health_warnings(nodes: list[UiNode], resources: StringResources) -> dict[str, object]:
+    """The warning header, into the fields the VW cloud's warning lights fill.
+
+    "No issues found" clears them. "Issues found" sets the flag and names each
+    category whose row carries a ``warningValue`` beside its name; a header
+    seen without such rows leaves the count and the list unknown.
+    """
+    header = next((n for n in nodes if _rid(n) == "warningHeaderTitle" and n.text), None)
+    if header is None:
+        return {}
+    title = header.text.strip().casefold()
+    if title in _labels(resources, HEALTH_NO_ISSUES):
+        return {"warning_active": False, "warning_count": 0, "warning_messages": ""}
+    if title not in _labels(resources, HEALTH_ISSUES):
+        return {}
+    values = [n for n in nodes if _rid(n) == "warningValue" and n.text and n.bounds]
+    messages = []
+    for name in nodes:
+        if not _rid(name).startswith("warningName") or not name.text or name.bounds is None:
+            continue
+        top, bottom = name.bounds[1], name.bounds[3]
+        beside = [
+            v.text.strip() for v in values
+            if v.bounds is not None and v.bounds[1] < bottom and v.bounds[3] > top
+        ]
+        if beside:
+            messages.append(f"{name.text.strip()}: {', '.join(beside)}")
+    out: dict[str, object] = {"warning_active": True}
+    if messages:
+        out.update(warning_count=len(messages), warning_messages=", ".join(messages))
     return out
 
 

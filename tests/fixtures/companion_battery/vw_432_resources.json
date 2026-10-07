@@ -167,6 +167,12 @@
   "screen_vehiclehealth_subhead_adblue_level": [
     "AdBlue remaining range"
   ],
+  "screen_vehiclehealth_overview_no_issues": [
+    "No issues found"
+  ],
+  "screen_vehiclehealth_overview_issues_found_generic": [
+    "Issues found"
+  ],
   "acc_vehicle_tab_label_lock_unlock_vehicle": [
     "Vehicle"
   ],
