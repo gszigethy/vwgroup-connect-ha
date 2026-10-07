@@ -72,10 +72,55 @@ HEALTH_ROWS = {
     "screen_vehiclehealth_subhead_oil_service": ("oil_service_km", "oil_service_due_in_days"),
     "screen_vehiclehealth_subhead_adblue_level": ("adblue_range_km", None),
 }
+# Overview tiles narrate "<label>. <value>. <hint>" (Vehicle. Locked. Open details).
+TILE_LOCK = "acc_vehicle_tab_label_lock_unlock_vehicle"
+TILE_LOCKED = "acc_vehicle_tab_value_lock_unlock_vehicle_state_locked"
+TILE_UNLOCKED = "acc_vehicle_tab_value_lock_unlock_vehicle_state_unlocked"
+TILE_CLIMA = "acc_vehicle_tab_clima_tile_label"
+TILE_CLIMA_ON = "acc_vehicle_tab_clima_tile_value_all_clima_on"
+TILE_CLIMA_OFF = "acc_vehicle_tab_clima_tile_value_all_clima_off"
+_TILE_KEYS = (TILE_LOCK, TILE_LOCKED, TILE_UNLOCKED, TILE_CLIMA, TILE_CLIMA_ON, TILE_CLIMA_OFF)
+# The Driving data screen (the app's "snowshoe" trip statistics): the overview
+# tile, the two trip cards' titles, their row labels and the units the values
+# carry. The cyclic card is titled by drivetrain; every spelling is accepted.
+DRIVING_TILE = "acc_vehicle_tab_label_driving_data"
+_RTS = "volkswagen_acc_cat_snowshoe_rts_"
+_RTS_UNIT = "volkswagen_cat_snowshoe_rts_"
+TRIP_CARDS = {
+    "last_trip": (_RTS + "lastSingleTripLabel", _RTS_UNIT + "lastSingleTripTileTitle"),
+    "refuel_trip": (
+        _RTS + "cyclicTripsScreenheaderLabelHybrid", _RTS + "cyclicTripsScreenheaderEV",
+        _RTS + "cyclicTripsScreenheaderCombustion", _RTS_UNIT + "cyclicTripsHybrid",
+        _RTS_UNIT + "cyclicTripsEV", _RTS_UNIT + "cyclicTripsCombustion",
+    ),
+}
+TRIP_ROWS = {
+    _RTS + "distanceDrivenLabel": "distance",
+    _RTS + "consumptionLabel": "consumption",
+    _RTS + "averageSpeedLabel": "speed",
+    _RTS + "drivingTimeLabel": "time",
+}
+TRIP_UNITS = {
+    _RTS_UNIT + "unitKm": ("distance", 1.0),
+    _RTS_UNIT + "unitMiles": ("distance", 1.609344),
+    _RTS_UNIT + "speedKmh": ("speed", 1.0),
+    _RTS_UNIT + "speedMph": ("speed", 1.609344),
+    _RTS_UNIT + "unitKwhPer100Km": ("electric", 1.0),
+    _RTS_UNIT + "unitLiterPer100Km": ("fuel", 1.0),
+}
+DURATION_HOURS = "duration_hours"
+_TRIP_KEYS = (
+    DRIVING_TILE, *(k for keys in TRIP_CARDS.values() for k in keys), *TRIP_ROWS,
+    *TRIP_UNITS, DURATION_HOURS,
+)
+# Overview tiles opened by a nav read, by their translated label.
+DEPARTURE_TILE = "acc_vehicle_tab_label_departure_times"
 _SINGLE_KEYS = frozenset({
     "acc_common_hint_details", "acc_vehicle_tab_label_settings", *_LIMIT_KEYS,
+    DEPARTURE_TILE, *_TRIP_KEYS,
     SYNC_LAST_UPDATE, SYNC_JUST_NOW, SYNC_TOO_OLD, DATA_UNAVAILABLE, *_CLIMA_KEYS,
     *HEALTH_ROWS,
+    *_TILE_KEYS,
 })
 # Android's plural quantity attributes (``android:^attr-private`` ids).
 _QUANTITIES = {
@@ -260,6 +305,9 @@ def read_battery_resources(nodes: list[UiNode], resources: StringResources) -> d
     for pattern in _patterns(resources, "acc_vehicle_tab_range_tile_value_battery_currently_charging"):
         if any(pattern.search(n.content_desc) for n in nodes) and "electric_range_km" in out:
             out["is_charging"] = True
+            # Without this the overview's catch-all selector hands the whole
+            # tile narration to the Charging Status sensor.
+            out.setdefault("charging_state", "Currently charging")
     # Each plural form is a separate named resource. The zero/one forms may
     # spell the number out; interpret the resource key, not the localized word.
     time_parts: dict[str, int] = {}
@@ -275,7 +323,44 @@ def read_battery_resources(nodes: list[UiNode], resources: StringResources) -> d
                             time_parts[unit] = value
     if time_parts:
         out["remaining_charge_time_min"] = time_parts.get("hours", 0) * 60 + time_parts.get("minutes", 0)
+    mode = read_charge_mode(nodes, resources)
+    if mode is not None:
+        out["charge_mode"] = mode
     return out
+
+
+# The range sheet's "Charging method" row (ChargeModeDescriptor in the 4.3.2
+# APK): each label it shows stands for one ChargeModes$Mode wire value, the
+# same value the VW cloud reports as ``chargeMode``.
+CHARGE_MODE_LABEL = "acc_range_modal_label_charge_mode"
+CHARGE_MODES = {
+    "immediate_charging": "manual",
+    "departure_time": "timer",
+    "departure_time_charge_air_condition": "timerChargingWithClimatisation",
+    "preferred_times": "preferredChargingTimes",
+    "solar_power": "onlyOwnCurrent",
+    "discharge": "immediateDischarging",
+    "bidirectional_charging": "homeStorageCharging",
+}
+
+
+def read_charge_mode(nodes: list[UiNode], resources: StringResources) -> str | None:
+    """The charge mode from "Charging method. Immediate charging. Change …"."""
+    labels = _labels(resources, CHARGE_MODE_LABEL)
+    if not labels:
+        return None
+    values = {
+        label: wire
+        for suffix, wire in CHARGE_MODES.items()
+        for label in _labels(resources, "acc_range_modal_value_charge_mode_" + suffix)
+    }
+    for node in nodes:
+        parts = [p.strip().casefold() for p in node.content_desc.split(". ")]
+        if len(parts) >= 2 and parts[0] in labels:
+            wire = values.get(parts[1].rstrip("."))
+            if wire is not None:
+                return wire
+    return None
 
 
 def find_battery_control(nodes: list[UiNode], resources: StringResources, action: str) -> UiNode | None:
@@ -315,6 +400,194 @@ def find_settings_entry(nodes: list[UiNode], resources: StringResources) -> UiNo
         and any(node.content_desc.startswith(label + ".") for label in labels)
         and any(node.content_desc.rstrip(".").endswith(hint) for hint in hints)
     ), None)
+
+
+def find_tile_entry(nodes: list[UiNode], resources: StringResources, key: str) -> UiNode | None:
+    """An overview tile by its translated label and the "Open details" hint."""
+    labels = resources.get(key, set())
+    hints = resources.get("acc_common_hint_details", set())
+    return next((
+        node for node in nodes if node.enabled and node.tap_point
+        and any(node.content_desc.startswith(label + ".") for label in labels)
+        and any(node.content_desc.rstrip(".").endswith(hint) for hint in hints)
+    ), None)
+
+
+_TIMER_TIME_RE = re.compile(r"^(\d{1,2})[:.](\d{2})$")
+_TIMER_MERIDIEM_RE = re.compile(r"^([ap])\.?\s?m\.?$", re.I)
+
+
+def read_departure_timers(nodes: list[UiNode]) -> dict[str, object]:
+    """The Departure times screen's timer rows, top to bottom, at most three.
+
+    A row is the clickable box around a switch. Its ``checked`` state is the
+    timer's on/off and its time is the clock text inside it ("07:25", with an
+    "AM"/"PM" beside it on a 12-hour phone), reported as 24-hour "HH:MM" like
+    the VW cloud's ``departureTime``. The words around them are not read, so
+    this works in any language. Rows without a time (charging locations) are
+    skipped. The count is set only when all three timers were on screen.
+    """
+    switches: dict[tuple[int, int, int, int], UiNode] = {}
+    for node in nodes:
+        if node.checkable and node.bounds is not None:
+            switches.setdefault(node.bounds, node)
+    rows: list[tuple[int, bool, str]] = []
+    for box, switch in switches.items():
+        centre_y = (box[1] + box[3]) // 2
+        row = min(
+            (n for n in nodes if n.clickable and n.bounds is not None and not n.checkable
+             and n.bounds[1] <= centre_y <= n.bounds[3] and n.bounds[0] <= box[0]
+             and n.bounds[2] >= box[2]),
+            key=lambda n: (n.bounds[3] - n.bounds[1]) if n.bounds else 0,
+            default=None,
+        )
+        if row is None or row.bounds is None:
+            continue
+        inside = [n.text.strip() for n in nodes if n.text and _inside(n, row.bounds)]
+        clock = next((m for t in inside if (m := _TIMER_TIME_RE.match(t))), None)
+        if clock is None:
+            continue
+        hour, minute = int(clock.group(1)), int(clock.group(2))
+        meridiem = next((m.group(1).lower() for t in inside if (m := _TIMER_MERIDIEM_RE.match(t))), None)
+        if meridiem is not None:
+            if not 1 <= hour <= 12:
+                continue
+            hour = hour % 12 + (12 if meridiem == "p" else 0)
+        if hour > 23 or minute > 59:
+            continue
+        rows.append((row.bounds[1], switch.checked, f"{hour:02d}:{minute:02d}"))
+    rows.sort()
+    out: dict[str, object] = {}
+    for index, (_top, enabled, time) in enumerate(rows[:3], start=1):
+        out[f"departure_timer_{index}_enabled"] = enabled
+        out[f"departure_timer_{index}_time"] = time
+    if len(rows) >= 3:
+        out["departure_timer_enabled_count"] = sum(1 for _top, on, _time in rows[:3] if on)
+    return out
+
+
+_TRIP_VALUE_RE = re.compile(r"^\W*?(\d[\d.,\u00a0\u202f ]*?)\s*([^\d\s.,].*)$")
+
+
+def _trip_number(raw: str) -> float | None:
+    """ "1,234.5", "1.234,5", "16,5", "299": one separator followed by three
+    digits groups thousands, any other last separator is the decimal mark."""
+    digits = re.sub(r"[\s\u00a0\u202f]", "", raw)
+    marks = [i for i, c in enumerate(digits) if c in ".,"]
+    if marks and not (len(marks) == 1 and len(digits) - marks[0] - 1 == 3):
+        whole = re.sub(r"[.,]", "", digits[:marks[-1]])
+        digits = whole + "." + digits[marks[-1] + 1:]
+    else:
+        digits = re.sub(r"[.,]", "", digits)
+    try:
+        return float(digits)
+    except ValueError:
+        return None
+
+
+def _trip_cards(
+    nodes: list[UiNode], resources: StringResources,
+) -> list[tuple[str, tuple[int, int, int, int]]]:
+    """(card prefix, card box) for each trip card title on screen."""
+    cards = []
+    for prefix, keys in TRIP_CARDS.items():
+        titles = _labels(resources, *keys)
+        for title in nodes:
+            if title.bounds is None or title.text.strip().casefold() not in titles:
+                continue
+            box = min(
+                (n.bounds for n in nodes if n.clickable and n.bounds is not None
+                 and _inside(title, n.bounds)),
+                key=lambda b: (b[2] - b[0]) * (b[3] - b[1]),
+                default=None,
+            )
+            if box is not None:
+                cards.append((prefix, box))
+    return cards
+
+
+def trip_carousel_row(
+    nodes: list[UiNode], resources: StringResources,
+) -> tuple[int, int, int, int] | None:
+    """The band the trip cards share, to swipe sideways in; None without both."""
+    boxes = [box for _prefix, box in _trip_cards(nodes, resources)]
+    if len(boxes) < 2:
+        return None
+    left = min(b[0] for b in boxes)
+    right = max(b[2] for b in boxes)
+    return left, max(b[1] for b in boxes), right, min(b[3] for b in boxes)
+
+
+def read_driving_data(nodes: list[UiNode], resources: StringResources) -> dict[str, object]:
+    """The trip cards' rows into the VW cloud's ``last_trip_*`` / ``refuel_trip_*``.
+
+    Each row label is followed, to its right, by its value text (consumption
+    by one line per energy). Values are kept only when their unit is one of the
+    app's own: distance and speed in km or miles (miles converted), consumption
+    in kWh/100 km or l/100 km. A card clipped at the screen edge shows its
+    labels without values and gives nothing.
+    """
+    out: dict[str, object] = {}
+    row_labels = {
+        label: row for key, row in TRIP_ROWS.items() for label in _labels(resources, key)
+    }
+    units = {
+        label: spec for key, spec in TRIP_UNITS.items() for label in _labels(resources, key)
+    }
+    hours = _patterns(resources, DURATION_HOURS)
+    minutes = _patterns(resources, CLIMA_MINUTES)
+    for prefix, box in _trip_cards(nodes, resources):
+        inside = [n for n in nodes if n.text.strip() and n.bounds is not None and _inside(n, box)]
+        labels = sorted(
+            ((n.bounds, row_labels[n.text.strip().casefold()]) for n in inside
+             if n.bounds is not None and n.text.strip().casefold() in row_labels),
+        )
+        for index, (label_box, row) in enumerate(labels):
+            below = labels[index + 1][0][1] if index + 1 < len(labels) else box[3]
+            texts = [
+                n.text.strip() for n in inside
+                if n.bounds is not None and n.bounds[0] >= label_box[2]
+                and label_box[1] <= n.bounds[1] < below
+            ]
+            for text in texts:
+                if row == "time":
+                    total = _trip_duration(text, hours, minutes)
+                    if total is not None:
+                        out[f"{prefix}_duration_min"] = total
+                    continue
+                match = _TRIP_VALUE_RE.match(text)
+                spec = units.get(match.group(2).strip().casefold()) if match else None
+                number = _trip_number(match.group(1)) if match else None
+                if spec is None or number is None:
+                    continue
+                kind, factor = spec
+                if row == "distance" and kind == "distance":
+                    out[f"{prefix}_distance_km"] = round(number * factor, 1)
+                elif row == "speed" and kind == "speed":
+                    out[f"{prefix}_avg_speed_kmh"] = round(number * factor, 1)
+                elif row == "consumption" and kind == "electric":
+                    out[f"{prefix}_avg_electric_consumption_kwh_100km"] = number
+                elif row == "consumption" and kind == "fuel":
+                    out[f"{prefix}_avg_fuel_consumption_l_100km"] = number
+    return out
+
+
+def _trip_duration(
+    text: str, hours: list[re.Pattern[str]], minutes: list[re.Pattern[str]],
+) -> int | None:
+    """ "10 h 59 min", "12 min", "2 h" by the app's own duration templates."""
+    found_h = next((m for p in hours if (m := p.search(text))), None)
+    found_m = next((m for p in minutes if (m := p.search(text))), None)
+    if found_h is None and found_m is None:
+        return None
+    total = 0
+    for match, scale in ((found_h, 60), (found_m, 1)):
+        if match is not None and match.lastindex:
+            value = _trip_number(match.group(1))
+            if value is None:
+                return None
+            total += int(value) * scale
+    return total
 
 
 def find_request_limit(nodes: list[UiNode], resources: StringResources) -> bool:
@@ -525,4 +798,27 @@ def read_health_resources(nodes: list[UiNode], resources: StringResources) -> di
                 match = _DAYS_RE.match(part)
                 if match and int(match.group(1)) <= 3650:
                     out[days_target] = int(match.group(1))
+    return out
+
+
+def read_overview_resources(nodes: list[UiNode], resources: StringResources) -> dict[str, object]:
+    """The lock and climate tiles of the overview, by the app's own labels.
+
+    Only a value the app names exactly is taken: "Is being locked" and the
+    climate tile's "information not available" leave the field to the
+    preset's selectors, as does a language whose labels could not be read.
+    """
+    out: dict[str, object] = {}
+    lock, locked, unlocked = (_labels(resources, k) for k in (TILE_LOCK, TILE_LOCKED, TILE_UNLOCKED))
+    clima, clima_on, clima_off = (_labels(resources, k) for k in (TILE_CLIMA, TILE_CLIMA_ON, TILE_CLIMA_OFF))
+    for node in nodes:
+        parts = [p.strip().casefold() for p in node.content_desc.split(". ")]
+        if len(parts) < 2:
+            continue
+        label, value = parts[0], parts[1].rstrip(".")
+        if label in lock and value in locked | unlocked:
+            out["doors_locked"] = value in locked
+        elif label in clima and value in clima_on | clima_off:
+            out["climatisation_active"] = value in clima_on
+            out["climatisation_state"] = node.content_desc.split(". ")[1].strip().rstrip(".")
     return out

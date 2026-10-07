@@ -50,14 +50,21 @@ from .screen import (
 )
 from .transport import CompanionTransportError, NetworkAdbTransport
 from .resources import (
+    DEPARTURE_TILE,
+    DRIVING_TILE,
     find_app_alert,
     find_battery_control,
     find_battery_tile,
     find_request_limit,
     find_settings_entry,
+    find_tile_entry,
     read_battery_resources,
     read_climate_resources,
+    read_departure_timers,
+    read_driving_data,
     read_health_resources,
+    read_overview_resources,
+    trip_carousel_row,
 )
 from .app_sync import find_sync_button
 from .sync_time import find_sync_line
@@ -168,6 +175,9 @@ class CompanionChannel:
         # C9 nav-read cadence + cache: nav taps at most every _NAV_READ_INTERVAL_S
         # and the values persist in between so the sensors don't flap.
         self._nav_cache: dict[str, object] = {}
+        # Which nav read last supplied each cached key, so switching a read off
+        # drops exactly its values.
+        self._nav_cache_from: dict[str, str] = {}
         self._last_nav_at: float | None = None
         # After a command, only the detail path that command used is re-read on
         # the next poll; the other opted-in paths keep their own cadence.
@@ -219,6 +229,30 @@ class CompanionChannel:
         more, so it must never ride along on a shallower opt-in.
         """
         return nav.opt_in in self._nav_opt_ins and bool(nav.path)
+
+    @property
+    def nav_opt_ins(self) -> frozenset[str]:
+        """The nav-read opt-ins currently on."""
+        return self._nav_opt_ins
+
+    def set_nav_opt_in(self, opt_in: str, enabled: bool) -> None:
+        """Turn one nav-read opt-in on or off while running.
+
+        On: its paths are read on the next poll, without waiting for the
+        cadence. Off: the values it supplied leave the cache, so its entities
+        stop showing a reading nobody refreshes any more.
+        """
+        opt_ins = set(self._nav_opt_ins)
+        if enabled:
+            opt_ins.add(opt_in)
+            self._nav_only |= {n.name for n in self._preset.nav_reads if n.opt_in == opt_in}
+        else:
+            opt_ins.discard(opt_in)
+            for key in [k for k, src in self._nav_cache_from.items() if src == opt_in]:
+                self._nav_cache.pop(key, None)
+                self._nav_cache_from.pop(key, None)
+        self._nav_opt_ins = frozenset(opt_ins)
+        self._read_charge_detail = "charge_detail" in self._nav_opt_ins
 
     def _nav_due(self) -> bool:
         """True when a nav-read has never run or the cadence window elapsed."""
@@ -374,6 +408,7 @@ class CompanionChannel:
         fields = read_fields(nodes, self._preset)
         if self._preset.brand == "volkswagen":
             fields.update(read_battery_resources(nodes, self._app_strings))
+            fields.update(read_overview_resources(nodes, self._app_strings))
             self._note_sync_line(nodes)
         if self._seen_at is not None:
             fields["companion_app_synced_at"] = self._seen_at
@@ -450,48 +485,104 @@ class CompanionChannel:
         if not only or self._nav_due():
             only = set()
             self._last_nav_at = self._now()
-        for nav in self._preset.nav_reads:
+        def wanted(nav: NavReadSelector) -> bool:
             if not self._nav_allowed(nav):
-                continue  # this path's own opt-in is off
+                return False  # this path's own opt-in is off
             if only and nav.name not in only:
-                continue  # a command's readback re-reads its own path only
-            if all(fields.get(v.target) is not None for v in nav.values):
-                continue  # nothing to fetch from this detail
-            walked = 0
-            try:
-                detail, walked = await self._walk_to_detail(nav.path)
-                if detail is not None:
-                    values = read_selectors(detail, nav.values)
-                    if self._preset.brand == "volkswagen" and nav.name == "charge_detail":
-                        values.update(read_battery_resources(detail, self._app_strings))
-                    if self._preset.brand == "volkswagen" and nav.name == "vehicle_health":
-                        values.update(read_health_resources(detail, self._app_strings))
-                    if self._preset.brand == "volkswagen" and nav.name in (
-                        "climate_detail", "climate_settings",
-                    ):
-                        values.update(read_climate_resources(detail, self._app_strings))
-                    for key, val in values.items():
-                        # #1552 — a fresh detail-screen value wins over a stale
-                        # overview value for the same key (direct assign, not
-                        # setdefault); the overview reading is what goes stale.
-                        fields[key] = val
-                        self._nav_cache[key] = val
-            except CompanionTransportError:
-                _LOGGER.debug(
-                    "companion %s: nav read '%s' hit a transport error; skipping",
-                    self._preset.brand, nav.name,
-                )
-            finally:
-                # Back out exactly as far as we actually walked. A path that
-                # stopped early (a step not on screen) must not press BACK for
-                # taps it never made, or it would leave the app somewhere behind
-                # the overview for the next poll.
-                await self._return_to_overview(min(walked, nav.back_presses))
+                return False  # a command's readback re-reads its own path only
+            # Nothing to fetch from this detail when every value is known.
+            targets = [v.target for v in nav.values] + list(nav.resource_targets)
+            return not all(fields.get(t) is not None for t in targets)
+
+        navs = list(self._preset.nav_reads)
+        index = 0
+        while index < len(navs):
+            nav = navs[index]
+            index += 1
+            if not wanted(nav):
+                continue
+            # A path that continues another (the climate sheet, then its
+            # Settings) is read on the same walk: one trip in, one way out.
+            group = [nav]
+            while (
+                index < len(navs)
+                and navs[index].path[: len(group[-1].path)] == group[-1].path
+                and wanted(navs[index])
+            ):
+                group.append(navs[index])
+                index += 1
+            await self._read_nav_group(group, fields)
+
+    async def _read_nav_group(
+        self, group: list[NavReadSelector], fields: dict[str, object]
+    ) -> None:
+        """Walk to each detail of ``group`` in turn, reading as it goes.
+
+        Each member's path extends the previous one's, so the walk only taps
+        the steps the previous screen has not already reached.
+        """
+        walked = 0
+        reached = group[0]
+        here: list[UiNode] | None = None
+        done = 0
+        try:
+            for nav in group:
+                detail, taps = await self._walk_to_detail(nav.path[done:], here)
+                walked += taps
+                if taps:
+                    reached = nav
+                if detail is None:
+                    break
+                extra: dict[str, object] = {}
+                if self._preset.brand == "volkswagen" and nav.name == "driving_data":
+                    extra = await self._read_driving_data(detail)
+                self._apply_nav_values(nav, detail, fields, extra)
+                here, done = detail, len(nav.path)
+        except CompanionTransportError:
+            _LOGGER.debug(
+                "companion %s: nav read '%s' hit a transport error; skipping",
+                self._preset.brand, reached.name,
+            )
+        finally:
+            # Back out exactly as far as we actually walked. A path that
+            # stopped early (a step not on screen) must not press BACK for
+            # taps it never made, or it would leave the app somewhere behind
+            # the overview for the next poll.
+            await self._return_to_overview(min(walked, reached.back_presses))
+
+    def _apply_nav_values(
+        self, nav: NavReadSelector, detail: list[UiNode], fields: dict[str, object],
+        extra: dict[str, object] | None = None,
+    ) -> None:
+        values = read_selectors(detail, nav.values)
+        values.update(extra or {})
+        if self._preset.brand == "volkswagen" and nav.name == "charge_detail":
+            values.update(read_battery_resources(detail, self._app_strings))
+        if self._preset.brand == "volkswagen" and nav.name == "vehicle_health":
+            values.update(read_health_resources(detail, self._app_strings))
+        if self._preset.brand == "volkswagen" and nav.name == "departure_times":
+            values.update(read_departure_timers(detail))
+        if self._preset.brand == "volkswagen" and nav.name in (
+            "climate_detail", "climate_settings",
+        ):
+            values.update(read_climate_resources(detail, self._app_strings))
+        for key, val in values.items():
+            # #1552 — a fresh detail-screen value wins over a stale
+            # overview value for the same key (direct assign, not
+            # setdefault); the overview reading is what goes stale.
+            fields[key] = val
+            self._nav_cache[key] = val
+            self._nav_cache_from[key] = nav.opt_in
 
     async def _walk_to_detail(
-        self, steps: "tuple[ActionSelector, ...]"
+        self,
+        steps: "tuple[ActionSelector, ...]",
+        here: list[UiNode] | None = None,
     ) -> tuple[list[UiNode] | None, int]:
         """Tap an ordered path of controls and return (detail_nodes, taps_made).
+
+        ``here`` is a screen the caller has just read and cleared, so a walk
+        that continues from it does not dump it again.
 
         Stops without tapping as soon as a step is not on the current screen, so
         we never tap into the dark on a layout that moved; the caller backs out
@@ -503,8 +594,13 @@ class CompanionChannel:
         # What the previous step already settled, so a step never dumps a
         # screen its predecessor just finished reading.
         pending: str | None = None
+        if here is not None and not steps:
+            return here, 0
         for index, step in enumerate(steps):
-            nodes, cleared = await self._dump_and_clear_overlays(pending)
+            if index == 0 and here is not None:
+                nodes, cleared = here, True
+            else:
+                nodes, cleared = await self._dump_and_clear_overlays(pending)
             pending = None
             if not cleared:
                 return None, taps
@@ -543,6 +639,31 @@ class CompanionChannel:
         detail, cleared = await self._dump_and_clear_overlays(pending)
         return (detail if cleared else None), taps
 
+    async def _read_driving_data(self, nodes: list[UiNode]) -> dict[str, object]:
+        """Both trip cards: the first as drawn, the second after one swipe.
+
+        The carousel shows the second card clipped at the edge, title and
+        labels but no values. A sideways swipe inside the carousel brings it
+        on screen; it moves the cards only and asks the car for nothing.
+        """
+        out = read_driving_data(nodes, self._app_strings)
+        row = trip_carousel_row(nodes, self._app_strings)
+        swipe = getattr(self._t, "swipe", None)
+        if "refuel_trip_distance_km" in out or row is None or swipe is None:
+            return out
+        left, top, right, bottom = row
+        y = (top + bottom) // 2
+        try:
+            await swipe(left + int((right - left) * 0.85), y, left + int((right - left) * 0.15), y, 400)
+        except CompanionTransportError:
+            return out
+        swiped, cleared = await self._dump_and_clear_overlays(await self._settle())
+        if cleared:
+            for key, val in read_driving_data(swiped, self._app_strings).items():
+                if key.startswith("refuel_trip_"):
+                    out.setdefault(key, val)
+        return out
+
     async def _scroll_up(self, nodes: list[UiNode]) -> list[UiNode]:
         """Swipe the current screen up by half a display, best-effort.
 
@@ -575,6 +696,10 @@ class CompanionChannel:
             node = find_battery_tile(nodes, self._app_strings)
         if step.action == "open_vehicle_settings" and node is None:
             node = find_settings_entry(nodes, self._app_strings)
+        if step.action == "open_departure_times" and node is None:
+            node = find_tile_entry(nodes, self._app_strings, DEPARTURE_TILE)
+        if step.action == "open_driving_data" and node is None:
+            node = find_tile_entry(nodes, self._app_strings, DRIVING_TILE)
         return node
 
     async def _settle(

@@ -239,7 +239,6 @@
           "fuel_tank_capacity": "Capacidad del depósito (litros, para % de combustible)",
           "enable_reverse_geocoding": "Geocodificación inversa (dirección de aparcamiento)",
           "read_only_mode": "Modo solo lectura",
-          "companion_read_charge_detail": "Companion: leer el objetivo de carga (navega por la app)",
           "companion_wake_sleep": "Companion: despertar la pantalla para consultar y apagarla después",
           "companion_close_app": "Companion: cerrar la app del coche tras cada lectura",
           "force_ppe_climate": "Climatización PPE/PPC Audi (Q6/A6 e-tron, RS e-tron GT Facelift, A3 2024+ PHEV)",
@@ -264,10 +263,6 @@
           "vwde_cred_relogin": "Volkswagen.de: volver a iniciar sesión con la contraseña guardada cuando caduque la sesión web",
           "vweu_device_grant": "Añadir VW EU bidireccional — comandos + lecturas en vivo (BETA)",
           "remove_vweu_twoway": "Eliminar VW EU bidireccional (volver al canal anterior)",
-          "companion_read_vehicle_health": "Companion: leer cuentakilómetros y servicio desde el estado del vehículo (navega por la app)",
-          "companion_read_climate_detail": "Companion: leer temperatura objetivo y exterior (navega por la app)",
-          "companion_read_climate_settings": "Companion: leer ajustes de climatización: climatización al desbloquear, calefacción automática de lunas, zonas (navega por la app)",
-          "companion_read_parking_position": "Companion: leer la posición de aparcamiento desde el enlace para compartir de la app (navega por la app)",
           "skoda_official_api_key": "Clave API oficial de Škoda — añade la API oficial del fabricante como fuente de datos en vivo (y conmutación por error)",
           "clear_skoda_official_key": "Borrar la clave API oficial de Škoda guardada (se crea una nueva automáticamente si tu inicio de sesión lo permite)",
           "skoda_official_mode": "Modo de fuente de la API oficial de Škoda"
@@ -277,7 +272,6 @@
           "spin": "S-PIN para bloqueo de puertas.",
           "enable_reverse_geocoding": "Envía GPS de aparcamiento a OpenStreetMap Nominatim para resolver calle/ciudad. Desactivado por defecto (privacidad).",
           "read_only_mode": "Cuando está activado, solo se crean sensores de estado — sin interruptores, botones, cerraduras, clima o deslizadores que envíen comandos. Útil si quieres telemetría del vehículo sin riesgo de actuación accidental. Recarga la integración tras activar.",
-          "companion_read_charge_detail": "Solo para Companion (ADB). Lee también el objetivo de carga, la potencia y el tiempo restante que están detrás de la pantalla de detalle de carga. Para llegar ahí PULSA en la app (cada 15 minutos aproximadamente), así que actívalo solo tras comprobar que el proceso funciona en tu teléfono. Desactivado por defecto. Recarga tras cambiarlo.",
           "companion_wake_sleep": "Solo para Companion (ADB). Despierta la pantalla del teléfono antes de cada consulta y la vuelve a apagar después, para que un teléfono bloqueado o en reposo muestre la app durante la lectura sin dejar la pantalla encendida de forma permanente. Desactivado por defecto. Recarga tras cambiarlo.",
           "companion_close_app": "Solo Companion (ADB). Fuerza el cierre de la app del coche tras cada sondeo, para que la siguiente lectura la reinicie desde cero en lugar de leer una pantalla en caché. Útil en dispositivos donde la app congela sus valores entre lecturas. Desactivado por defecto — un reinicio en frío es más lento. Recarga tras cambiarlo.",
           "force_ppe_climate": "Solo para Audi. Fuerza el nuevo formato PPE/PPC (climatisationMode obligatorio, targetTemperature omitido) al iniciar la climatización. Activar solo si posees Q6 e-tron, A6 e-tron, RS e-tron GT Facelift o A3 2024+ PHEV — de lo contrario la API responde 400. Recarga la integración tras activar.",
@@ -1604,6 +1598,17 @@
       },
       "alarm_reason": {
         "name": "Motivo de la alarma"
+      },
+      "companion_charge_mode": {
+        "name": "Modo de carga",
+        "state": {
+          "manual": "Manual",
+          "timer": "Temporizador",
+          "preferred_charging_times": "Horarios de carga preferidos",
+          "only_own_current": "Solo energía propia",
+          "immediate_discharging": "Descargar ahora",
+          "timer_charging_climatization": "Carga programada con climatización"
+        }
       }
     },
     "binary_sensor": {
@@ -1968,6 +1973,27 @@
       },
       "active_ventilation_switch": {
         "name": "Ventilación activa"
+      },
+      "companion_read_charge_detail": {
+        "name": "Leer detalle de carga"
+      },
+      "companion_read_vehicle_health": {
+        "name": "Leer estado del vehículo y ajustes"
+      },
+      "companion_read_climate_detail": {
+        "name": "Leer detalle de climatización"
+      },
+      "companion_read_climate_settings": {
+        "name": "Leer ajustes de climatización"
+      },
+      "companion_read_departure_times": {
+        "name": "Leer horas de salida"
+      },
+      "companion_read_driving_data": {
+        "name": "Leer datos de conducción"
+      },
+      "companion_read_parking_position": {
+        "name": "Leer posición de aparcamiento"
       }
     },
     "number": {
