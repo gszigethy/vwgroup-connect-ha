@@ -123,7 +123,7 @@ units; durations by `duration_hours` / `duration_minutes`.
 | Charging up to (50–100 %) | `80%` | `target_soc` + Charge Target number | — | Mapped (read and set) |
 | Reduced AC charging current | off | — (`vw_eu` has amps, not on/off) | `vehiclesettingsscreen_reducedchargingspeed` | Not mapped |
 | Automatically release AC connector | on | `auto_unlock_when_charged` → binary sensor | `vehiclesettingsscreen_automaticplugunlock` | Mapped (#9) |
-| Synchronise now | button | `command_sync_vehicle` | — | Mapped (command) |
+| Synchronise now | button | `command_sync_vehicle` → App sync interval number, Force vehicle refresh button | — | Mapped (command); the button syncs once, then re-reads the app after 3 minutes |
 | Plug & Charge, users, notifications, contracts | links | — | — | Not mapped (account) |
 
 ## Other tabs

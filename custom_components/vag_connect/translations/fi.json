@@ -2049,6 +2049,9 @@
       },
       "companion_reset_button": {
         "name": "Nollaa companion-yhteys"
+      },
+      "companion_force_refresh_button": {
+        "name": "Pakota ajoneuvon päivitys"
       }
     },
     "climate": {

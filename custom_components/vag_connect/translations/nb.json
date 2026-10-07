@@ -2049,6 +2049,9 @@
       },
       "companion_reset_button": {
         "name": "Tilbakestill companion-tilkobling"
+      },
+      "companion_force_refresh_button": {
+        "name": "Tving oppdatering av kjøretøy"
       }
     },
     "climate": {

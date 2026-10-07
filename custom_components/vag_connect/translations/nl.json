@@ -2049,6 +2049,9 @@
       },
       "companion_reset_button": {
         "name": "Companion-verbinding resetten"
+      },
+      "companion_force_refresh_button": {
+        "name": "Voertuigupdate forceren"
       }
     },
     "climate": {

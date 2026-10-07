@@ -53,6 +53,10 @@ async def async_setup_entry(
         # because an unverified-brand companion is read_only too.
         if coordinator.is_companion():
             entities.append(VagCompanionResetButton(coordinator, vin))
+            # #968 — "Synchronise now" wakes the car, so like the sync slider
+            # it needs a preset that maps it and an entry outside Read-only Mode.
+            if not read_only and _companion_can_sync(entry):
+                entities.append(VagCompanionForceRefreshButton(coordinator, vin))
             return entities
         # v2.17.1 / #923 — EU-Data-Act portal buttons appear whenever this entry
         # reads the portal: as its PRIMARY (read-only) channel OR as a
@@ -89,6 +93,14 @@ async def async_setup_entry(
         return entities
 
     register_dynamic_spawner(entry, coordinator, async_add_entities, _build_for_vin)
+
+
+def _companion_can_sync(entry: ConfigEntry) -> bool:
+    """True when this companion entry's brand preset maps "Synchronise now"."""
+    from .companion.app_sync import preset_can_sync  # noqa: PLC0415
+    from .const import CONF_BRAND  # noqa: PLC0415
+
+    return preset_can_sync(str(entry.data.get(CONF_BRAND, "")))
 
 
 class VagFlashButton(VagConnectEntity, ButtonEntity):
@@ -186,3 +198,21 @@ class VagCompanionResetButton(VagConnectEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         await self.coordinator.async_reset_companion_cooldown()
+
+
+class VagCompanionForceRefreshButton(VagConnectEntity, ButtonEntity):
+    """#968 — tap the app's "Synchronise now", then re-read the app.
+
+    The Refresh button only re-reads what the app already shows; this one first
+    makes the car send fresh data (vehicle Settings → Synchronise now) and
+    re-reads the app once the car has had time to answer.
+    """
+
+    _attr_translation_key = "companion_force_refresh_button"
+    _attr_icon = "mdi:car-clock"
+
+    def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin, "companion_force_refresh_button")
+
+    async def async_press(self) -> None:
+        await self.coordinator.async_companion_force_refresh()

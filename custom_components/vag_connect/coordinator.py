@@ -8326,6 +8326,34 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         )
         return True
 
+    async def async_companion_force_refresh(self) -> None:
+        """#968 — Force vehicle refresh button: one "Synchronise now", then a read.
+
+        Like one turn of ``_companion_app_sync_loop``: an accepted sync is read
+        back once the car has had time to answer, in the background so the
+        press returns after the tap. A refused sync is read at once, so the App
+        request status sensor shows why, and the press fails with that reason.
+        """
+        from homeassistant.exceptions import HomeAssistantError  # noqa: PLC0415
+
+        outcome = await self.async_companion_sync_vehicle()
+        if outcome:
+            self.hass.async_create_background_task(
+                self._companion_sync_readback(), f"{DOMAIN}_app_sync_readback"
+            )
+            return
+        await self.async_request_refresh()
+        if outcome is False:
+            raise HomeAssistantError(
+                "The app did not sync the car; see the App request status sensor"
+            )
+
+    async def _companion_sync_readback(self) -> None:
+        """Re-read the app once the car has had time to answer a sync."""
+        await asyncio.sleep(_APP_SYNC_READBACK_S)
+        if self._started:
+            await self.async_request_refresh()
+
     async def async_reset_companion_cooldown(self) -> None:
         """v2.26.0 (ckomma #22) — user-initiated clear of a stuck companion
         failure/rate-limit backoff, then an immediate re-read.
