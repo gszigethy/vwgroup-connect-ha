@@ -102,7 +102,7 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Test-Install dependencies
+      - name: Install test dependencies
         run: |
           pip install \
             pytest \

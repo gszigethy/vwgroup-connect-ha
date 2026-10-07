@@ -97,7 +97,7 @@ jobs:
               lines.append("")
               compare_url = f"https://github.com/{repo}/compare/v{prev_version}...v{version}"
               lines.append(f"Every commit, file and code change between the two versions:")
-                            lines.append("")
+              lines.append("")
               lines.append(f"➜ **{compare_url}**")
               lines.append("")
 
@@ -107,7 +107,7 @@ jobs:
               lines.append("")
               lines.append("If you're upgrading from an older version, also read these notes:")
               lines.append("")
-                            for v, d in recent_prior:
+              for v, d in recent_prior:
                   date_part = f" · {d}" if d else ""
                   lines.append(f"- [v{v}](https://github.com/{repo}/releases/tag/v{v}){date_part}")
               lines.append("")
@@ -119,7 +119,7 @@ jobs:
           lines.append("")
           lines.append("**HACS users:** enable Show beta versions for this fork custom Integration repository, then select the new beta.")
           lines.append("")
-                    lines.append("**Manual install:**")
+          lines.append("**Manual install:**")
           lines.append("")
           lines.append("1. Download `vag_connect.zip` from this release")
           lines.append("2. Unzip and copy `custom_components/vag_connect/` to your HA `config/custom_components/` folder, replacing any older copy")
@@ -137,9 +137,9 @@ jobs:
           lines.append("")
           lines.append(f"Open an issue with the bug-report template: https://github.com/{repo}/issues/new/choose")
           lines.append("")
-                    lines.append("Please mask your VIN to the last 6 characters and remove email/tokens/GPS before posting.")
+          lines.append("Please mask your VIN to the last 6 characters and remove email/tokens/GPS before posting.")
           lines.append("")
-          
+
           notes = "\n".join(lines)
           with open("/tmp/release_notes.md", "w") as f:
               f.write(notes)
