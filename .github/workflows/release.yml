@@ -58,6 +58,11 @@ jobs:
           pattern = rf"## \[{re.escape(version)}\][^\n]*\n(.*?)(?=\n## \[|\Z)"
           match = re.search(pattern, changelog, re.DOTALL)
           changelog_section = match.group(1).strip() if match else ""
+          # Release notes are English only: drop the " / German" half of the
+          # changelog's bilingual subheadings ("### Added / Hinzugefügt").
+          changelog_section = re.sub(
+              r"^(#{3,4} [^\n]*?) / [^\n]*$", r"\1", changelog_section, flags=re.M
+          )
 
           # All previous versions (semver, PEP 440 pre-releases and fork
           # releases like 4.11.0-5), newest first. Date is captured
@@ -66,9 +71,6 @@ jobs:
               r"## \[(\d+\.\d+\.\d+(?:(?:a|b|rc)\d+|-\d+)?)\](?:\s*-\s*(\d{4}-\d{2}-\d{2}))?",
               changelog,
           )
-          versions_only = [v for v, _ in all_entries]
-          idx = versions_only.index(version) if version in versions_only else -1
-          prev_version = versions_only[idx + 1] if idx + 1 < len(versions_only) else None
           # Last 3 prior versions for the "Recent releases" pointer
           recent_prior = [(v, d) for v, d in all_entries if v != version][:3]
 
@@ -91,16 +93,6 @@ jobs:
               lines.append("_See the [CHANGELOG.md](" +
                            f"https://github.com/{repo}/blob/v{version}/CHANGELOG.md) for details._")
           lines.append("")
-
-          # ── Compare against previous version ─────────────────────────────
-          if prev_version:
-              lines.append(f"## Full diff vs v{prev_version}")
-              lines.append("")
-              compare_url = f"https://github.com/{repo}/compare/v{prev_version}...v{version}"
-              lines.append(f"Every commit, file and code change between the two versions:")
-              lines.append("")
-              lines.append(f"➜ **{compare_url}**")
-              lines.append("")
 
           # ── Recent releases pointer ──────────────────────────────────────
           if recent_prior:
