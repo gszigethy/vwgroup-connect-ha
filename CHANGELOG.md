@@ -42,6 +42,23 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0-9] - 2026-10-07 — Companion taps survive app updates
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.11.0** plus fork release **9**, on top of 4.11.0-8.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a regular release — select `v4.11.0-9`, download, and restart Home Assistant.
+
+### Fixed / Behoben
+- **Companion: commands work on VW app 4.6.4, and app updates no longer switch taps off.** Climate, start/stop
+  charging, charge target and Synchronise now each accepted only app 4.3.2, so switching climate off on 4.6.4 failed
+  with *climate commands are mapped for app 4.3.2 only*. Every version list now accepts its verified builds and
+  anything newer: each control is still found on screen by resource id or the app's own label, a missing one stops the
+  command instead of tapping blind, and the result is checked. An unknown older build or an unreadable version stays
+  blocked. The 4.6.4 climate sheet and the resource ids the commands use were checked against live dumps and the
+  decompiled 4.6.4 APK. (#31)
+
 ## [4.11.0-8] - 2026-10-07 — VW app 4.6.4, ADB reconnect
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
