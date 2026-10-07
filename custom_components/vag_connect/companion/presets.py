@@ -270,7 +270,12 @@ _VW = BrandPreset(
     # widening, not a selector rewrite. Accept the Play "4.3.2" and the internal
     # versionName forms ("3.64.0" / "3.63.2") that report the same UI, so a patch
     # bump no longer re-quarantines readers.
-    verified_app_version=("4.3.2", "3.64.0", "3.63.2", "4.2.1"),
+    # 2026-10-07 — 4.6.4 regression-tested live on the Tiguan: the overview,
+    # charge sheet, Vehicle Health, vehicle Settings (incl. Synchronise now),
+    # climate sheet and settings, driving data and departure times all read the
+    # same as on 4.3.2. The parking read needs the app's Google Maps consent,
+    # which the update resets; the user accepts it in the app.
+    verified_app_version=("4.6.4", "4.3.2", "3.64.0", "3.63.2", "4.2.1"),
     # v2.26.0 — READ vocabulary re-grounded against ckomma/charge-app-connector-vw
     # (real-device VW app 4.2.x). The old words ("Ladezustand", "Reichweite",
     # "Zielladung") did NOT match what We Connect actually narrates in its
