@@ -1989,6 +1989,9 @@
       "companion_read_departure_times": {
         "name": "Číst časy odjezdu"
       },
+      "companion_read_driving_data": {
+        "name": "Číst jízdní data"
+      },
       "companion_read_parking_position": {
         "name": "Číst parkovací polohu"
       }

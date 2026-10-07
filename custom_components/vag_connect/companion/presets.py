@@ -807,6 +807,28 @@ _VW = BrandPreset(
             opt_in="climate_settings",
         ),
         NavReadSelector(
+            name="driving_data",
+            # The overview's Driving data tile. Its trip cards sit side by
+            # side in a carousel: "Last single trip" first, then "From
+            # charging or refuelling". ``read_driving_data`` reads them by the
+            # app's own labels and units, swiping the carousel (sideways only,
+            # never a pull-to-refresh) to bring the second card on screen.
+            steps=(
+                ActionSelector(
+                    action="open_driving_data",
+                    content_desc_re=r"^(?:Driving\s*data|Fahrdaten)\b",
+                    scroll_first=True,
+                ),
+            ),
+            values=(),
+            back_presses=1,
+            opt_in="driving_data",
+            resource_targets=(
+                "last_trip_distance_km", "last_trip_duration_min", "last_trip_avg_speed_kmh",
+                "refuel_trip_distance_km", "refuel_trip_duration_min", "refuel_trip_avg_speed_kmh",
+            ),
+        ),
+        NavReadSelector(
             name="departure_times",
             # The overview's Departure times tile. Each timer row shows its
             # time and a switch whose ``checked`` state is the timer's on/off;
@@ -902,6 +924,7 @@ _VW = BrandPreset(
         ActionSelector(action="up", resource_id="vwd_navigation_button"),
         ActionSelector(action="up", resource_id="vehicleHealthBack"),
         ActionSelector(action="up", resource_id="climatisationSettingsLeading"),
+        ActionSelector(action="up", resource_id="catRemoteTripStatisticsBack"),
         # #968 (plainmad, live 4.3.2 dump) — the charge detail is a bottom
         # sheet, and its way out is a described Close control rather than any
         # of the ids above.

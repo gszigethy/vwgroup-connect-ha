@@ -51,6 +51,7 @@ from .screen import (
 from .transport import CompanionTransportError, NetworkAdbTransport
 from .resources import (
     DEPARTURE_TILE,
+    DRIVING_TILE,
     find_app_alert,
     find_battery_control,
     find_battery_tile,
@@ -60,7 +61,9 @@ from .resources import (
     read_battery_resources,
     read_climate_resources,
     read_departure_timers,
+    read_driving_data,
     read_overview_resources,
+    trip_carousel_row,
 )
 from .app_sync import find_sync_button
 from .sync_time import find_sync_line
@@ -529,7 +532,10 @@ class CompanionChannel:
                     reached = nav
                 if detail is None:
                     break
-                self._apply_nav_values(nav, detail, fields)
+                extra: dict[str, object] = {}
+                if self._preset.brand == "volkswagen" and nav.name == "driving_data":
+                    extra = await self._read_driving_data(detail)
+                self._apply_nav_values(nav, detail, fields, extra)
                 here, done = detail, len(nav.path)
         except CompanionTransportError:
             _LOGGER.debug(
@@ -544,9 +550,11 @@ class CompanionChannel:
             await self._return_to_overview(min(walked, reached.back_presses))
 
     def _apply_nav_values(
-        self, nav: NavReadSelector, detail: list[UiNode], fields: dict[str, object]
+        self, nav: NavReadSelector, detail: list[UiNode], fields: dict[str, object],
+        extra: dict[str, object] | None = None,
     ) -> None:
         values = read_selectors(detail, nav.values)
+        values.update(extra or {})
         if self._preset.brand == "volkswagen" and nav.name == "charge_detail":
             values.update(read_battery_resources(detail, self._app_strings))
         if self._preset.brand == "volkswagen" and nav.name == "departure_times":
@@ -628,6 +636,31 @@ class CompanionChannel:
         detail, cleared = await self._dump_and_clear_overlays(pending)
         return (detail if cleared else None), taps
 
+    async def _read_driving_data(self, nodes: list[UiNode]) -> dict[str, object]:
+        """Both trip cards: the first as drawn, the second after one swipe.
+
+        The carousel shows the second card clipped at the edge, title and
+        labels but no values. A sideways swipe inside the carousel brings it
+        on screen; it moves the cards only and asks the car for nothing.
+        """
+        out = read_driving_data(nodes, self._app_strings)
+        row = trip_carousel_row(nodes, self._app_strings)
+        swipe = getattr(self._t, "swipe", None)
+        if "refuel_trip_distance_km" in out or row is None or swipe is None:
+            return out
+        left, top, right, bottom = row
+        y = (top + bottom) // 2
+        try:
+            await swipe(left + int((right - left) * 0.85), y, left + int((right - left) * 0.15), y, 400)
+        except CompanionTransportError:
+            return out
+        swiped, cleared = await self._dump_and_clear_overlays(await self._settle())
+        if cleared:
+            for key, val in read_driving_data(swiped, self._app_strings).items():
+                if key.startswith("refuel_trip_"):
+                    out.setdefault(key, val)
+        return out
+
     async def _scroll_up(self, nodes: list[UiNode]) -> list[UiNode]:
         """Swipe the current screen up by half a display, best-effort.
 
@@ -662,6 +695,8 @@ class CompanionChannel:
             node = find_settings_entry(nodes, self._app_strings)
         if step.action == "open_departure_times" and node is None:
             node = find_tile_entry(nodes, self._app_strings, DEPARTURE_TILE)
+        if step.action == "open_driving_data" and node is None:
+            node = find_tile_entry(nodes, self._app_strings, DRIVING_TILE)
         return node
 
     async def _settle(
