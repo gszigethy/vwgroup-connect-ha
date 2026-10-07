@@ -1604,6 +1604,17 @@
       },
       "alarm_reason": {
         "name": "Alarmreden"
+      },
+      "companion_charge_mode": {
+        "name": "Laadmodus",
+        "state": {
+          "manual": "Handmatig",
+          "timer": "Timer",
+          "preferred_charging_times": "Voorkeurslaadtijden",
+          "only_own_current": "Alleen eigen stroom",
+          "immediate_discharging": "Nu ontladen",
+          "timer_charging_climatization": "Getimed laden met klimaatregeling"
+        }
       }
     },
     "binary_sensor": {

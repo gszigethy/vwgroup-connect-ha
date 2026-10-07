@@ -260,6 +260,9 @@ def read_battery_resources(nodes: list[UiNode], resources: StringResources) -> d
     for pattern in _patterns(resources, "acc_vehicle_tab_range_tile_value_battery_currently_charging"):
         if any(pattern.search(n.content_desc) for n in nodes) and "electric_range_km" in out:
             out["is_charging"] = True
+            # Without this the overview's catch-all selector hands the whole
+            # tile narration to the Charging Status sensor.
+            out.setdefault("charging_state", "Currently charging")
     # Each plural form is a separate named resource. The zero/one forms may
     # spell the number out; interpret the resource key, not the localized word.
     time_parts: dict[str, int] = {}
@@ -275,7 +278,44 @@ def read_battery_resources(nodes: list[UiNode], resources: StringResources) -> d
                             time_parts[unit] = value
     if time_parts:
         out["remaining_charge_time_min"] = time_parts.get("hours", 0) * 60 + time_parts.get("minutes", 0)
+    mode = read_charge_mode(nodes, resources)
+    if mode is not None:
+        out["charge_mode"] = mode
     return out
+
+
+# The range sheet's "Charging method" row (ChargeModeDescriptor in the 4.3.2
+# APK): each label it shows stands for one ChargeModes$Mode wire value, the
+# same value the VW cloud reports as ``chargeMode``.
+CHARGE_MODE_LABEL = "acc_range_modal_label_charge_mode"
+CHARGE_MODES = {
+    "immediate_charging": "manual",
+    "departure_time": "timer",
+    "departure_time_charge_air_condition": "timerChargingWithClimatisation",
+    "preferred_times": "preferredChargingTimes",
+    "solar_power": "onlyOwnCurrent",
+    "discharge": "immediateDischarging",
+    "bidirectional_charging": "homeStorageCharging",
+}
+
+
+def read_charge_mode(nodes: list[UiNode], resources: StringResources) -> str | None:
+    """The charge mode from "Charging method. Immediate charging. Change …"."""
+    labels = _labels(resources, CHARGE_MODE_LABEL)
+    if not labels:
+        return None
+    values = {
+        label: wire
+        for suffix, wire in CHARGE_MODES.items()
+        for label in _labels(resources, "acc_range_modal_value_charge_mode_" + suffix)
+    }
+    for node in nodes:
+        parts = [p.strip().casefold() for p in node.content_desc.split(". ")]
+        if len(parts) >= 2 and parts[0] in labels:
+            wire = values.get(parts[1].rstrip("."))
+            if wire is not None:
+                return wire
+    return None
 
 
 def find_battery_control(nodes: list[UiNode], resources: StringResources, action: str) -> UiNode | None:
