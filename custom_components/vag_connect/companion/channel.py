@@ -50,13 +50,16 @@ from .screen import (
 )
 from .transport import CompanionTransportError, NetworkAdbTransport
 from .resources import (
+    DEPARTURE_TILE,
     find_app_alert,
     find_battery_control,
     find_battery_tile,
     find_request_limit,
     find_settings_entry,
+    find_tile_entry,
     read_battery_resources,
     read_climate_resources,
+    read_departure_timers,
     read_overview_resources,
 )
 from .app_sync import find_sync_button
@@ -484,7 +487,8 @@ class CompanionChannel:
             if only and nav.name not in only:
                 return False  # a command's readback re-reads its own path only
             # Nothing to fetch from this detail when every value is known.
-            return not all(fields.get(v.target) is not None for v in nav.values)
+            targets = [v.target for v in nav.values] + list(nav.resource_targets)
+            return not all(fields.get(t) is not None for t in targets)
 
         navs = list(self._preset.nav_reads)
         index = 0
@@ -545,6 +549,8 @@ class CompanionChannel:
         values = read_selectors(detail, nav.values)
         if self._preset.brand == "volkswagen" and nav.name == "charge_detail":
             values.update(read_battery_resources(detail, self._app_strings))
+        if self._preset.brand == "volkswagen" and nav.name == "departure_times":
+            values.update(read_departure_timers(detail))
         if self._preset.brand == "volkswagen" and nav.name in (
             "climate_detail", "climate_settings",
         ):
@@ -654,6 +660,8 @@ class CompanionChannel:
             node = find_battery_tile(nodes, self._app_strings)
         if step.action == "open_vehicle_settings" and node is None:
             node = find_settings_entry(nodes, self._app_strings)
+        if step.action == "open_departure_times" and node is None:
+            node = find_tile_entry(nodes, self._app_strings, DEPARTURE_TILE)
         return node
 
     async def _settle(
