@@ -138,6 +138,9 @@ class NavReadSelector:
     steps: tuple[ActionSelector, ...] = ()  # ordered taps, overview → detail
     back_presses: int = 1
     opt_in: str = "charge_detail"
+    # Values a resource reader supplies from this screen besides ``values``;
+    # counted when deciding whether the screen still has something to give.
+    resource_targets: tuple[str, ...] = ()
 
     @property
     def path(self) -> tuple[ActionSelector, ...]:
@@ -802,6 +805,26 @@ _VW = BrandPreset(
             ),
             back_presses=2,
             opt_in="climate_settings",
+        ),
+        NavReadSelector(
+            name="departure_times",
+            # The overview's Departure times tile. Each timer row shows its
+            # time and a switch whose ``checked`` state is the timer's on/off;
+            # the switches are read, never tapped. ``read_departure_timers``
+            # does the reading, by layout rather than words.
+            steps=(
+                ActionSelector(
+                    action="open_departure_times",
+                    content_desc_re=r"^(?:Departure\s*times|Abfahrtszeiten)\b",
+                    scroll_first=True,
+                ),
+            ),
+            values=(),
+            back_presses=1,
+            opt_in="departure_times",
+            resource_targets=tuple(
+                f"departure_timer_{i}_{part}" for i in (1, 2, 3) for part in ("enabled", "time")
+            ),
         ),
         NavReadSelector(
             name="parking_position",

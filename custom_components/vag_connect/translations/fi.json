@@ -1986,6 +1986,9 @@
       "companion_read_climate_settings": {
         "name": "Lue ilmastointiasetukset"
       },
+      "companion_read_departure_times": {
+        "name": "Lue lähtöajat"
+      },
       "companion_read_parking_position": {
         "name": "Lue pysäköintipaikka"
       }
