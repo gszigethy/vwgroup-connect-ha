@@ -116,7 +116,20 @@ class NetworkAdbTransport:
     async def shell(self, cmd: str, timeout_s: float = 10.0) -> str:
         if self._device is None:
             raise CompanionTransportError("not connected")
-        return await asyncio.to_thread(self._device.shell, cmd, timeout_s)
+        try:
+            return await asyncio.to_thread(self._device.shell, cmd, timeout_s)
+        except Exception as err:  # noqa: BLE001 - adb-shell raises many types
+            # adb-shell keeps ``available`` True after the socket breaks (a phone
+            # that dropped off Wi-Fi, a restarted adbd: "Broken pipe"), so
+            # ``connected`` would never ask for a reconnect and every later read
+            # would fail the same way. Drop the device so the next call connects
+            # afresh, and raise the channel's own error so the failure backoff
+            # applies.
+            await self.close()
+            raise CompanionTransportError(
+                f"the ADB connection to {self._host}:{self._port} failed "
+                f"({type(err).__name__}); reconnecting on the next read"
+            ) from err
 
     async def dump_ui(self, timeout_s: float = 15.0) -> str:
         """Run uiautomator, return the screen's accessibility XML.
