@@ -251,6 +251,9 @@ def read_battery_resources(nodes: list[UiNode], resources: StringResources) -> d
     for pattern in _patterns(resources, "acc_vehicle_tab_range_tile_value_battery_currently_charging"):
         if any(pattern.search(n.content_desc) for n in nodes) and "electric_range_km" in out:
             out["is_charging"] = True
+            # Without this the overview's catch-all selector hands the whole
+            # tile narration to the Charging Status sensor.
+            out.setdefault("charging_state", "Currently charging")
     # Each plural form is a separate named resource. The zero/one forms may
     # spell the number out; interpret the resource key, not the localized word.
     time_parts: dict[str, int] = {}
