@@ -288,6 +288,58 @@ async def test_command_readback_walks_only_its_own_detail_path():
     assert channel._nav_only == set()
 
 
+def test_charge_mode_is_read_from_the_charging_method_row():
+    # @gszigethy Tiguan: "Charging method. Immediate charging. Change charging
+    # method"; Immediate charging is the APK's ChargeModes "manual".
+    out = read_battery_resources(parse_ui_dump(dump("tiguan_target_reached")), STRINGS)
+    assert out["charge_mode"] == "manual"
+
+
+def test_charge_mode_uses_the_installed_language():
+    # @kgroshert ID.4 (German): "Ladeverfahren. Sofortladen. Ladeverfahren ändern".
+    german = {
+        "acc_range_modal_label_charge_mode": {"Ladeverfahren"},
+        "acc_range_modal_value_charge_mode_immediate_charging": {"Sofortladen"},
+    }
+    out = read_battery_resources(parse_ui_dump(dump("id4_charging")), german)
+    assert out["charge_mode"] == "manual"
+
+
+@pytest.mark.parametrize(("label", "wire"), [
+    ("Charge at preferred times", "preferredChargingTimes"),
+    ("Charge for departure time", "timer"),
+    ("Charge/air condition for departure", "timerChargingWithClimatisation"),
+    ("Charge using solar power", "onlyOwnCurrent"),
+    ("Something new", None),
+])
+def test_charge_mode_labels_map_to_the_cloud_values(label, wire):
+    from custom_components.vag_connect.companion.resources import read_charge_mode
+
+    xml = (
+        '<hierarchy><node text="" resource-id="" content-desc="Charging method. '
+        f'{label}. Change charging method" bounds="[0,0][10,10]"/></hierarchy>'
+    )
+    assert read_charge_mode(parse_ui_dump(xml), STRINGS) == wire
+
+
+@pytest.mark.parametrize(("raw", "shown"), [
+    ("manual", "manual"), ("preferredChargingTimes", "preferred_charging_times"),
+    ("timerChargingWithClimatisation", "timer_charging_climatization"), (None, None),
+])
+def test_companion_charge_mode_sensor_shows_the_select_options(raw, shown):
+    from unittest.mock import MagicMock
+
+    from custom_components.vag_connect.sensor import VagCompanionChargeModeSensor
+
+    vin = "WVWZZZAUZFW805377"
+    sensor = VagCompanionChargeModeSensor.__new__(VagCompanionChargeModeSensor)
+    sensor._vin = vin
+    sensor.coordinator = MagicMock()
+    sensor.coordinator.data = {vin: {"vin": vin, "charge_mode": raw}}
+    assert sensor.native_value == shown
+    assert "manual" in sensor.options
+
+
 def test_overview_while_charging_reports_a_state_not_the_tile_narration():
     nodes = parse_ui_dump(dump("tiguan_overview"))
     fields = read_fields(nodes, VW)

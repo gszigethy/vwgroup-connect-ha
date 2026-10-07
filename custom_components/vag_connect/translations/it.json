@@ -1604,6 +1604,17 @@
       },
       "alarm_reason": {
         "name": "Motivo dell'allarme"
+      },
+      "companion_charge_mode": {
+        "name": "Modalità di ricarica",
+        "state": {
+          "manual": "Manuale",
+          "timer": "Timer",
+          "preferred_charging_times": "Orari di ricarica preferiti",
+          "only_own_current": "Solo energia propria",
+          "immediate_discharging": "Scarica ora",
+          "timer_charging_climatization": "Ricarica a timer con climatizzazione"
+        }
       }
     },
     "binary_sensor": {
