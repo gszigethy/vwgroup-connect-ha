@@ -80,6 +80,10 @@ CONF_COMPANION_READ_CLIMATE_DETAIL   = "companion_read_climate_detail"
 # one tap deeper than the climate detail, so it has its own opt-in.
 CONF_COMPANION_READ_CLIMATE_SETTINGS = "companion_read_climate_settings"
 CONF_COMPANION_READ_PARKING_POSITION = "companion_read_parking_position"
+# The Departure times screen: each timer's time and on/off switch (read only).
+CONF_COMPANION_READ_DEPARTURE_TIMES = "companion_read_departure_times"
+# The Driving data screen: the last trip and the trip since charging/refuelling.
+CONF_COMPANION_READ_DRIVING_DATA = "companion_read_driving_data"
 # #968 — how often the companion asks the car itself for fresh data, via the
 # app's vehicle Settings → "Synchronise now". Separate from CONF_SCAN_INTERVAL,
 # which only re-reads the app screen: a sync wakes the car, so it runs on its

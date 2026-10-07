@@ -21,9 +21,9 @@ Home Assistant climate entities. It is a stand-alone change against upstream
 | Window heating only | `command_start_window_heating` / `command_stop_window_heating` | Picker row 2, or Mk8 toggles, then `cta_start` |
 | Set target temperature | `command_set_climate_temperature` | Tap the neighbouring dial label, one 0.5 step at a time |
 
-The sheet is read by the existing `climate_detail` opt-in. The Settings sheet
-is one tap deeper and has a new opt-in, `companion_read_climate_settings`, off
-by default.
+The sheet is read when the **Read climate detail** switch is on. The Settings
+sheet is one tap deeper and has its own switch, **Read climate settings**. Both
+are off by default and sit on the VW Group Connect Settings device.
 
 ## How the app behaves (installed 4.3.2 APK)
 

@@ -239,7 +239,6 @@
           "fuel_tank_capacity": "Polttoainesäiliön tilavuus (litraa, polttoaine-%)",
           "enable_reverse_geocoding": "Käänteinen geokoodaus (pysäköintiosoite)",
           "read_only_mode": "Vain luku -tila",
-          "companion_read_charge_detail": "Companion: lue lataustavoite (navigoi sovelluksessa)",
           "companion_wake_sleep": "Companion: herätä näyttö kyselyn ajaksi, nukuta sen jälkeen",
           "companion_close_app": "Companion: sulje auton sovellus jokaisen luennan jälkeen",
           "force_ppe_climate": "Audi PPE/PPC -ilmastoinnin runko (Q6/A6 e-tron, RS e-tron GT Facelift, A3 2024+ PHEV)",
@@ -264,10 +263,6 @@
           "vwde_cred_relogin": "Volkswagen.de: kirjaudu uudelleen tallennetulla salasanalla, kun verkkoistunto vanhenee",
           "vweu_device_grant": "Lisää VW EU Two-Way — komennot + live-lukemat (BETA)",
           "remove_vweu_twoway": "Poista VW EU Two-Way (palaa edelliseen kanavaan)",
-          "companion_read_vehicle_health": "Companion: lue mittarilukema ja huolto ajoneuvon kunnosta (navigoi sovelluksessa)",
-          "companion_read_climate_detail": "Companion: lue tavoite- ja ulkolämpötila (navigoi sovelluksessa)",
-          "companion_read_climate_settings": "Companion: lue ilmastointiasetukset – ilmastointi avattaessa, automaattinen ikkunalämmitys, vyöhykkeet (selaa sovellusta)",
-          "companion_read_parking_position": "Companion: lue pysäköintipaikka sovelluksen jakolinkistä (navigoi sovelluksessa)",
           "skoda_official_api_key": "Virallinen Škoda-API-avain — lisää valmistajan virallisen API:n live-tietolähteeksi (ja vikasietona)",
           "clear_skoda_official_key": "Tyhjennä tallennettu virallinen Škoda-API-avain (uusi luodaan automaattisesti, jos kirjautumisesi tukee sitä)",
           "skoda_official_mode": "Škodan virallisen API:n lähdetila"
@@ -277,7 +272,6 @@
           "spin": "S-PIN ovien lukitsemiseen. Sovellus → Turvallisuus → S-PIN.",
           "enable_reverse_geocoding": "Lähettää pysäköinnin GPS-sijainnin OpenStreetMap Nominatimille kadun/kaupungin selvittämiseksi. Oletuksena pois päältä yksityisyyden vuoksi.",
           "read_only_mode": "Käytössä ollessaan vain tilanantureita luodaan — ei kytkimiä, painikkeita, lukkoja, ilmastointia tai liukusäätimiä, jotka lähettävät komentoja. Hyödyllinen, jos haluat ajoneuvon telemetrian ilman tahattoman toiminnan riskiä. Lataa integraatio uudelleen vaihdon jälkeen.",
-          "companion_read_charge_detail": "Vain Companion (ADB). Lukee lisäksi lataustavoitteen, lataustehon ja jäljellä olevan ajan, jotka ovat latauksen tietonäytön takana. Tämä NAPAUTTAA sovellusta siirtyäkseen sinne (noin 15 minuutin välein), joten ota se käyttöön vasta kun olet varmistanut, että se toimii puhelimessasi. Oletuksena pois päältä. Lataa uudelleen vaihdon jälkeen.",
           "companion_wake_sleep": "Vain Companion (ADB). Herättää puhelimen näytön ennen jokaista kyselyä ja nukuttaa sen jälkeen, jotta lukittu tai nukkuva puhelin näyttää sovelluksen luvun ajan ilman, että näyttö jää pysyvästi päälle. Oletuksena pois päältä. Lataa uudelleen vaihdon jälkeen.",
           "companion_close_app": "Vain Companion (ADB). Pysäyttää (sulkee) auton sovelluksen pakotetusti jokaisen kyselyn jälkeen, jotta seuraava luenta käynnistää sen uudelleen puhtaalta pöydältä eikä lue välimuistiin jäänyttä näyttöä. Auttaa laitteissa, joissa sovellus jäädyttää arvonsa luentojen välillä. Oletuksena pois — kylmäkäynnistys on hitaampi. Lataa uudelleen muutoksen jälkeen.",
           "force_ppe_climate": "Vain Audi. Pakottaa uuden PPE/PPC-rungon muodon (climatisationMode pakollinen, targetTemperature jätetty pois) ilmastoinnin käynnistyksessä. Ota käyttöön vain, jos omistat Q6 e-tronin, A6 e-tronin, RS e-tron GT Faceliftin tai A3 2024+ PHEV:n — muutoin ilmastoinnin käynnistys palauttaa 400. Lataa integraatio uudelleen vaihdon jälkeen.",
@@ -1604,6 +1598,17 @@
       },
       "alarm_reason": {
         "name": "Hälytyksen syy"
+      },
+      "companion_charge_mode": {
+        "name": "Lataustapa",
+        "state": {
+          "manual": "Manuaalinen",
+          "timer": "Ajastin",
+          "preferred_charging_times": "Ensisijaiset latausajat",
+          "only_own_current": "Vain oma sähkö",
+          "immediate_discharging": "Pura nyt",
+          "timer_charging_climatization": "Ajastettu lataus ilmastoinnilla"
+        }
       }
     },
     "binary_sensor": {
@@ -1968,6 +1973,27 @@
       },
       "active_ventilation_switch": {
         "name": "Aktiivinen tuuletus"
+      },
+      "companion_read_charge_detail": {
+        "name": "Lue lataustiedot"
+      },
+      "companion_read_vehicle_health": {
+        "name": "Lue ajoneuvon kunto ja asetukset"
+      },
+      "companion_read_climate_detail": {
+        "name": "Lue ilmastoinnin tiedot"
+      },
+      "companion_read_climate_settings": {
+        "name": "Lue ilmastointiasetukset"
+      },
+      "companion_read_departure_times": {
+        "name": "Lue lähtöajat"
+      },
+      "companion_read_driving_data": {
+        "name": "Lue ajotiedot"
+      },
+      "companion_read_parking_position": {
+        "name": "Lue pysäköintipaikka"
       }
     },
     "number": {

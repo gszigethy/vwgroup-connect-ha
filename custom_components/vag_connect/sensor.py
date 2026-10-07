@@ -4688,6 +4688,35 @@ class VagAppRequestStatusSensor(VagConnectEntity, SensorEntity):
         return state if state in self._attr_options else None
 
 
+class VagCompanionChargeModeSensor(VagConnectEntity, SensorEntity):
+    """The charge mode the Volkswagen app shows, read-only (companion).
+
+    The range sheet's "Charging method" row, mapped to the same ``charge_mode``
+    value the VW cloud reports. Cloud entries show it on the Charging Mode
+    select; the companion cannot set the mode, so it gets this sensor instead.
+    """
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_translation_key = "companion_charge_mode"
+    _attr_icon = "mdi:ev-plug-type2"
+
+    def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin, "companion_charge_mode")
+
+    @property
+    def options(self) -> list[str]:
+        from .select import _CHARGE_MODE_OPTIONS  # noqa: PLC0415
+
+        return list(_CHARGE_MODE_OPTIONS)
+
+    @property
+    def native_value(self) -> str | None:
+        from .select import _normalise_raw_mode  # noqa: PLC0415
+
+        mode = _normalise_raw_mode(self._vehicle.get("charge_mode"))
+        return mode if mode in self.options else None
+
+
 # b13 — platinum parallel-updates rule: the coordinator's background poll
 # loop owns every API request, so entity updates need no throttling. HA reads
 # this MODULE-level constant (an entity attr is a no-op).
@@ -4814,6 +4843,10 @@ async def async_setup_entry(
             entities.append(VagLastVehicleSyncSensor(coordinator, vin))
         if syncs_vehicle:
             entities.append(VagAppRequestStatusSensor(coordinator, vin))
+        if reads_sync_line and vehicle.get("has_battery") and not (
+            coordinator.command_method_available("command_set_charge_mode")
+        ):
+            entities.append(VagCompanionChargeModeSensor(coordinator, vin))
         return entities
 
     register_dynamic_spawner(entry, coordinator, async_add_entities, _build_for_vin)

@@ -28,7 +28,8 @@ from .transport import NetworkAdbTransport
 _LOGGER = logging.getLogger(__name__)
 
 
-# VehicleData flags that default to False and that no companion screen supplies.
+# VehicleData flags that default to False; only the opt-in departure-times
+# read supplies them.
 _UNREAD_FLAGS = (
     "departure_timer_1_enabled", "departure_timer_2_enabled", "departure_timer_3_enabled",
 )
@@ -141,9 +142,9 @@ class CompanionClient:
         if fields is None and self._last_data is not None:
             return self._last_data
         data = VehicleData(vin=vin.upper())
-        # The model defaults these to False for the cloud parsers; the app
-        # screens this channel reads never show them, so "off" would be a
-        # value nobody read. Unknown keeps the entities hidden.
+        # The model defaults these to False for the cloud parsers; without
+        # the departure-times read "off" would be a value nobody read.
+        # Unknown keeps the entities hidden; a read overwrites them below.
         for key in _UNREAD_FLAGS:
             setattr(data, key, None)
         data.source_channel = self._source_channel
@@ -173,6 +174,10 @@ class CompanionClient:
         data.companion_source_age_s = self._channel.source_data_age_s
         self._last_data = data
         return data
+
+    def set_nav_opt_in(self, opt_in: str, enabled: bool) -> None:
+        """Turn one companion nav read on or off without a reload."""
+        self._channel.set_nav_opt_in(opt_in, enabled)
 
     # -- the command surface --------------------------------------------------
 

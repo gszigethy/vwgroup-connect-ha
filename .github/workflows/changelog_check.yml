@@ -1,4 +1,4 @@
-name: Changelog Pflicht
+name: Changelog Required
 
 # Runs on EVERY pull request, deliberately. This job is a required check on
 # main, and a required check that is filtered out by path never reports at
@@ -13,33 +13,33 @@ on:
 
 jobs:
   check:
-    name: CHANGELOG.md aktualisiert?
+    name: CHANGELOG.md updated?
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # need full history for git diff origin/main...HEAD
 
-      - name: Prüfen ob CHANGELOG.md geändert wurde
+      - name: Check whether CHANGELOG.md was updated
         run: |
           FILES=$(git diff --name-only origin/main...HEAD)
           if ! echo "$FILES" | grep -qE '^(custom_components/|CHANGELOG\.md$|docs/CHANGELOG_TECHNICAL\.md$)'; then
-            echo "Kein Integrations-Code geändert (nur Doku/CI/Tests) — CHANGELOG-Pflicht gilt hier nicht."
+            echo "No integration code changed (docs/CI/tests only) — CHANGELOG update is not required."
             exit 0
           fi
           if ! echo "$FILES" | grep -q "CHANGELOG.md"; then
             echo ""
             echo "══════════════════════════════════════════"
-            echo "  CHANGELOG.md wurde nicht aktualisiert!"
+            echo "  CHANGELOG.md was not updated!"
             echo "══════════════════════════════════════════"
             echo ""
-            echo "Bitte trage deine Änderungen im Unreleased-Block ein:"
+            echo "Please add your changes to the Unreleased section:"
             echo ""
             echo "  ## [Unreleased]"
-            echo "  ### Hinzugefügt / Geändert / Behoben"
-            echo "  - Beschreibung der Änderung"
-            echo "    Autor: @dein-name"
+            echo "  ### Added / Changed / Fixed"
+            echo "  - Description of the change"
+            echo "    Author: @your-name"
             echo ""
             exit 1
           fi
-          echo "CHANGELOG.md wurde aktualisiert — OK"
+          echo "CHANGELOG.md was updated — OK"

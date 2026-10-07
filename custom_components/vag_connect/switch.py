@@ -2,8 +2,11 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Switches for VW Group Connect (lock/unlock, charging)."""
 
+from typing import Any
+
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -24,6 +27,9 @@ async def async_setup_entry(
 ) -> None:
     """Set up switch entities. v1.25.0 PR-C: dynamic listener spawn."""
     coordinator: VagConnectCoordinator = entry.runtime_data
+    # The companion's nav reads only read the app, so they are offered in
+    # Read-only Mode too.
+    async_add_entities(_companion_read_switches(coordinator, entry))
     # v1.12.0 (#63) — Read-only Mode: switches send commands, skip all.
     if coordinator.is_read_only():
         return
@@ -430,3 +436,84 @@ class VagAuxHeatingSwitch(VagConnectEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs: object) -> None:
         await self.coordinator.async_stop_aux_heating(self._vin)
+
+
+# The companion's nav reads, each a CONFIG switch on the settings device next
+# to the interval sliders: (nav opt-in, entry option it is stored under, icon).
+COMPANION_READS: tuple[tuple[str, str, str], ...] = (
+    ("charge_detail", "companion_read_charge_detail", "mdi:ev-station"),
+    ("vehicle_health", "companion_read_vehicle_health", "mdi:car-wrench"),
+    ("climate_detail", "companion_read_climate_detail", "mdi:thermometer"),
+    ("climate_settings", "companion_read_climate_settings", "mdi:air-conditioner"),
+    ("departure_times", "companion_read_departure_times", "mdi:timer-outline"),
+    ("driving_data", "companion_read_driving_data", "mdi:map-marker-distance"),
+    ("parking_position", "companion_read_parking_position", "mdi:map-marker"),
+)
+
+
+def _companion_read_switches(
+    coordinator: VagConnectCoordinator, entry: ConfigEntry,
+) -> list[SwitchEntity]:
+    """One switch per nav read the entry's brand preset has."""
+    if not coordinator.is_companion():
+        return []
+    from .companion.presets import PRESETS  # noqa: PLC0415
+    from .const import CONF_BRAND  # noqa: PLC0415
+
+    preset = PRESETS.get(str(entry.data.get(CONF_BRAND, "")))
+    available = {nav.opt_in for nav in preset.nav_reads} if preset else set()
+    return [
+        VagCompanionReadSwitch(coordinator, entry, opt_in, option, icon)
+        for opt_in, option, icon in COMPANION_READS
+        if opt_in in available
+    ]
+
+
+class VagCompanionReadSwitch(SwitchEntity):
+    """Whether the companion walks the app to one detail screen.
+
+    Each read taps through the app about every 15 minutes, so all are off by
+    default. The setting is stored in the entry options as before and applied
+    to the running channel at once: switching on reads the screen on the next
+    poll, switching off drops the values that read supplied.
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self, coordinator: VagConnectCoordinator, entry: ConfigEntry,
+        opt_in: str, option: str, icon: str,
+    ) -> None:
+        from .number import _settings_device  # noqa: PLC0415
+
+        self._coordinator = coordinator
+        self._entry = entry
+        self._opt_in = opt_in
+        self._option = option
+        self._attr_translation_key = option
+        self._attr_icon = icon
+        self._attr_unique_id = f"{entry.entry_id}_{option}"
+        self._attr_device_info = _settings_device(entry)
+
+    @property
+    def is_on(self) -> bool:
+        # Options THEN data: the update listener folds options into data.
+        options = dict(getattr(self._entry, "options", None) or {})
+        data = dict(getattr(self._entry, "data", None) or {})
+        return bool(options.get(self._option, data.get(self._option, False)))
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._set(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._set(False)
+
+    async def _set(self, enabled: bool) -> None:
+        self._coordinator.set_companion_read(self._opt_in, enabled)
+        current = dict(self._entry.options or {})
+        current[self._option] = enabled
+        self._coordinator.hass.config_entries.async_update_entry(
+            self._entry, options=current,
+        )
+        self.async_write_ha_state()
