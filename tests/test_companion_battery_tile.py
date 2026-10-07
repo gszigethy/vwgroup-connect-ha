@@ -288,6 +288,37 @@ async def test_command_readback_walks_only_its_own_detail_path():
     assert channel._nav_only == set()
 
 
+def test_settings_auto_release_switch_is_read():
+    from custom_components.vag_connect.companion.resources import read_settings_resources
+
+    nodes = parse_ui_dump(dump("tiguan_settings_switches"))
+    assert read_settings_resources(nodes, STRINGS) == {"auto_unlock_when_charged": True}
+    # The same screen still gives the charge limit, by the preset's selector.
+    settings = next(nav for nav in VW.nav_reads if nav.name == "vehicle_settings")
+    assert read_selectors(nodes, settings.values) == {"target_soc": 80}
+
+
+def test_settings_switches_absent_without_their_rows():
+    from custom_components.vag_connect.companion.resources import read_settings_resources
+
+    assert read_settings_resources(parse_ui_dump(dump("tiguan_settings")), STRINGS) == {}
+
+
+@pytest.mark.asyncio
+async def test_settings_walk_runs_for_its_switches_when_the_limit_is_known():
+    channel = CompanionChannel(Phone(), VW, time_fn=time.monotonic, nav_opt_ins={"vehicle_health"})
+    walked = []
+
+    async def fake_walk(path, *_args):
+        walked.append(path[0].action)
+        return None, 0
+
+    channel._walk_to_detail = fake_walk
+    await channel._augment_via_nav({"target_soc": 80, "odometer_km": 1, "service_due_in_days": 1,
+                                    "oil_service_due_in_days": 1})
+    assert walked == ["open_vehicle_settings"]
+
+
 @pytest.mark.asyncio
 async def test_departure_timers_are_unknown_not_off():
     # Without the departure-times read "off" would be a value nobody read.

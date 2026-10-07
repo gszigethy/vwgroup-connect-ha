@@ -152,6 +152,9 @@
   "vehiclesettingsscreen_airconditionedzones_options_rightrearseatzone": [
     "Rear right"
   ],
+  "vehiclesettingsscreen_automaticplugunlock": [
+    "Automatically release AC connector"
+  ],
   "screen_vehiclehealth_subhead_totaldistance": [
     "Total distance"
   ],

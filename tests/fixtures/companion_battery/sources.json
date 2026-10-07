@@ -97,5 +97,11 @@
     "original_file": "geo-d560.xml",
     "source": "https://github.com/its-me-prash/vwgroup-connect-ha/issues/968#issuecomment-5950045566",
     "note": "Local supplemental ADB capture, 2026-10-04, @gszigethy (Tiguan 1.5 l eHybrid, VW 4.3.2, Android 10, 1080x2340); the same screen at density 560; same nodes. Not from the earlier ZIP."
+  },
+  {
+    "fixture": "tiguan_settings_switches.xml",
+    "contributor": "gszigethy",
+    "source": "Local ADB capture, 2026-10-06, Tiguan Life 1.5 l eHybrid, VW app 4.3.2 (English)",
+    "note": "Vehicle Settings, top of the list: Reduced AC charging current off, Automatically release AC connector on. Read-only navigation."
   }
 ]

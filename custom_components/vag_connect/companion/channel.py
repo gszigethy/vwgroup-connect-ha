@@ -64,6 +64,7 @@ from .resources import (
     read_driving_data,
     read_health_resources,
     read_overview_resources,
+    read_settings_resources,
     trip_carousel_row,
 )
 from .app_sync import find_sync_button
@@ -560,6 +561,8 @@ class CompanionChannel:
             values.update(read_battery_resources(detail, self._app_strings))
         if self._preset.brand == "volkswagen" and nav.name == "vehicle_health":
             values.update(read_health_resources(detail, self._app_strings))
+        if self._preset.brand == "volkswagen" and nav.name == "vehicle_settings":
+            values.update(read_settings_resources(detail, self._app_strings))
         if self._preset.brand == "volkswagen" and nav.name == "departure_times":
             values.update(read_departure_timers(detail))
         if self._preset.brand == "volkswagen" and nav.name in (

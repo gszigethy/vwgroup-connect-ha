@@ -64,6 +64,11 @@ _CLIMA_KEYS = (
     CLIMA_MODE_AC, CLIMA_MODE_WINDOW_HEATING, CLIMA_ZONES, CLIMA_ZONES_SEVERAL,
     *CLIMA_ZONE_KEYS,
 )
+# Switches on vehicle Settings, read into the field the VW cloud parser fills
+# for the same setting (vw_eu: autoUnlockPlugWhenCharged).
+SETTINGS_SWITCHES = {
+    "vehiclesettingsscreen_automaticplugunlock": ("auto_unlock_when_charged", True, False),
+}
 # Vehicle Health Report subheads, each followed by its value line: a distance,
 # or "<days> <word> / <distance>" for the service countdowns.
 HEALTH_ROWS = {
@@ -123,7 +128,7 @@ _SINGLE_KEYS = frozenset({
     "acc_common_hint_details", "acc_vehicle_tab_label_settings", *_LIMIT_KEYS,
     DEPARTURE_TILE, *_TRIP_KEYS,
     SYNC_LAST_UPDATE, SYNC_JUST_NOW, SYNC_TOO_OLD, DATA_UNAVAILABLE, *_CLIMA_KEYS,
-    *HEALTH_ROWS, HEALTH_NO_ISSUES, HEALTH_ISSUES,
+    *HEALTH_ROWS, HEALTH_NO_ISSUES, HEALTH_ISSUES, *SETTINGS_SWITCHES,
     *_TILE_KEYS,
 })
 # Android's plural quantity attributes (``android:^attr-private`` ids).
@@ -773,6 +778,25 @@ def _read_zones(nodes: list[UiNode], resources: StringResources) -> dict[str, ob
             if match and match.lastindex and match.group(1) == "2":
                 return {"climate_zone_front_left": True, "climate_zone_front_right": True}
     return {}
+
+
+def read_settings_resources(nodes: list[UiNode], resources: StringResources) -> dict[str, object]:
+    """Switches on vehicle Settings, by the app's own labels.
+
+    A switch row is the checkable node whose bounds hold the label; its
+    ``checked`` attribute is the setting. Read only: nothing here is tapped.
+    """
+    out: dict[str, object] = {}
+    switches = [n for n in nodes if n.checkable and n.bounds is not None]
+    for key, (target, on, off) in SETTINGS_SWITCHES.items():
+        labels = _labels(resources, key)
+        label = next((n for n in nodes if n.text and n.text.strip().casefold() in labels), None)
+        if label is None:
+            continue
+        row = next((n for n in switches if _inside(label, n.bounds)), None)  # type: ignore[arg-type]
+        if row is not None:
+            out[target] = on if row.checked else off
+    return out
 
 
 _DISTANCE_UNIT_RE = re.compile(r"\d\s*(?:km|mi)\b", re.I)
