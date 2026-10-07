@@ -176,7 +176,7 @@ class TestNavReadOptIn:
     @pytest.mark.asyncio
     async def test_version_drift_blocks_nav_even_if_opted_in(self) -> None:
         now, _ = _clock()
-        t = _NavTransport(_VW_OVERVIEW, _VW_DETAIL, version="9.9.9")
+        t = _NavTransport(_VW_OVERVIEW, _VW_DETAIL, version="1.0.0")
         ch = CompanionChannel(
             t, PRESETS["volkswagen"], time_fn=now, read_charge_detail=True,
         )

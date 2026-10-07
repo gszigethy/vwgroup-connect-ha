@@ -74,6 +74,36 @@ class FieldSelector:
     parse: str = "str"  # str, percent, int_km, range_km, bool_charging, kw, bool_locked, bool_ignition, hm_minutes
 
 
+def _version_key(version: str) -> tuple[int, ...] | None:
+    """"4.6.4" -> (4, 6, 4); None for a version that is not dotted numbers."""
+    try:
+        return tuple(int(part) for part in version.strip().split("."))
+    except ValueError:
+        return None
+
+
+def app_version_covered(
+    live: str | None, verified: str | tuple[str, ...] | None
+) -> bool:
+    """True when the live app is a verified build or newer than all of them.
+
+    2026-10-07 — an app update used to switch every tap off until someone
+    listed the new version. Taps do not depend on the version number: each
+    control is found on screen by resource id or the app's own label, a missing
+    one stops the flow instead of tapping blind, and the result is checked
+    afterwards. So a newer build is allowed and relies on those checks; an
+    unknown OLDER build (or an unreadable version) stays blocked.
+    """
+    if live is None or not verified:
+        return False
+    want = (verified,) if isinstance(verified, str) else tuple(verified)
+    if live in want:
+        return True
+    key = _version_key(live)
+    known = [k for k in (_version_key(v) for v in want) if k is not None]
+    return key is not None and bool(known) and key > max(known)
+
+
 @dataclass(frozen=True)
 class ActionSelector:
     """How to find a button to tap for a write action."""

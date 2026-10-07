@@ -486,10 +486,10 @@ class TestNavWalk:
     async def test_an_app_version_the_preset_does_not_know_disables_the_walk(
         self,
     ) -> None:
-        # Same gate as a write: a drifted layout means a stale map, and a tap on
-        # a stale map is a tap on the wrong control.
+        # Same gate as a write. Newer builds are allowed (each control is found
+        # on screen); an unknown OLDER build is not.
         transport = _WalkTransport(
-            [_overview(), _overview(scrolled=True), HEALTH_SCREEN], version="9.9.9"
+            [_overview(), _overview(scrolled=True), HEALTH_SCREEN], version="1.0.0"
         )
         await _channel(transport, {"vehicle_health"}).read()
         assert transport.taps == []
