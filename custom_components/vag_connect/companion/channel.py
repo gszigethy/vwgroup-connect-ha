@@ -57,6 +57,7 @@ from .resources import (
     find_settings_entry,
     read_battery_resources,
     read_climate_resources,
+    read_overview_resources,
 )
 from .app_sync import find_sync_button
 from .sync_time import find_sync_line
@@ -373,6 +374,7 @@ class CompanionChannel:
         fields = read_fields(nodes, self._preset)
         if self._preset.brand == "volkswagen":
             fields.update(read_battery_resources(nodes, self._app_strings))
+            fields.update(read_overview_resources(nodes, self._app_strings))
             self._note_sync_line(nodes)
         if self._seen_at is not None:
             fields["companion_app_synced_at"] = self._seen_at

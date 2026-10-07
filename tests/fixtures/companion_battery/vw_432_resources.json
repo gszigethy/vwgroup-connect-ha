@@ -152,6 +152,24 @@
   "vehiclesettingsscreen_airconditionedzones_options_rightrearseatzone": [
     "Rear right"
   ],
+  "acc_vehicle_tab_label_lock_unlock_vehicle": [
+    "Vehicle"
+  ],
+  "acc_vehicle_tab_value_lock_unlock_vehicle_state_locked": [
+    "Locked"
+  ],
+  "acc_vehicle_tab_value_lock_unlock_vehicle_state_unlocked": [
+    "Unlocked"
+  ],
+  "acc_vehicle_tab_clima_tile_label": [
+    "Climate control"
+  ],
+  "acc_vehicle_tab_clima_tile_value_all_clima_on": [
+    "On"
+  ],
+  "acc_vehicle_tab_clima_tile_value_all_clima_off": [
+    "Off"
+  ],
   "acc_range_modal_label_charge_mode": [
     "Charging method"
   ],
