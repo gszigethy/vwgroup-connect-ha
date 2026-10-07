@@ -28,11 +28,20 @@ def test_accepts_4_3_2_and_internal_version_strings() -> None:
     assert ch._decide_version_ok("4.2.1") is True  # backward compatibility
 
 
-def test_rejects_a_genuinely_unknown_version() -> None:
+def test_rejects_an_unknown_older_or_unreadable_version() -> None:
     ch = _vw_channel()
-    assert ch._decide_version_ok("5.0.0") is False
+    assert ch._decide_version_ok("4.3.1") is False
     assert ch._decide_version_ok("1.0.0") is False
+    assert ch._decide_version_ok("4.7.0-beta") is False
     assert ch._decide_version_ok(None) is False
+
+
+def test_accepts_a_build_newer_than_every_verified_one() -> None:
+    # 2026-10-07 — an app update no longer switches taps off; each control is
+    # still found on screen before it is tapped.
+    ch = _vw_channel()
+    assert ch._decide_version_ok("4.6.5") is True
+    assert ch._decide_version_ok("5.0.0") is True
 
 
 def test_preset_lists_4_3_2_and_tile_is_resource_id_hardened() -> None:

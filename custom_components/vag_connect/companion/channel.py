@@ -33,6 +33,7 @@ from .presets import (
     ActionSelector,
     BrandPreset,
     NavReadSelector,
+    app_version_covered,
 )
 from .screen import (
     UiNode,
@@ -165,6 +166,7 @@ class CompanionChannel:
         # #968 — what the vehicle sync flow last found; None until it has run.
         self._request_state: str | None = None
         self._live_app_version: str | None = None
+        self._newer_logged: str | None = None  # last newer build logged
         # v2.26.0 — "verified preset AND live app version matches the one it was
         # built against". Gates BOTH writes and forward-nav reads (C9); a wrong
         # tap is a wrong tap whether it is a command or a navigation. Decided on
@@ -199,7 +201,8 @@ class CompanionChannel:
             bool(self._version_ok)
             and self._preset.writable
             and any(
-                a.app_versions is None or self._live_app_version in a.app_versions
+                a.app_versions is None
+                or app_version_covered(self._live_app_version, a.app_versions)
                 for a in self._preset.actions
             )
             and not self._is_rate_limited()
@@ -870,14 +873,21 @@ class CompanionChannel:
                 "nav reads) disabled until it is confirmed", self._preset.brand,
             )
             return False
-        if live_version not in want_set:
+        if not app_version_covered(live_version, want_set):
             _LOGGER.warning(
-                "companion %s: app is %s but this preset was built for %s; "
-                "taps (writes and nav reads) are disabled until the preset is "
-                "confirmed against the new version. Overview reads keep working.",
+                "companion %s: app is %s, older than or unknown to this preset "
+                "(built for %s); taps (writes and nav reads) are disabled. "
+                "Overview reads keep working.",
                 self._preset.brand, live_version, "/".join(want_set),
             )
             return False
+        if live_version not in want_set and live_version != self._newer_logged:
+            self._newer_logged = live_version
+            _LOGGER.info(
+                "companion %s: app %s is newer than the verified %s; taps rely "
+                "on finding each control on screen",
+                self._preset.brand, live_version, "/".join(want_set),
+            )
         return True
 
     # -- write ----------------------------------------------------------------
@@ -1167,7 +1177,9 @@ class CompanionChannel:
         spec = next((a for a in self._preset.actions if a.action == action), None)
         if spec is None:
             raise CompanionWriteBlocked(f"no confirmed control for '{action}'")
-        if spec.app_versions and self._live_app_version not in spec.app_versions:
+        if spec.app_versions and not app_version_covered(
+            self._live_app_version, spec.app_versions
+        ):
             raise CompanionWriteBlocked(
                 f"'{action}' is not mapped for app version {self._live_app_version}"
             )

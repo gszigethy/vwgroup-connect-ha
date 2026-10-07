@@ -34,6 +34,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, AsyncIterator, Awaitable, Callable
 
+from .presets import app_version_covered
 from .resources import (
     StringResources,
     climate_function_state,
@@ -357,10 +358,12 @@ class ClimateController:
             await ch._refresh_version_gate()
         except CompanionTransportError as err:
             raise self._blocked(str(err)) from err
-        if not ch._version_ok or ch._live_app_version not in CLIMATE_APP_VERSIONS:
+        if not ch._version_ok or not app_version_covered(
+            ch._live_app_version, CLIMATE_APP_VERSIONS
+        ):
             raise self._blocked(
                 f"climate commands are mapped for app {'/'.join(CLIMATE_APP_VERSIONS)} "
-                f"only; the phone has {ch._live_app_version or 'an unknown version'}. "
+                f"and newer; the phone has {ch._live_app_version or 'an unknown version'}. "
                 "Reads still work."
             )
         if ch._is_rate_limited():
