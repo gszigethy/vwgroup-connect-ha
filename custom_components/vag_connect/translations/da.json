@@ -2049,6 +2049,9 @@
       },
       "companion_reset_button": {
         "name": "Nulstil companion-forbindelse"
+      },
+      "companion_force_refresh_button": {
+        "name": "Gennemtving opdatering af køretøj"
       }
     },
     "climate": {
