@@ -16,12 +16,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Python 3.14 einrichten
+      - name: Set up Python 3.14
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.14"
 
-      - name: Abhängigkeiten installieren
+      - name: Install dependencies
         run: |
           pip install \
             ruff==0.15.12 \
@@ -40,7 +40,7 @@ jobs:
             --warn-return-any \
             --no-error-summary
 
-      - name: manifest.json validieren
+      - name: Validate manifest.json
         run: |
           python3 -c "
           import json, sys
@@ -48,17 +48,17 @@ jobs:
           required = ['domain', 'name', 'version', 'requirements', 'iot_class', 'config_flow']
           missing = [k for k in required if k not in m]
           if missing:
-              print('FEHLER: Fehlende Felder:', missing); sys.exit(1)
+              print('ERROR: Missing fields:', missing); sys.exit(1)
           # requirements can be empty (we bundle our own client) or contain pypi packages
           print('requirements:', m.get('requirements', []))
           valid_iot = ('cloud_push', 'cloud_polling', 'local_push', 'local_polling')
           if m.get('iot_class') not in valid_iot:
-              print('FEHLER: iot_class ungültig:', m.get('iot_class')); sys.exit(1)
+              print('ERROR: Invalid iot_class:', m.get('iot_class')); sys.exit(1)
           print('iot_class:', m['iot_class'])
           print('manifest.json OK — Version:', m['version'])
           "
 
-      - name: Alle JSON-Dateien validieren
+      - name: Validate all JSON files
         run: |
           python3 -c "
           import json, os, sys
@@ -71,22 +71,22 @@ jobs:
                           json.load(open(p))
                           print(f'OK: {p}')
                       except Exception as e:
-                          errors.append(f'FEHLER {p}: {e}')
+                          errors.append(f'ERROR {p}: {e}')
           if errors:
               for e in errors: print(e)
               sys.exit(1)
           "
 
-      - name: CHANGELOG.md enthält aktuelle Version
+      - name: CHANGELOG.md contains current version
         run: |
           python3 -c "
           import json, sys
           version = json.load(open('custom_components/vag_connect/manifest.json'))['version']
           changelog = open('CHANGELOG.md').read()
           if f'[{version}]' not in changelog:
-              print(f'FEHLER: Version {version} nicht im CHANGELOG.md!')
+              print(f'ERROR: Version {version} not found in CHANGELOG.md!')
               sys.exit(1)
-          print(f'CHANGELOG.md enthält Version {version} — OK')
+          print(f'CHANGELOG.md contains version {version} — OK')
           "
 
   tests:
@@ -94,13 +94,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
 
-      - name: Python 3.14 einrichten
+      - name: Set up Python 3.14
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.14"
 
-      - name: Test-Abhängigkeiten installieren
+      - name: Install test dependencies
         run: |
           pip install \
             pytest \
@@ -110,7 +112,7 @@ jobs:
             voluptuous \
             homeassistant
 
-      - name: Tests mit Coverage ausführen
+      - name: Run tests with coverage
         id: pytest
         run: |
           set -o pipefail
@@ -119,7 +121,14 @@ jobs:
           python3 -m pytest tests/ -v --tb=long \
             --cov=custom_components/vag_connect \
             --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
             --cov-fail-under=75 2>&1 | tee pytest_output.log
+
+      - name: SonarQube Cloud analysis
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       - name: Show pytest output in step summary on failure
         if: failure()
