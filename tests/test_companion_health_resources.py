@@ -26,6 +26,7 @@ def _read(name: str) -> dict[str, object]:
 def test_tiguan_service_has_days_and_distance():
     assert _read("tiguan_health") == {
         "odometer_km": 322, "service_due_in_days": 711, "service_km": 29700,
+        "warning_active": False, "warning_count": 0, "warning_messages": "",
     }
 
 
@@ -34,6 +35,7 @@ def test_imperial_golf_converts_miles():
         "odometer_km": 35430,
         "service_due_in_days": 71, "service_km": 19473,
         "oil_service_due_in_days": 71, "oil_service_km": 2414,
+        "warning_active": False, "warning_count": 0, "warning_messages": "",
     }
 
 
@@ -54,3 +56,36 @@ def test_service_value_forms(value, expected):
 def test_translated_subhead():
     strings = {"screen_vehiclehealth_subhead_totaldistance": {"Kilometerstand"}}
     assert read_health_resources(_rows("Kilometerstand", "12.345 km"), strings) == {"odometer_km": 12345}
+
+
+def _warning_rows(title: str, *rows: tuple[str, str, str | None]) -> list[UiNode]:
+    nodes = [UiNode("warningHeaderTitle", "", title, "android.widget.TextView", False, (0, 0, 9, 9))]
+    for index, (rid, name, value) in enumerate(rows):
+        top = 100 * (index + 1)
+        nodes.append(UiNode(rid, "", name, "android.widget.TextView", False, (50, top, 300, top + 40)))
+        if value is not None:
+            nodes.append(UiNode("warningValue", "", value, "android.widget.TextView", False,
+                                (600, top + 5, 900, top + 35)))
+    return nodes
+
+
+def test_issues_found_names_the_categories_with_a_value():
+    nodes = _warning_rows(
+        "Issues found",
+        ("warningNameBrake", "Brakes", "Brake fluid"),
+        ("warningNameTire", "Tyres", None),
+        ("warningNameLighting", "Lighting", "Low beam left"),
+    )
+    assert read_health_resources(nodes, STRINGS) == {
+        "warning_active": True, "warning_count": 2,
+        "warning_messages": "Brakes: Brake fluid, Lighting: Low beam left",
+    }
+
+
+def test_issues_found_without_rows_sets_only_the_flag():
+    nodes = _warning_rows("Issues found", ("warningNameBrake", "Brakes", None))
+    assert read_health_resources(nodes, STRINGS) == {"warning_active": True}
+
+
+def test_unknown_warning_header_reads_nothing():
+    assert read_health_resources(_warning_rows("Something else"), STRINGS) == {}
