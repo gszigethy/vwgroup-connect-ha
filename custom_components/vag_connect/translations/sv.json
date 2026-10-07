@@ -239,7 +239,6 @@
           "fuel_tank_capacity": "Tankvolym (liter, för bränsle-%)",
           "enable_reverse_geocoding": "Omvänd geokodning (parkeringsadress)",
           "read_only_mode": "Skrivskyddat läge",
-          "companion_read_charge_detail": "Companion: läs laddningsmål (navigerar i appen)",
           "companion_wake_sleep": "Companion: väck skärmen för hämtning, släck efteråt",
           "companion_close_app": "Companion: stäng bil-appen efter varje avläsning",
           "force_ppe_climate": "Audi PPE/PPC klimat-body (Q6/A6 e-tron, RS e-tron GT Facelift, A3 2024+ PHEV)",
@@ -264,10 +263,6 @@
           "vwde_cred_relogin": "Volkswagen.de: logga in igen med det sparade lösenordet när webbsessionen upphör",
           "vweu_device_grant": "Lägg till VW EU Two-Way — kommandon + live-avläsningar (BETA)",
           "remove_vweu_twoway": "Ta bort VW EU Two-Way (återgå till föregående kanal)",
-          "companion_read_vehicle_health": "Companion: läs mätarställning och service från fordonsstatus (navigerar i appen)",
-          "companion_read_climate_detail": "Companion: läs börtemperatur och utetemperatur (navigerar i appen)",
-          "companion_read_climate_settings": "Companion: läs klimatinställningar – klimat vid upplåsning, automatisk rutvärme, zoner (navigerar i appen)",
-          "companion_read_parking_position": "Companion: läs parkeringsposition från appens delningslänk (navigerar i appen)",
           "skoda_official_api_key": "Officiell Škoda API-nyckel — lägger till tillverkarens officiella API som live-datakälla (och failover)",
           "clear_skoda_official_key": "Rensa den lagrade officiella Škoda API-nyckeln (en ny skapas automatiskt om din inloggning stöder det)",
           "skoda_official_mode": "Škoda officiell API-källäge"
@@ -277,7 +272,6 @@
           "spin": "S-PIN för dörrlåsning.",
           "enable_reverse_geocoding": "Skickar parkerings-GPS till OpenStreetMap Nominatim för att hämta gata/stad. Av som standard (integritet).",
           "read_only_mode": "När aktiverat skapas endast statussensorer — inga brytare, knappar, lås, klimat eller reglage som skickar kommandon. Användbart om du vill ha fordonstelemetri utan risk för oavsiktlig aktivering. Ladda om integrationen efter ändring.",
-          "companion_read_charge_detail": "Endast Companion (ADB). Läser även laddningsmål, effekt och återstående tid som ligger bakom laddningsdetaljvyn. Detta TRYCKER i appen för att navigera dit (ungefär var 15:e minut), så aktivera det först när du har bekräftat att flödet fungerar på din telefon. Av som standard. Ladda om efter ändring.",
           "companion_wake_sleep": "Endast Companion (ADB). Väcker telefonens skärm före varje hämtning och släcker den igen efteråt, så att en låst eller sovande telefon visar appen under avläsningen utan att skärmen är tänd hela tiden. Av som standard. Ladda om efter ändring.",
           "companion_close_app": "Endast Companion (ADB). Tvångsstoppar (stänger) bil-appen efter varje avläsning, så att nästa läsning startar om den från början i stället för att läsa en skärm som appen lämnat i cache. Hjälper på enheter där appen fryser sina värden mellan avläsningar. Av som standard — en kall omstart är långsammare. Ladda om efter ändring.",
           "force_ppe_climate": "Endast Audi. Tvingar det nya PPE/PPC body-formatet (climatisationMode obligatoriskt, targetTemperature utelämnat) vid klimatstart. Aktivera bara om du äger en Q6 e-tron, A6 e-tron, RS e-tron GT Facelift eller A3 2024+ PHEV — annars svarar API:t med 400. Ladda om integrationen efter aktivering.",
@@ -1979,6 +1973,21 @@
       },
       "active_ventilation_switch": {
         "name": "Aktiv ventilation"
+      },
+      "companion_read_charge_detail": {
+        "name": "Läs laddningsdetaljer"
+      },
+      "companion_read_vehicle_health": {
+        "name": "Läs fordonets status och inställningar"
+      },
+      "companion_read_climate_detail": {
+        "name": "Läs klimatdetaljer"
+      },
+      "companion_read_climate_settings": {
+        "name": "Läs klimatinställningar"
+      },
+      "companion_read_parking_position": {
+        "name": "Läs parkeringsposition"
       }
     },
     "number": {

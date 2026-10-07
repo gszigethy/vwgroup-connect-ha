@@ -168,6 +168,9 @@ class CompanionChannel:
         # C9 nav-read cadence + cache: nav taps at most every _NAV_READ_INTERVAL_S
         # and the values persist in between so the sensors don't flap.
         self._nav_cache: dict[str, object] = {}
+        # Which nav read last supplied each cached key, so switching a read off
+        # drops exactly its values.
+        self._nav_cache_from: dict[str, str] = {}
         self._last_nav_at: float | None = None
         # After a command, only the detail path that command used is re-read on
         # the next poll; the other opted-in paths keep their own cadence.
@@ -219,6 +222,30 @@ class CompanionChannel:
         more, so it must never ride along on a shallower opt-in.
         """
         return nav.opt_in in self._nav_opt_ins and bool(nav.path)
+
+    @property
+    def nav_opt_ins(self) -> frozenset[str]:
+        """The nav-read opt-ins currently on."""
+        return self._nav_opt_ins
+
+    def set_nav_opt_in(self, opt_in: str, enabled: bool) -> None:
+        """Turn one nav-read opt-in on or off while running.
+
+        On: its paths are read on the next poll, without waiting for the
+        cadence. Off: the values it supplied leave the cache, so its entities
+        stop showing a reading nobody refreshes any more.
+        """
+        opt_ins = set(self._nav_opt_ins)
+        if enabled:
+            opt_ins.add(opt_in)
+            self._nav_only |= {n.name for n in self._preset.nav_reads if n.opt_in == opt_in}
+        else:
+            opt_ins.discard(opt_in)
+            for key in [k for k, src in self._nav_cache_from.items() if src == opt_in]:
+                self._nav_cache.pop(key, None)
+                self._nav_cache_from.pop(key, None)
+        self._nav_opt_ins = frozenset(opt_ins)
+        self._read_charge_detail = "charge_detail" in self._nav_opt_ins
 
     def _nav_due(self) -> bool:
         """True when a nav-read has never run or the cadence window elapsed."""
@@ -528,6 +555,7 @@ class CompanionChannel:
             # setdefault); the overview reading is what goes stale.
             fields[key] = val
             self._nav_cache[key] = val
+            self._nav_cache_from[key] = nav.opt_in
 
     async def _walk_to_detail(
         self,

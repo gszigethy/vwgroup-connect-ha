@@ -239,7 +239,6 @@
           "fuel_tank_capacity": "Fuel tank capacity (litres, for fuel level %)",
           "enable_reverse_geocoding": "Reverse Geocoding (parking address)",
           "read_only_mode": "Read-only Mode",
-          "companion_read_charge_detail": "Companion: read charge target (navigates the app)",
           "companion_wake_sleep": "Companion: wake screen to poll, sleep after",
           "companion_close_app": "Companion: close car app after each read",
           "force_ppe_climate": "Audi PPE/PPC Climate body (Q6/A6 e-tron, RS e-tron GT Facelift, A3 2024+ PHEV)",
@@ -264,10 +263,6 @@
           "test_cohort": "Help improve VW Group Connect (opt-in test cohort)",
           "vwde_cred_relogin": "Volkswagen.de: re-login with your stored password when the web session dies",
           "remove_vweu_twoway": "Remove VW EU Two-Way (revert to the previous channel)",
-          "companion_read_vehicle_health": "Companion: read odometer and service from Vehicle Health (navigates the app)",
-          "companion_read_climate_detail": "Companion: read target and outside temperature (navigates the app)",
-          "companion_read_climate_settings": "Companion: read climate settings — climate at unlock, automatic window heating, zones (navigates the app)",
-          "companion_read_parking_position": "Companion: read parking position from the app's share link (navigates the app)",
           "skoda_official_api_key": "Škoda official API key — adds the official manufacturer API as a live data source (and failover)",
           "clear_skoda_official_key": "Clear the stored Škoda official API key (a fresh one is created automatically if your login supports it)",
           "skoda_official_mode": "Škoda official-API source mode"
@@ -277,7 +272,6 @@
           "spin": "S-PIN for door locking. App → Security → S-PIN.",
           "enable_reverse_geocoding": "Sends parking GPS to OpenStreetMap Nominatim to resolve street/city. Off by default for privacy.",
           "read_only_mode": "When enabled, only status sensors are created — no switches, buttons, locks, climate or sliders that send commands. Useful if you want vehicle telemetry without any risk of accidental actuation. Reload the integration after toggling.",
-          "companion_read_charge_detail": "Companion (ADB) only. Also reads the charge target, power and remaining time that live behind the charge-detail screen. This TAPS the app to navigate there (about every 15 minutes), so enable it only after confirming the flow works on your phone. Off by default. Reload after toggling.",
           "companion_wake_sleep": "Companion (ADB) only. Wakes the phone display before each poll and puts it back to sleep afterwards, so a locked or sleeping phone shows the app during the read without keeping the screen on permanently. Off by default. Reload after toggling.",
           "companion_close_app": "Companion (ADB) only. Force-stops (closes) the car app after each poll, so the next read relaunches it fresh instead of scraping a screen the app left cached. Helps on devices where the app freezes its values between reads. Off by default — a cold relaunch is slower. Reload after toggling.",
           "force_ppe_climate": "Audi-only. Forces the new PPE/PPC body shape (climatisationMode mandatory, targetTemperature omitted) on climate start. Enable only if you own a Q6 e-tron, A6 e-tron, RS e-tron GT Facelift or A3 2024+ PHEV — climate-start otherwise returns 400. Reload the integration after toggling.",
@@ -2012,6 +2006,21 @@
       },
       "active_ventilation_switch": {
         "name": "Active ventilation"
+      },
+      "companion_read_charge_detail": {
+        "name": "Read charge detail"
+      },
+      "companion_read_vehicle_health": {
+        "name": "Read Vehicle Health & Settings"
+      },
+      "companion_read_climate_detail": {
+        "name": "Read climate detail"
+      },
+      "companion_read_climate_settings": {
+        "name": "Read climate settings"
+      },
+      "companion_read_parking_position": {
+        "name": "Read parking position"
       }
     },
     "number": {
