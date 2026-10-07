@@ -152,6 +152,18 @@
   "vehiclesettingsscreen_airconditionedzones_options_rightrearseatzone": [
     "Rear right"
   ],
+  "screen_vehiclehealth_subhead_totaldistance": [
+    "Total distance"
+  ],
+  "screen_vehiclehealth_subhead_nextinspection": [
+    "Next service"
+  ],
+  "screen_vehiclehealth_subhead_oil_service": [
+    "Next oil service"
+  ],
+  "screen_vehiclehealth_subhead_adblue_level": [
+    "AdBlue remaining range"
+  ],
   "acc_vehicle_tab_label_lock_unlock_vehicle": [
     "Vehicle"
   ],

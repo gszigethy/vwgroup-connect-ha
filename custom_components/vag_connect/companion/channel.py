@@ -62,6 +62,7 @@ from .resources import (
     read_climate_resources,
     read_departure_timers,
     read_driving_data,
+    read_health_resources,
     read_overview_resources,
     trip_carousel_row,
 )
@@ -557,6 +558,8 @@ class CompanionChannel:
         values.update(extra or {})
         if self._preset.brand == "volkswagen" and nav.name == "charge_detail":
             values.update(read_battery_resources(detail, self._app_strings))
+        if self._preset.brand == "volkswagen" and nav.name == "vehicle_health":
+            values.update(read_health_resources(detail, self._app_strings))
         if self._preset.brand == "volkswagen" and nav.name == "departure_times":
             values.update(read_departure_timers(detail))
         if self._preset.brand == "volkswagen" and nav.name in (

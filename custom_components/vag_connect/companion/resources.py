@@ -64,6 +64,14 @@ _CLIMA_KEYS = (
     CLIMA_MODE_AC, CLIMA_MODE_WINDOW_HEATING, CLIMA_ZONES, CLIMA_ZONES_SEVERAL,
     *CLIMA_ZONE_KEYS,
 )
+# Vehicle Health Report subheads, each followed by its value line: a distance,
+# or "<days> <word> / <distance>" for the service countdowns.
+HEALTH_ROWS = {
+    "screen_vehiclehealth_subhead_totaldistance": ("odometer_km", None),
+    "screen_vehiclehealth_subhead_nextinspection": ("service_km", "service_due_in_days"),
+    "screen_vehiclehealth_subhead_oil_service": ("oil_service_km", "oil_service_due_in_days"),
+    "screen_vehiclehealth_subhead_adblue_level": ("adblue_range_km", None),
+}
 # Overview tiles narrate "<label>. <value>. <hint>" (Vehicle. Locked. Open details).
 TILE_LOCK = "acc_vehicle_tab_label_lock_unlock_vehicle"
 TILE_LOCKED = "acc_vehicle_tab_value_lock_unlock_vehicle_state_locked"
@@ -111,6 +119,7 @@ _SINGLE_KEYS = frozenset({
     "acc_common_hint_details", "acc_vehicle_tab_label_settings", *_LIMIT_KEYS,
     DEPARTURE_TILE, *_TRIP_KEYS,
     SYNC_LAST_UPDATE, SYNC_JUST_NOW, SYNC_TOO_OLD, DATA_UNAVAILABLE, *_CLIMA_KEYS,
+    *HEALTH_ROWS,
     *_TILE_KEYS,
 })
 # Android's plural quantity attributes (``android:^attr-private`` ids).
@@ -760,6 +769,36 @@ def _read_zones(nodes: list[UiNode], resources: StringResources) -> dict[str, ob
             if match and match.lastindex and match.group(1) == "2":
                 return {"climate_zone_front_left": True, "climate_zone_front_right": True}
     return {}
+
+
+_DISTANCE_UNIT_RE = re.compile(r"\d\s*(?:km|mi)\b", re.I)
+_DAYS_RE = re.compile(r"^\D*(\d{1,4})\D*$")
+
+
+def read_health_resources(nodes: list[UiNode], resources: StringResources) -> dict[str, object]:
+    """The Vehicle Health Report's rows, found by the app's own subheads.
+
+    Each subhead is followed by its value line. A value part with a km/mi
+    unit is the distance; a bare number is the day count, whatever word the
+    language uses for days.
+    """
+    out: dict[str, object] = {}
+    texts = [n.text.strip() for n in nodes if n.text and n.text.strip()]
+    for key, (distance_target, days_target) in HEALTH_ROWS.items():
+        labels = _labels(resources, key)
+        index = next((i for i, t in enumerate(texts) if t.casefold() in labels), None)
+        if index is None or index + 1 >= len(texts):
+            continue
+        for part in texts[index + 1].split("/"):
+            if _DISTANCE_UNIT_RE.search(part):
+                value = coerce("range_km", part)
+                if isinstance(value, int):
+                    out[distance_target] = value
+            elif days_target is not None:
+                match = _DAYS_RE.match(part)
+                if match and int(match.group(1)) <= 3650:
+                    out[days_target] = int(match.group(1))
+    return out
 
 
 def read_overview_resources(nodes: list[UiNode], resources: StringResources) -> dict[str, object]:
