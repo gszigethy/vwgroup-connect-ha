@@ -42,6 +42,30 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0-5] - 2026-10-07 — Companion reads as switches
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.11.0** plus fork release **5**, on top of 4.11.0-4.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a regular release — select `v4.11.0-5`, download, and restart Home Assistant.
+
+### Changed / Geändert
+- **Companion: the app reads are switches on the VW Group Connect Settings device.** Read charge detail, Read Vehicle
+  Health & Settings, Read climate detail, Read climate settings and Read parking position move from the Configure
+  dialog to CONFIG switches next to the interval sliders. Existing choices carry over (same entry options). A switch
+  applies at once: on reads its screen on the next poll, off drops the values that read supplied. Before, a change
+  needed a restart. Offered in Read-only Mode too, since they only read the app. (#18)
+
+### Added / Hinzugefügt
+- **Companion: Read departure times switch.** Opens the overview's Departure times tile and reads each timer's time
+  (24-hour, like the VW cloud) and on/off from its switch, into the existing Departure Timer sensors. The switches
+  are read, never tapped. Off by default. (#15)
+- **Companion: Read driving data switch.** Opens the overview's Driving data tile and reads the last single trip and
+  the trip since charging or refuelling (distance, consumption, average speed, driving time) into the existing
+  last-trip and refuel-trip sensors, by the app's own labels and units; miles are converted. The second trip card is
+  brought on screen with one sideways swipe, never a pull-to-refresh. Off by default. (#16)
+
 ## [4.11.0-4] - 2026-10-07 — App screens read by the app's own labels
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
