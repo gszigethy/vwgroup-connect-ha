@@ -94,6 +94,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
 
       - name: Python 3.14 einrichten
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
@@ -119,7 +121,14 @@ jobs:
           python3 -m pytest tests/ -v --tb=long \
             --cov=custom_components/vag_connect \
             --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
             --cov-fail-under=75 2>&1 | tee pytest_output.log
+
+      - name: SonarQube Cloud analysis
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       - name: Show pytest output in step summary on failure
         if: failure()
