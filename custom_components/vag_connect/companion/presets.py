@@ -162,6 +162,10 @@ class OverlaySelector:
     name: str  # for logging / diagnostics
     content_desc_re: str | None = None
     text_re: str | None = None
+    # 2026-10-07 — a screen BACK cannot clear (the Google Maps consent: BACK
+    # only leaves the map, and the parking read needs it) names the button to
+    # tap instead. BACK stays the fallback when that button is not on screen.
+    tap: ActionSelector | None = None
 
 
 @dataclass(frozen=True)
@@ -917,6 +921,27 @@ _VW = BrandPreset(
             name="vehicle_health_delay",
             content_desc_re=r"(?:verzögert\s*ausgeführt|executed\s*with\s*a\s*delay)",
             text_re=r"(?:verzögert\s*ausgeführt|executed\s*with\s*a\s*delay)",
+        ),
+        # 2026-10-07 — app 4.6.4 asks again for the Google Maps consent
+        # (modal_google_maps_disclaimer_title) on the Map tab, which blocks the
+        # parking read. Agreed on the user's request (common_button_agree).
+        OverlaySelector(
+            name="google_maps_consent",
+            text_re=r"^(?:This\s*app\s*uses|Diese\s*App\s*(?:nutzt|verwendet))\s*Google\s*Maps",
+            tap=ActionSelector(
+                action="agree_google_maps",
+                label_re=r"^(?:Agree|Zustimmen|Einverstanden|Akzeptieren)$",
+            ),
+        ),
+        # 2026-10-07 — the app's rating prompt (dialog_app_survey_prompt,
+        # layout dialog_app_rating_alert): thumbs down / thumbs up and no close
+        # button. BACK closes it without rating the app.
+        OverlaySelector(
+            name="app_rating",
+            text_re=(
+                r"How\s*do\s*you\s*like\s*the\s*(?:Volkswagen\s*)?app"
+                r"|Wie\s*gefällt\s*(?:Ihnen|dir)\s*die\s*(?:Volkswagen[-\s]*)?App"
+            ),
         ),
     ),
     # v2.26.0 (ckomma #21) — SEEDED (unverified even for VW: the ckomma report

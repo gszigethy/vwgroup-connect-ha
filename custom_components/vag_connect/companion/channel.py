@@ -794,11 +794,20 @@ class CompanionChannel:
             overlay = find_overlay(nodes, self._preset)
             if overlay is None:
                 return nodes, True
-            _LOGGER.debug(
-                "companion %s: dismissing overlay '%s' with BACK",
-                self._preset.brand, overlay.name,
-            )
-            await self._t.key_back()
+            node = find_node_for(nodes, overlay.tap) if overlay.tap is not None else None
+            point = node.tap_point if node is not None else None
+            if point is not None:
+                _LOGGER.debug(
+                    "companion %s: dismissing overlay '%s' with its '%s' button",
+                    self._preset.brand, overlay.name, overlay.tap.action if overlay.tap else "",
+                )
+                await self._t.tap(*point)
+            else:
+                _LOGGER.debug(
+                    "companion %s: dismissing overlay '%s' with BACK",
+                    self._preset.brand, overlay.name,
+                )
+                await self._t.key_back()
             xml = await self._t.dump_ui()
         nodes = parse_ui_dump(xml)
         still = find_overlay(nodes, self._preset)
