@@ -47,3 +47,8 @@ def test_read_only_brands_keep_single_or_none_version() -> None:
     """The unverified brands are unchanged (None) — the set is a VW widening."""
     for brand in ("audi", "skoda", "seat", "cupra"):
         assert PRESETS[brand].verified_app_version is None
+
+
+def test_accepts_4_6_4() -> None:
+    # 2026-10-07 — regression-tested live on 4.6.4; same tree as 4.3.2.
+    assert _vw_channel()._decide_version_ok("4.6.4") is True
