@@ -42,6 +42,79 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0-6] - 2026-10-07 — Vehicle Health and Settings read by the app's own labels
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.11.0** plus fork release **6**, on top of 4.11.0-5.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a regular release — select `v4.11.0-6`, download, and restart Home Assistant.
+
+### New in this release / Neu in diesem Release
+
+#### Added / Hinzugefügt
+- **Companion: service and oil-service distances from the Vehicle Health Report.** The report's rows are found by the
+  app's own string keys (Total distance, Next service, Next oil service, AdBlue range), in any app language. Each
+  service row is split into days and distance, so *Service km* and *Oil Service km* are filled next to the day counts;
+  miles are converted. The English/German patterns stay as the fallback. (#8)
+- **Companion: Vehicle Health warnings.** "No issues found" clears Warning Active, Warning Count and Warning Messages;
+  "Issues found" sets Warning Active and lists each category that carries a warning (Brakes, Tyres, …). Only the
+  `vw_eu` warning-light fields are used. A car with a warning has not been captured yet, so the category layout comes
+  from the APK. Read with the *Read Vehicle Health & Settings* switch. (#14)
+- **Companion: Automatically release AC connector.** Read from the switch on the vehicle Settings screen into the
+  existing read-only binary sensor; nothing is tapped. (#9)
+
+#### Fixed / Behoben
+- **Companion: vehicle Settings is read again.** The read was skipped whenever the charge target was already known,
+  which the charge sheet supplies first on every refresh. (#9)
+- **Companion: Departure Timer N Enabled is unknown, not off, when the departure times are not read.** Before, the
+  sensors showed the model's default *off* whatever the car had set. With *Read departure times* on they show the
+  timers' real state. (#10)
+- **Release notes:** the GitHub release notes link the diff and the recent releases to the previous fork releases
+  (they pointed at the old 4.12.0b betas) and describe the HACS install for regular releases. (#21)
+
+#### Other / Sonstiges
+- CI imports the pytest coverage into SonarQube Cloud; the release-notes script compiles again. (#20)
+- `docs/COMPANION_APP_MAP.md`: screen-by-screen map of VW app 4.3.2 as the companion reads it, with the field and
+  entity of each value. (#12, #22)
+
+### Everything since 4.12.0b7 / Alles seit 4.12.0b7
+
+4.11.0-1 had the same content as 4.12.0b7 (the 4.12.0b8–b10 pre-releases were dropped). Releases 4.11.0-2 to
+4.11.0-6 added the following
+([full diff since 4.12.0b7](https://github.com/gszigethy/vwgroup-connect-ha/compare/v4.12.0b7...v4.11.0-6)). All of it concerns the ADB companion channel (VW app 4.3.2); cloud channels and the
+EU Data Act sensors are unchanged apart from the charging-switch fix.
+
+#### Settings device switches (4.11.0-5)
+- The app reads are CONFIG switches on the VW Group Connect Settings device, next to the interval sliders: *Read
+  charge detail*, *Read Vehicle Health & Settings*, *Read climate detail*, *Read climate settings*, *Read parking
+  position*, *Read departure times*, *Read driving data*. A switch applies on the next poll without a restart; off
+  drops the values that read supplied.
+
+#### New values
+- **Departure times** (opt-in, 4.11.0-5): each timer's time (24-hour) and on/off into the Departure Timer sensors.
+- **Driving data** (opt-in, 4.11.0-5): last single trip and the trip since charging or refuelling — distance,
+  consumption, average speed, driving time — into the last-trip and refuel-trip sensors.
+- **Charging Mode** read-only sensor (4.11.0-4): the range sheet's charging method, as the VW cloud names it.
+- **Climate Start Mode** sensor and **Climate Zone** sensors from the Air Conditioning Settings (4.11.0-2).
+- **Vehicle Health:** service and oil-service distances, warnings (4.11.0-6).
+- **Vehicle Settings:** Automatically release AC connector (4.11.0-6).
+
+#### Read in any app language
+- Air Conditioning sheet (4.11.0-2), overview lock and climate tiles (4.11.0-4), Charging method (4.11.0-4), Vehicle
+  Health Report (4.11.0-6) and vehicle Settings switches (4.11.0-6) are matched against the installed app's own
+  string table; the English/German patterns remain the fallback.
+
+#### Faster and gentler phone navigation
+- Fewer screen dumps per walk, one ADB shell call per dump, shorter waits after a tap or BACK (4.11.0-3).
+- The Air Conditioning sheet and its Settings are read on one walk (4.11.0-4).
+- The temperature dial is never tapped on a reading outside 15.5–30 °C or in window-heating mode (4.11.0-2).
+
+#### Fixes
+- Charging switch on during conservation charging (cloud channels, 4.11.0-2).
+- Charging Status shows a state while charging, not the tile's whole narration (4.11.0-4).
+- Vehicle Settings read no longer skipped; departure timers unknown instead of a default *off* (4.11.0-6).
+
 ## [4.11.0-5] - 2026-10-07 — Companion reads as switches
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
