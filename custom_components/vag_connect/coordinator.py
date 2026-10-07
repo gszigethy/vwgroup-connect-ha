@@ -8191,6 +8191,12 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         except Exception:  # noqa: BLE001
             pass
 
+    def set_companion_read(self, opt_in: str, enabled: bool) -> None:
+        """Apply a companion nav-read switch to the running channel."""
+        setter = getattr(self._cariad_client, "set_nav_opt_in", None)
+        if callable(setter):
+            setter(opt_in, enabled)
+
     def is_companion(self) -> bool:
         """v2.26.0 — True if this entry reads via the companion (ADB) channel."""
         from .const import CONF_STRATEGY, STRATEGY_COMPANION_ADB  # noqa: PLC0415

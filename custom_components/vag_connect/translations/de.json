@@ -243,7 +243,6 @@
           "enable_push_fcm": "CUPRA/SEAT Push-Updates (FCM, EXPERIMENTELL)",
           "enable_push_audi_vw": "Audi/VW Push-Updates (Cariad FCM, EXPERIMENTELL)",
           "read_only_mode": "Nur-Lesen-Modus",
-          "companion_read_charge_detail": "Companion: Ladeziel lesen (navigiert in der App)",
           "companion_wake_sleep": "Companion: Display zum Abfragen wecken, danach schlafen",
           "companion_close_app": "Companion: Auto-App nach jedem Lesen schließen",
           "client_id_override": "OAuth client_id Override (Power-User)",
@@ -264,10 +263,6 @@
           "vwde_cred_relogin": "Volkswagen.de: bei totgelaufener Web-Sitzung mit gespeichertem Passwort neu anmelden",
           "vweu_device_grant": "VW EU Two-Way hinzufügen — Befehle + Live-Daten (BETA)",
           "remove_vweu_twoway": "VW EU Two-Way entfernen (zurück zum vorherigen Kanal)",
-          "companion_read_vehicle_health": "Companion: Kilometerstand und Service aus dem Fahrzeugcheck lesen (navigiert in der App)",
-          "companion_read_climate_detail": "Companion: Solltemperatur und Außentemperatur lesen (navigiert in der App)",
-          "companion_read_climate_settings": "Companion: Klimaeinstellungen lesen – Klimatisierung beim Entriegeln, automatische Scheibenheizung, Zonen (navigiert durch die App)",
-          "companion_read_parking_position": "Companion: Parkposition aus dem Teilen-Link der App lesen (navigiert in der App)",
           "skoda_official_api_key": "Offizieller Škoda-API-Schlüssel — nutzt die offizielle Hersteller-API als Live-Datenquelle (und Failover)",
           "clear_skoda_official_key": "Gespeicherten offiziellen Škoda-API-Schlüssel löschen (ein neuer wird automatisch erstellt, falls dein Login das unterstützt)",
           "skoda_official_mode": "Škoda Offizielle-API-Quellenmodus"
@@ -281,7 +276,6 @@
           "scan_interval": "Polling-Intervall in Minuten (5–60). Niedrige Werte bringen die Daten schneller, fressen aber das tägliche API-Quota schneller (~1.500 Calls/Tag bei MyCupra/MySEAT).",
           "spin": "Optionale 4-stellige Sicherheits-PIN für privilegierte Kommandos (Lock/Unlock bei manchen Marken). Leer lassen wenn nicht benötigt.",
           "read_only_mode": "Wenn aktiv: nur Status-Sensoren werden erstellt, keine Schalter/Buttons/Schlösser/Climate die Befehle senden würden. Schützt vor versehentlicher Auslösung und Subscription-zählenden Kommandos.",
-          "companion_read_charge_detail": "Nur Companion (ADB). Liest zusätzlich Ladeziel, Ladeleistung und Restzeit, die hinter dem Lade-Detailscreen liegen. Dafür TIPPT die App zur Navigation dorthin (etwa alle 15 Minuten) — nur aktivieren, wenn der Ablauf auf deinem Handy funktioniert. Standard aus. Nach Änderung neu laden.",
           "companion_wake_sleep": "Nur Companion (ADB). Weckt das Display vor jeder Abfrage und legt es danach wieder schlafen, damit ein gesperrtes/schlafendes Handy die App während des Lesens zeigt, ohne den Bildschirm dauerhaft an zu lassen. Standard aus. Nach Änderung neu laden.",
           "companion_close_app": "Nur Companion (ADB). Beendet (schließt) die Auto-App nach jeder Abfrage per Force-Stop, damit der nächste Lesevorgang sie frisch startet, statt einen zwischengespeicherten Screen abzugreifen. Hilft auf Geräten, wo die App ihre Werte zwischen den Lesevorgängen einfriert. Standard aus — ein Kaltstart ist langsamer. Nach Änderung neu laden.",
           "client_id_override": "Power-User Eskapeluke wenn die Community einen frischen OAuth client_id in einer neuen VW Group APK entdeckt bevor unser täglicher Atlas-Builder ihn findet. Paste den vollen UUID@apps_vw-dilab_com String hier rein, dann probiert der Resolver ihn ZUERST bei jedem authenticate, mit allen bestehenden client_ids weiter als Fallback in der Chain. Leer lassen für Default-Verhalten. Format: 8-4-4-4-12 hex Zeichen gefolgt von @apps_vw-dilab_com. Ungültige Werte werden stillschweigend ignoriert.",
@@ -1979,6 +1973,21 @@
       },
       "active_ventilation_switch": {
         "name": "Aktive Belüftung"
+      },
+      "companion_read_charge_detail": {
+        "name": "Ladedetails lesen"
+      },
+      "companion_read_vehicle_health": {
+        "name": "Fahrzeugzustand & Einstellungen lesen"
+      },
+      "companion_read_climate_detail": {
+        "name": "Klimadetails lesen"
+      },
+      "companion_read_climate_settings": {
+        "name": "Klimaeinstellungen lesen"
+      },
+      "companion_read_parking_position": {
+        "name": "Parkposition lesen"
       }
     },
     "number": {

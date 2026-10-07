@@ -163,6 +163,10 @@ class CompanionClient:
         self._last_data = data
         return data
 
+    def set_nav_opt_in(self, opt_in: str, enabled: bool) -> None:
+        """Turn one companion nav read on or off without a reload."""
+        self._channel.set_nav_opt_in(opt_in, enabled)
+
     # -- the command surface --------------------------------------------------
 
     def supports_command(self, command_name: str) -> bool:

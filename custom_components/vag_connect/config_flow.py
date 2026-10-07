@@ -3416,19 +3416,11 @@ class VagConnectOptionsFlow(config_entries.OptionsFlow):
         # in only after confirming the flow on their own device).
         from .const import (  # noqa: PLC0415
             CONF_COMPANION_CLOSE_APP,
-            CONF_COMPANION_READ_CHARGE_DETAIL,
             CONF_COMPANION_WAKE_SLEEP,
             CONF_STRATEGY,
             STRATEGY_COMPANION_ADB,
         )
         if current_data.get(CONF_STRATEGY) == STRATEGY_COMPANION_ADB:
-            schema[vol.Optional(
-                CONF_COMPANION_READ_CHARGE_DETAIL,
-                default=current_options.get(
-                    CONF_COMPANION_READ_CHARGE_DETAIL,
-                    current_data.get(CONF_COMPANION_READ_CHARGE_DETAIL, False),
-                ),
-            )] = _BOOL_SELECTOR
             schema[vol.Optional(
                 CONF_COMPANION_WAKE_SLEEP,
                 default=current_options.get(
@@ -3445,27 +3437,9 @@ class VagConnectOptionsFlow(config_entries.OptionsFlow):
                     current_data.get(CONF_COMPANION_CLOSE_APP, False),
                 ),
             )] = _BOOL_SELECTOR
-            # v4.4.0 (#968) — the deeper nav-read opt-ins. Each walks further
-            # into the app than the charge-detail read, so each is its own
-            # toggle and each defaults to OFF.
-            from .const import (  # noqa: PLC0415
-                CONF_COMPANION_READ_CLIMATE_DETAIL,
-                CONF_COMPANION_READ_CLIMATE_SETTINGS,
-                CONF_COMPANION_READ_PARKING_POSITION,
-                CONF_COMPANION_READ_VEHICLE_HEALTH,
-            )
-            for _key in (
-                CONF_COMPANION_READ_VEHICLE_HEALTH,
-                CONF_COMPANION_READ_CLIMATE_DETAIL,
-                CONF_COMPANION_READ_CLIMATE_SETTINGS,
-                CONF_COMPANION_READ_PARKING_POSITION,
-            ):
-                schema[vol.Optional(
-                    _key,
-                    default=current_options.get(
-                        _key, current_data.get(_key, False)
-                    ),
-                )] = _BOOL_SELECTOR
+            # The companion nav reads (charge detail, Vehicle Health, climate,
+            # parking position, ...) are switches on the settings device, so
+            # they apply without a reload.
         # b17 — opt-in: auto-create monthly ``utility_meter`` helpers wired to
         # our TOTAL_INCREASING sensors (charged energy kWh, odometer km), so a
         # user gets monthly counters without hand-building them. Surfaced ONLY
