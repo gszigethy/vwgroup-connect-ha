@@ -59,10 +59,11 @@ jobs:
           match = re.search(pattern, changelog, re.DOTALL)
           changelog_section = match.group(1).strip() if match else ""
 
-          # All previous semver versions, newest first. Date is captured
+          # All previous versions (semver, PEP 440 pre-releases and fork
+          # releases like 4.11.0-5), newest first. Date is captured
           # from the `## [X.Y.Z] - YYYY-MM-DD` header when present.
           all_entries = re.findall(
-              r"## \[(\d+\.\d+\.\d+(?:(?:a|b|rc)\d+)?)\](?:\s*-\s*(\d{4}-\d{2}-\d{2}))?",
+              r"## \[(\d+\.\d+\.\d+(?:(?:a|b|rc)\d+|-\d+)?)\](?:\s*-\s*(\d{4}-\d{2}-\d{2}))?",
               changelog,
           )
           versions_only = [v for v, _ in all_entries]
@@ -82,7 +83,7 @@ jobs:
           lines.append("")
 
           # ── What changed in this release ─────────────────────────────────
-          lines.append("## What's new in this release / Was ist neu in diesem Release")
+          lines.append("## What's new in this release")
           lines.append("")
           if changelog_section:
               lines.append(changelog_section)
@@ -111,13 +112,13 @@ jobs:
                   date_part = f" · {d}" if d else ""
                   lines.append(f"- [v{v}](https://github.com/{repo}/releases/tag/v{v}){date_part}")
               lines.append("")
-              lines.append(f"Full history: [CHANGELOG.md](https://github.com/{repo}/blob/main/CHANGELOG.md)")
+              lines.append(f"Full history: [CHANGELOG.md](https://github.com/{repo}/blob/v{version}/CHANGELOG.md)")
               lines.append("")
 
           # ── Installation / Update ────────────────────────────────────────
           lines.append("## Installation / Update")
           lines.append("")
-          lines.append("**HACS users:** enable Show beta versions for this fork custom Integration repository, then select the new beta.")
+          lines.append("**HACS users:** open VW Group Connect in HACS, select Redownload, pick this version, then restart Home Assistant.")
           lines.append("")
           lines.append("**Manual install:**")
           lines.append("")
