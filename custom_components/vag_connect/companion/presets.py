@@ -479,19 +479,20 @@ _VW = BrandPreset(
     # walks that two-step path. Vehicle execution remains pending validation.
     # Runtime APK resources supply localized labels; these are the legacy
     # English fallback. Climate commands remain unmapped. Read compatibility
-    # with older builds does not arm their charge controls.
+    # with older builds does not arm their charge controls. 4.6.4 dumps show
+    # the same selectors (phone-ui-capture-4.6.4/charging, settings-save).
     actions=(
         ActionSelector(
             action="start_charging",
             content_desc_re=r"^Start charging(?:\.|$)",
             nav_read="charge_detail",
-            app_versions=("4.3.2",),
+            app_versions=("4.6.4", "4.3.2"),
         ),
         ActionSelector(
             action="stop_charging",
             content_desc_re=r"^Stop charging(?:\.|$)",
             nav_read="charge_detail",
-            app_versions=("4.3.2",),
+            app_versions=("4.6.4", "4.3.2"),
         ),
         # @gszigethy Tiguan, 4.3.2: the "Charging up to" slider on vehicle
         # Settings. The slider has no node; companion/charge_target.py places
@@ -500,7 +501,7 @@ _VW = BrandPreset(
             action="set_charge_target",
             resource_id="vwd_save_button",
             nav_read="vehicle_settings",
-            app_versions=("4.3.2",),
+            app_versions=("4.6.4", "4.3.2"),
         ),
         # @gszigethy Tiguan, 4.3.2: "Synchronise now" under Vehicle data, at the
         # bottom of vehicle Settings, asks the car for fresh data. Matched by id
@@ -509,7 +510,7 @@ _VW = BrandPreset(
             action="sync_vehicle",
             resource_id="subtitle_cta",
             nav_read="vehicle_settings",
-            app_versions=("4.3.2",),
+            app_versions=("4.6.4", "4.3.2"),
         ),
     ),
     # v2.26.0 (C9) — charge target / power / remaining-time live behind the

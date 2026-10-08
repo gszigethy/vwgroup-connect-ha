@@ -47,9 +47,10 @@ from .transport import CompanionTransportError
 if TYPE_CHECKING:
     from .channel import CompanionChannel
 
-# Commands are mapped against this build only. Reads keep the preset's own
+# Commands are mapped against these builds only (4.6.4: the same sheet ids in
+# the 4.6.4 dumps; not yet sent to a car on 4.6.4). Reads keep the preset's own
 # version set; a tap on another build's sheet is not assumed to be safe.
-CLIMATE_APP_VERSIONS: tuple[str, ...] = ("4.3.2",)
+CLIMATE_APP_VERSIONS: tuple[str, ...] = ("4.6.4", "4.3.2")
 
 DIAL_MIN_C = 15.5  # rendered "LO"
 DIAL_MAX_C = 30.0  # rendered "HI"

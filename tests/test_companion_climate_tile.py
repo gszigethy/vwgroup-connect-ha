@@ -441,6 +441,31 @@ async def test_other_app_versions_are_never_tapped():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("version", ["4.6.4", "4.3.2"])
+async def test_verified_builds_start_and_stop(version):
+    # 4.6.4 climate sheet dumps carry the same cta_start, clima_compose_view and
+    # clima_air_conditioning_pick ids as 4.3.2.
+    phone = FakePhone(layout="pick", version=version)
+    _ch, ctrl = _controller(phone)
+    await ctrl.start()
+    assert phone.taps == ["tile", "start"] and phone.running == "ac"
+    phone = FakePhone(layout="pick", version=version, running="ac")
+    _ch, ctrl = _controller(phone)
+    await ctrl.stop()
+    assert phone.taps == ["tile", "stop"] and phone.running is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", ["4.4.0", "4.6.3"])
+async def test_unlisted_builds_below_4_6_4_are_never_tapped(version):
+    phone = FakePhone(version=version)
+    _ch, ctrl = _controller(phone)
+    with pytest.raises(CompanionWriteBlocked, match="4.6.4/4.3.2"):
+        await ctrl.start()
+    assert phone.taps == []
+
+
+@pytest.mark.asyncio
 async def test_commands_keep_the_minimum_interval():
     phone = FakePhone(layout="pick")
     _ch, ctrl = _controller(phone)
