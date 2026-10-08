@@ -1971,6 +1971,18 @@
       "auto_unlock_plug_switch": {
         "name": "Automatické odemknutí nabíjecí zástrčky"
       },
+      "climate_at_unlock_switch": {
+        "name": "Přídavná klimatizace při odemknutí"
+      },
+      "window_heating_auto_switch": {
+        "name": "Automatické vyhřívání oken"
+      },
+      "climate_zone_front_left_switch": {
+        "name": "Klimatická zóna vpředu vlevo"
+      },
+      "climate_zone_front_right_switch": {
+        "name": "Klimatická zóna vpředu vpravo"
+      },
       "active_ventilation_switch": {
         "name": "Aktivní větrání"
       },

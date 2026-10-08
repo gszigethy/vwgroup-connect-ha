@@ -30,6 +30,7 @@ from typing import Callable
 
 from .presets import (
     ACTION_TO_COMMAND,
+    CLIMATE_SETTING_ACTIONS,
     ActionSelector,
     BrandPreset,
     NavReadSelector,
@@ -77,6 +78,17 @@ from .charge_target import (
     is_syncing,
     snap_target,
 )
+from .climate_settings import (
+    NAMES as CLIMATE_SETTING_NAMES,
+    TOGGLES as CLIMATE_TOGGLES,
+    find_save as find_climate_save,
+    find_toggle,
+    find_zone_switch,
+    find_zones_back,
+    find_zones_row,
+    on_settings_page,
+    on_zones_page,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -107,6 +119,8 @@ _SLIDER_TRIES = 3                  # charge-limit taps, each read back, before
 _SAVE_POLLS = 15                   # dumps to wait for the app to confirm a save
 _SYNC_SCROLLS = 3                  # swipes down vehicle Settings to reach
                                    # "Synchronise now" (one is enough on 4.3.2)
+_SCREEN_TRIES = 5                  # dumps to wait for the screen a tap should
+                                   # produce (a dump is about a second on ADB)
 
 
 _LIMIT_REASON = (
@@ -907,6 +921,8 @@ class CompanionChannel:
             raise CompanionWriteBlocked("the charge limit needs a target value")
         if action == "sync_vehicle":
             raise CompanionWriteBlocked("a vehicle sync runs through sync_vehicle")
+        if action in CLIMATE_SETTING_ACTIONS.values():
+            raise CompanionWriteBlocked("a climate setting needs its on/off value")
         spec, nodes = await self._command_gate(action)
         walked = 0
         nav = next((n for n in self._preset.nav_reads if n.name == spec.nav_read), None)
@@ -1069,6 +1085,230 @@ class CompanionChannel:
         raise CompanionWriteBlocked(
             "the app did not confirm saving the charge limit; check it in the app"
         )
+
+    async def set_climate_setting(self, key: str, enabled: bool) -> bool:
+        """Switch one Climate Settings value and save it; True when it changed.
+
+        ``key`` is the field the read fills: ``climate_at_unlock``,
+        ``window_heating_enabled``, ``climate_zone_front_left`` or
+        ``climate_zone_front_right``. A value already in place sends nothing.
+        Otherwise the switch is tapped (which only stages it), Save must appear,
+        Save is tapped, and the page is opened again to read the saved state.
+        Nothing is ever left staged: an abort un-stages a switch it tapped and
+        leaves the page without Save, which keeps what was saved.
+        """
+        async with self._screen_lock:
+            return await self._set_climate_setting_serialized(key, bool(enabled))
+
+    async def _set_climate_setting_serialized(self, key: str, enabled: bool) -> bool:
+        action = CLIMATE_SETTING_ACTIONS.get(key)
+        if action is None:
+            raise CompanionWriteBlocked(f"'{key}' is not a climate setting the app can change")
+        name = CLIMATE_SETTING_NAMES[key]
+        zone = key not in CLIMATE_TOGGLES
+        spec, nodes = await self._command_gate(action)
+        nav = next((n for n in self._preset.nav_reads if n.name == spec.nav_read), None)
+        if nav is None or not nav.path:
+            raise CompanionWriteBlocked("the Climate Settings path is not mapped")
+        if zone and not self._app_strings:
+            raise CompanionWriteBlocked(
+                "the zones are found by the app's own labels, and its translation "
+                "tables could not be read; nothing was changed"
+            )
+        # The switch this call tapped and has not saved, with its saved value,
+        # so an abort can put it back before leaving.
+        staged: bool | None = None
+        try:
+            page = await self._open_climate_settings(nav, nodes)
+            current, page = await self._read_climate_setting(key, page)
+            if current == enabled:
+                return False  # nothing to change, nothing sent
+            staged = current
+            page = await self._stage_climate_setting(key, enabled, page)
+            save = find_climate_save(page)
+            if save is None:
+                page = await self._await_screen(lambda n: find_climate_save(n) is not None)
+                save = find_climate_save(page)
+            if self._limit_on_screen(page):
+                self._trip_rate_limit()
+                raise CompanionWriteBlocked(_LIMIT_REASON)
+            if save is None or save.tap_point is None:
+                raise CompanionWriteBlocked(
+                    f"the app did not offer Save after switching the {name}; nothing was sent"
+                )
+            # Save is the one tap that sends. Stamp first, so a transport that
+            # fails after delivery still blocks an immediate repeat.
+            self._last_write_at = self._now()
+            self._nav_cache.pop(key, None)
+            await self._t.tap(*save.tap_point)
+            staged = None
+            after = await self._await_climate_settings_saved(nav, name)
+            page = await self._open_climate_settings(nav, after)
+            seen, page = await self._read_climate_setting(key, page)
+            if seen != enabled:
+                raise CompanionWriteBlocked(
+                    f"the app shows the {name} {'on' if seen else 'off'} after saving, "
+                    f"not {'on' if enabled else 'off'}; check it in the app"
+                )
+            self._nav_cache[key] = enabled
+            self._nav_cache_from[key] = nav.opt_in
+            return True
+        except CompanionTransportError as err:
+            raise CompanionWriteBlocked(str(err)) from err
+        finally:
+            await self._leave_climate_settings(key, staged)
+
+    async def _await_screen(self, done: Callable[[list[UiNode]], bool]) -> list[UiNode]:
+        """Dump until the screen a tap should produce is there (bounded)."""
+        nodes: list[UiNode] = []
+        for _ in range(_SCREEN_TRIES):
+            nodes, _cleared = await self._dump_and_clear_overlays()
+            if done(nodes) or self._limit_on_screen(nodes):
+                break
+        return nodes
+
+    async def _open_climate_settings(
+        self, nav: NavReadSelector, nodes: list[UiNode]
+    ) -> list[UiNode]:
+        """Reach the Settings page from wherever ``nodes`` shows: it, the sheet, or home."""
+        if on_settings_page(nodes):
+            return nodes
+        # From the sheet only its Settings row is left to tap.
+        on_sheet = find_node_for(nodes, nav.path[-1]) is not None
+        steps = nav.path[-1:] if on_sheet else nav.path
+        detail, _walked = await self._walk_to_detail(steps, nodes)
+        if detail is not None and not on_settings_page(detail) and not self._limit_on_screen(detail):
+            # A Compose page can be caught before its toolbar is drawn.
+            detail = await self._await_screen(on_settings_page)
+        if detail is not None and self._limit_on_screen(detail):
+            self._trip_rate_limit()
+            raise CompanionWriteBlocked(_LIMIT_REASON)
+        if detail is None or not on_settings_page(detail):
+            raise CompanionWriteBlocked("could not open the Climate Settings page")
+        return detail
+
+    async def _read_climate_setting(
+        self, key: str, page: list[UiNode]
+    ) -> tuple[bool, list[UiNode]]:
+        """The setting as the page shows it; a zone is read on the Zones page."""
+        name = CLIMATE_SETTING_NAMES[key]
+        if key in CLIMATE_TOGGLES:
+            toggle = find_toggle(page, key)
+            if toggle is None:
+                page = await self._await_screen(lambda n: find_toggle(n, key) is not None)
+                toggle = find_toggle(page, key)
+            if toggle is None:
+                raise CompanionWriteBlocked(
+                    f"the {name} switch is not on the Climate Settings page; this car "
+                    "may not have it"
+                )
+            return toggle.checked, page
+        strings = self._app_strings
+        if not on_zones_page(page, strings):
+            row = find_zones_row(page, strings)
+            if row is None or row.tap_point is None:
+                raise CompanionWriteBlocked(
+                    "the Zones row is not on the Climate Settings page; this car may "
+                    "not have zones"
+                )
+            await self._t.tap(*row.tap_point)
+            page = await self._await_screen(
+                lambda n: find_zone_switch(n, strings, key) is not None
+            )
+        if self._limit_on_screen(page):
+            self._trip_rate_limit()
+            raise CompanionWriteBlocked(_LIMIT_REASON)
+        switch = find_zone_switch(page, strings, key)
+        if switch is None:
+            raise CompanionWriteBlocked(f"the Zones page does not show the {name}")
+        return switch.checked, page
+
+    async def _stage_climate_setting(
+        self, key: str, enabled: bool, page: list[UiNode]
+    ) -> list[UiNode]:
+        """Tap the switch and see it flip; a zone is carried back to Settings."""
+        name = CLIMATE_SETTING_NAMES[key]
+        strings = self._app_strings
+        if key in CLIMATE_TOGGLES:
+            def find(n: list[UiNode]) -> UiNode | None:
+                return find_toggle(n, key)
+        else:
+            def find(n: list[UiNode]) -> UiNode | None:
+                return find_zone_switch(n, strings, key)
+        switch = find(page)
+        if switch is None or switch.tap_point is None:
+            raise CompanionWriteBlocked(f"the {name} switch cannot be tapped")
+        await self._t.tap(*switch.tap_point)
+        page = await self._await_screen(
+            lambda n: (s := find(n)) is not None and s.checked == enabled
+        )
+        flipped = find(page)
+        if flipped is None or flipped.checked != enabled:
+            raise CompanionWriteBlocked(f"the {name} switch did not change; nothing was sent")
+        if key in CLIMATE_TOGGLES:
+            return page
+        # The toolbar arrow keeps the zone change; Android BACK would drop it.
+        back = find_zones_back(page, strings)
+        if back is None or back.tap_point is None:
+            raise CompanionWriteBlocked(
+                "could not find the Zones page's back arrow; nothing was sent"
+            )
+        await self._t.tap(*back.tap_point)
+        page = await self._await_screen(
+            lambda n: on_settings_page(n) and find_climate_save(n) is not None
+        )
+        if not on_settings_page(page) and not self._limit_on_screen(page):
+            raise CompanionWriteBlocked(
+                "the app did not return to Climate Settings from Zones; nothing was sent"
+            )
+        return page
+
+    async def _await_climate_settings_saved(
+        self, nav: NavReadSelector, name: str
+    ) -> list[UiNode]:
+        """Wait for Save to be taken: the app closes Settings onto the sheet."""
+        nodes: list[UiNode] = []
+        for _ in range(_SAVE_POLLS):
+            nodes, _cleared = await self._dump_and_clear_overlays()
+            if self._limit_on_screen(nodes):
+                self._trip_rate_limit()
+                raise CompanionWriteBlocked(_LIMIT_REASON)
+            if self._is_alert(nodes):
+                raise CompanionWriteBlocked(
+                    f"the app reported a problem saving the {name}; check it in the app"
+                )
+            if on_settings_page(nodes):
+                if find_climate_save(nodes) is None:
+                    return nodes  # stayed on the page, nothing left to save
+                continue  # Save not taken yet
+            if find_node_for(nodes, nav.path[-1]) is not None:
+                return nodes  # back on the sheet: saved
+            if self._preset.screen_anchor is not None and has_anchor(nodes, self._preset):
+                return nodes
+            # Between screens: dump again.
+        raise CompanionWriteBlocked(
+            f"the app did not confirm saving the {name}; check it in the app"
+        )
+
+    async def _leave_climate_settings(self, key: str, staged: bool | None) -> None:
+        """Back to the overview without saving anything left staged.
+
+        A switch this call tapped but did not save is switched back first,
+        which on the 4.6.4 page also takes Save away again. A zone needs
+        nothing: Android BACK leaves the Zones page without the change, and
+        ``climatisationSettingsLeading`` leaves Settings without Save.
+        """
+        if staged is not None and key in CLIMATE_TOGGLES:
+            try:
+                nodes, _cleared = await self._dump_and_clear_overlays()
+                toggle = find_toggle(nodes, key)
+                if toggle is not None and toggle.checked != staged and toggle.tap_point:
+                    await self._t.tap(*toggle.tap_point)
+                    await self._await_screen(lambda n: find_climate_save(n) is None)
+            except CompanionTransportError:
+                pass
+        # Zones → Settings → sheet → overview, stopping once home.
+        await self._return_to_overview(3)
 
     async def sync_vehicle(self) -> bool:
         """Tap vehicle Settings → "Synchronise now", so the car sends fresh data.

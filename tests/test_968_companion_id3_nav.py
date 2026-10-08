@@ -545,7 +545,15 @@ class TestPresetShape:
             "sync_vehicle": "vehicle_settings",
         }
         assert all(a.app_versions == ("4.3.2",) for a in battery)
-        assert {a.action for a in _VW.actions} - {a.action for a in battery} == {
+        # The Climate Settings switches and zones: grounded in the 4.6.4
+        # captures (settings-save and the zone round trips), pinned to 4.6.4.
+        settings = {a for a in _VW.actions if a.nav_read == "climate_settings"}
+        assert {a.action for a in settings} == {
+            "set_climate_at_unlock", "set_window_heating_auto",
+            "set_climate_zone_front_left", "set_climate_zone_front_right",
+        }
+        assert all(a.app_versions == ("4.6.4",) for a in settings)
+        assert {a.action for a in _VW.actions} - {a.action for a in battery | settings} == {
             "start_climate", "stop_climate", "start_window_heating",
             "stop_window_heating", "set_climate_temperature",
         }

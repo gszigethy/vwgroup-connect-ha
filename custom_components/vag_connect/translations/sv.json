@@ -1971,6 +1971,18 @@
       "auto_unlock_plug_switch": {
         "name": "Lås upp laddkontakten automatiskt"
       },
+      "climate_at_unlock_switch": {
+        "name": "Extra luftkonditionering vid upplåsning"
+      },
+      "window_heating_auto_switch": {
+        "name": "Automatisk rutvärme"
+      },
+      "climate_zone_front_left_switch": {
+        "name": "Klimatzon fram vänster"
+      },
+      "climate_zone_front_right_switch": {
+        "name": "Klimatzon fram höger"
+      },
       "active_ventilation_switch": {
         "name": "Aktiv ventilation"
       },

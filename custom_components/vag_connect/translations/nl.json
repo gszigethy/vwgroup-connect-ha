@@ -1971,6 +1971,18 @@
       "auto_unlock_plug_switch": {
         "name": "Laadstekker automatisch ontgrendelen"
       },
+      "climate_at_unlock_switch": {
+        "name": "Extra airconditioning bij ontgrendelen"
+      },
+      "window_heating_auto_switch": {
+        "name": "Automatische ruitverwarming"
+      },
+      "climate_zone_front_left_switch": {
+        "name": "Klimaatzone linksvoor"
+      },
+      "climate_zone_front_right_switch": {
+        "name": "Klimaatzone rechtsvoor"
+      },
       "active_ventilation_switch": {
         "name": "Actieve ventilatie"
       },

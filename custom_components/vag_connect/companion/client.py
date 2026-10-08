@@ -304,6 +304,47 @@ class CompanionClient:
         except CompanionWriteBlocked as err:
             raise VehicleCommandError("command_set_target_soc", str(err)) from err
 
+    async def _climate_setting(self, command_name: str, key: str, enabled: bool) -> None:
+        """One Climate Settings switch, saved and read back by the channel."""
+        from ..cariad.exceptions import VehicleCommandError  # noqa: PLC0415
+
+        if not self.supports_command(command_name):
+            raise VehicleCommandError(
+                command_name,
+                "this command is not available on the companion (ADB) channel",
+            )
+        try:
+            # The channel's screen lock keeps polls and other commands out.
+            await self._channel.set_climate_setting(key, enabled)
+        except CompanionWriteBlocked as err:
+            raise VehicleCommandError(command_name, str(err)) from err
+
+    async def command_set_climate_at_unlock(
+        self, vin: str, *_a: Any, enabled: bool, **_k: Any
+    ) -> None:
+        await self._climate_setting("command_set_climate_at_unlock", "climate_at_unlock", enabled)
+
+    async def command_set_window_heating_auto(
+        self, vin: str, *_a: Any, enabled: bool, **_k: Any
+    ) -> None:
+        await self._climate_setting(
+            "command_set_window_heating_auto", "window_heating_enabled", enabled
+        )
+
+    async def command_set_climate_zone_front_left(
+        self, vin: str, *_a: Any, enabled: bool, **_k: Any
+    ) -> None:
+        await self._climate_setting(
+            "command_set_climate_zone_front_left", "climate_zone_front_left", enabled
+        )
+
+    async def command_set_climate_zone_front_right(
+        self, vin: str, *_a: Any, enabled: bool, **_k: Any
+    ) -> None:
+        await self._climate_setting(
+            "command_set_climate_zone_front_right", "climate_zone_front_right", enabled
+        )
+
     async def command_sync_vehicle(self, vin: str, *_a: Any, **_k: Any) -> bool:
         """Ask the car for fresh data via the app's "Synchronise now".
 
