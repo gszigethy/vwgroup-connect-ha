@@ -346,10 +346,9 @@ async def test_a_command_drops_only_the_climate_values_from_the_cache():
     phone = FakePhone(layout="pick")
     channel, ctrl = _controller(phone)
     channel._nav_cache = {"climatisation_active": False, "battery_soc": 80, "target_temperature": 22.0}
-    channel._last_nav_at = 123.0
     await ctrl.start()
     assert channel._nav_cache == {"battery_soc": 80, "target_temperature": 22.0}
-    assert channel._last_nav_at == 123.0  # no walk of every opted-in screen
+    assert phone.taps == ["tile", "start"]  # no walk of every opted-in screen
 
 
 @pytest.mark.asyncio
