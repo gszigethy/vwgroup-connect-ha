@@ -46,13 +46,15 @@ def newer_than_reported(version: str, baseline: str, issues: list[dict[str, Any]
 def github_issues(repo: str) -> list[dict[str, Any]]:
     """Read all pages and both states so old/closed notifications are remembered."""
     result = subprocess.run(
-        ["gh", "api", "--paginate", "--slurp", f"repos/{repo}/issues?state=all&per_page=100"],
+        ["gh", "api", "--paginate", f"repos/{repo}/issues?state=all&per_page=100",
+         "--jq", ".[] | @json"],
         check=True, capture_output=True, text=True, timeout=120,
     )
-    pages = json.loads(result.stdout)
-    if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
+    # JSON Lines works with both older host gh and current GitHub runners.
+    issues = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    if any(not isinstance(issue, dict) for issue in issues):
         raise ValueError("Unexpected GitHub issues response; refusing to open an issue")
-    return [issue for page in pages for issue in page]
+    return issues
 
 
 def issue_body(version: str, baseline: str) -> str:

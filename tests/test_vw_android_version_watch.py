@@ -95,9 +95,12 @@ def test_duplicate_never_posts(monkeypatch):
 
 def test_issues_are_paginated_and_include_closed(monkeypatch):
     def run(args, **kwargs):
-        assert "--paginate" in args and "--slurp" in args
-        assert "state=all" in args[-1]
-        return subprocess.CompletedProcess(args, 0, json.dumps([[reported("4.6.5")], [reported("4.7.0")]]))
+        assert "--paginate" in args and "--slurp" not in args
+        assert any("state=all" in arg for arg in args)
+        assert args[-1] == ".[] | @json"
+        return subprocess.CompletedProcess(
+            args, 0, "\n".join(json.dumps(reported(v)) for v in ("4.6.5", "4.7.0")),
+        )
 
     monkeypatch.setattr(watch.subprocess, "run", run)
     assert len(watch.github_issues(watch.REPOSITORY)) == 2
