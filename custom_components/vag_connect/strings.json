@@ -2115,6 +2115,13 @@
           "maximum": "Maximum",
           "reduced": "Reduced"
         }
+      },
+      "companion_climate_start_mode": {
+        "name": "Desired Climate Start Mode",
+        "state": {
+          "air_conditioning": "Air conditioning",
+          "window_heating": "Window heating only"
+        }
       }
     },
     "time": {

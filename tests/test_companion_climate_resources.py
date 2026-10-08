@@ -91,13 +91,13 @@ def test_translated_lo_label():
 
 
 @pytest.mark.asyncio
-async def test_window_heating_mode_refuses_the_dial_without_tapping_it():
+async def test_window_heating_start_leaves_the_dial_alone():
     phone = FakePhone(temp=22.0, mode="wh")
     channel, ctrl = _controller(phone)
     channel._app_strings = STRINGS
-    with pytest.raises(CompanionWriteBlocked, match="window heating"):
-        await ctrl.set_temperature(24.0)
+    await ctrl.start(window_heating_only=True, temp_c=24.0)
     assert not any(t.startswith("dial") for t in phone.taps)
+    assert phone.running == "wh"
 
 
 @pytest.mark.asyncio
@@ -112,7 +112,7 @@ async def test_a_dial_outside_the_celsius_range_is_never_tapped():
         + phone._t("start", 105, 2004, 975, 2130, rid="cta_start", text="Start", clickable=True)
     )
     with pytest.raises(CompanionWriteBlocked, match="outside"):
-        await ctrl.set_temperature(22.0)
+        await ctrl.start(temp_c=22.0)
     assert not any(t.startswith("dial") for t in phone.taps)
 
 
@@ -126,5 +126,5 @@ async def test_a_step_the_wrong_way_stops_the_walk():
     phone._on_dial = backwards
     _ch, ctrl = _controller(phone)
     with pytest.raises(CompanionWriteBlocked, match="away from"):
-        await ctrl.set_temperature(24.0)
+        await ctrl.start(temp_c=24.0)
     assert [t for t in phone.taps if t.startswith("dial")] == ["dial:22.5"]

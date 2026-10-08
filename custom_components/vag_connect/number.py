@@ -3,12 +3,14 @@
 """Number entities for VW Group Connect (target SOC, climatisation temperature)."""
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from homeassistant.components.number import (
     NumberDeviceClass,
     NumberEntity,
     NumberEntityDescription,
     NumberMode,
+    RestoreNumber,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
@@ -37,6 +39,9 @@ from .const import (
 )
 from .coordinator import VagConnectCoordinator
 from .entity_base import VagConnectEntity, register_dynamic_spawner
+
+if TYPE_CHECKING:
+    from .companion.client import ClimateTargets
 
 
 @dataclass(frozen=True)
@@ -246,6 +251,10 @@ async def async_setup_entry(
             # raises AttributeError on set (companion/ADB has no target-SoC etc.).
             if cmd_id and not coordinator.command_method_available(cmd_id):
                 continue
+            if desc.key == "target_temperature" and _companion_climate_targets(coordinator):
+                # Companion: a value held in HA for the next Start, not a write.
+                entities.append(VagCompanionClimateTemperatureNumber(coordinator, vin, desc))
+                continue
             entities.append(VagConnectNumber(coordinator, vin, desc))
         return entities
 
@@ -358,6 +367,64 @@ class VagConnectNumber(VagConnectEntity, NumberEntity):
             # Trigger an entity state update so the slider reflects the
             # new value immediately without waiting for the next poll.
             self.async_write_ha_state()
+
+
+def _companion_climate_targets(
+    coordinator: VagConnectCoordinator,
+) -> "ClimateTargets | None":
+    """The companion client's climate Start targets; None for other entries."""
+    if not coordinator.is_companion():
+        return None
+    from .companion.client import climate_targets_of  # noqa: PLC0415
+
+    return climate_targets_of(coordinator)
+
+
+class VagCompanionClimateTemperatureNumber(VagConnectNumber, RestoreNumber):
+    """Companion: the temperature the next climate Start applies.
+
+    The app's Air Conditioning sheet has no Save; Start applies the dial. So
+    this number is a value held in HA (restored across restarts): changing it
+    only stores it, and the climate Start sets the dial to it first. The poll
+    never writes it; what the app's dial shows stays on the read-only Target
+    Temperature sensor. Unavailable while the held mode is window heating only,
+    where the app disables the dial.
+    """
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        targets = _companion_climate_targets(self.coordinator)
+        if targets is None or targets.temp_c is not None:
+            return
+        value: float | None = None
+        last = await self.async_get_last_number_data()
+        if last is not None and last.native_value is not None:
+            value = float(last.native_value)
+        else:
+            state = await self.async_get_last_state()
+            try:
+                value = float(state.state) if state is not None else None
+            except (TypeError, ValueError):
+                value = None  # "unknown" / "unavailable"
+        if value is not None:
+            self.coordinator._cariad_client.store_climate_target_temperature(value)
+
+    @property
+    def available(self) -> bool:
+        targets = _companion_climate_targets(self.coordinator)
+        if targets is not None and targets.window_heating_only:
+            return False
+        return super().available
+
+    @property
+    def native_value(self) -> float | None:
+        targets = _companion_climate_targets(self.coordinator)
+        return targets.temp_c if targets is not None else None
+
+    async def async_set_native_value(self, value: float) -> None:
+        # Stores only (the coordinator skips the command path for companion).
+        await self.coordinator.async_set_climatisation_temperature(self._vin, value)
+        self.async_write_ha_state()
 
 
 class VagConnectScanIntervalNumber(NumberEntity):
