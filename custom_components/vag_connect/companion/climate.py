@@ -22,6 +22,11 @@ What the app does, from the installed 4.3.2 APK and the #968 captures:
   (``resources.py``); the German/English patterns are only the fallback when
   the tables cannot be read.
 
+The sheet has no Save (4.6.4 review): Start applies the selected mode and the
+dial's temperature. So the mode and temperature are held in HA and applied by
+``start`` itself, right before it presses Start; changing them alone never
+opens the app.
+
 Every step is read back from the screen before the next one, and a command
 never confirms anything the app did not show. A tap is not a vehicle result:
 the next poll supplies the real state.
@@ -205,7 +210,22 @@ class ClimateController:
 
     # -- public commands ------------------------------------------------------
 
-    async def start(self, *, window_heating_only: bool = False) -> None:
+    async def start(
+        self, *, window_heating_only: bool = False, temp_c: float | None = None,
+    ) -> None:
+        """Start what HA asked for: set the mode and the dial, check, then Start.
+
+        The sheet has no Save: Start sends the mode the picker shows and the
+        temperature the dial shows. So both are set first (the dial only in the
+        air conditioning mode; the app disables it for window heating alone),
+        read back from the screen, and Start is pressed only when both match.
+        ``temp_c`` None leaves the dial as it is. A running climate is left
+        alone: a changed setting applies at the next Start.
+        """
+        target = (
+            snap_temperature(temp_c)
+            if temp_c is not None and not window_heating_only else None
+        )
         async with self._on_sheet() as nodes:
             sheet = read_sheet(nodes)
             if sheet.running:
@@ -213,10 +233,18 @@ class ClimateController:
                 # pressed for a start request. Nothing to send.
                 return
             nodes = await self._select(nodes, window_heating_only)
+            mode_title = read_sheet(nodes).pick_title
+            if target is not None:
+                nodes = await self._apply_dial(nodes, target)
+            self._check_ready(nodes, window_heating_only, mode_title, target)
             sheet = read_sheet(nodes)
             if sheet.start is None or not sheet.start.enabled or sheet.start.tap_point is None:
                 raise self._blocked("the Start button is not available on the sheet")
             await self._tap_command(sheet.start)
+            if target is not None:
+                # Read back just before Start; the overview does not show the
+                # dial, so the cached sheet value is updated here.
+                self._ch._nav_cache["target_temperature"] = target
             await self._await_outcome(expect_running=True)
 
     async def stop(self, *, window_heating_only: bool = False) -> None:
@@ -235,65 +263,6 @@ class ClimateController:
                 raise self._blocked("the Stop button is not available on the sheet")
             await self._tap_command(sheet.stop)
             await self._await_outcome(expect_running=False)
-
-    async def set_temperature(self, temp_c: float) -> float:
-        """Step the dial to ``temp_c`` (snapped to the app's 0.5 grid) and read it back."""
-        target = snap_temperature(temp_c)
-        strings = self._strings
-        async with self._on_sheet() as nodes:
-            sheet = read_sheet(nodes)
-            if sheet.pick_title and climate_mode_is_window_heating(sheet.pick_title, strings):
-                raise self._blocked(
-                    "the app disables the temperature dial in the window heating "
-                    "mode; select air conditioning in the app first"
-                )
-            current, lower, higher = read_dial(nodes, strings)
-            if current is None:
-                raise self._blocked("could not read the temperature dial")
-            if not DIAL_MIN_C <= current <= DIAL_MAX_C:
-                # Not the °C dial this walk is mapped for (a Fahrenheit build,
-                # a changed layout): refuse before the first tap.
-                raise self._blocked(
-                    f"the dial shows {current:g}, outside the {DIAL_MIN_C:g}-"
-                    f"{DIAL_MAX_C:g} °C range this integration knows; not changing it"
-                )
-            if current == target:
-                return target
-            self._mark_write()
-            for _ in range(int((DIAL_MAX_C - DIAL_MIN_C) / DIAL_STEP_C) + 1):
-                neighbour = higher if target > current else lower
-                if neighbour is None or neighbour.tap_point is None:
-                    raise self._blocked("the next temperature step is not on the dial")
-                await self._ch._t.tap(*neighbour.tap_point)
-                before = current
-                nodes = await self._screen(
-                    lambda n: read_dial(n, strings)[0] not in (None, before)
-                )
-                moved, lower, higher = read_dial(nodes, strings)
-                if moved is None or moved == current:
-                    # Locked while running on cars that only take a target
-                    # temperature at start (GetIsTemperatureControlDisabled).
-                    raise self._blocked("the temperature dial did not move")
-                if abs(target - moved) >= abs(target - current):
-                    # One step the wrong way is the most a misread dial costs.
-                    raise self._blocked(
-                        f"the dial moved from {current:g} to {moved:g} °C, away from "
-                        f"{target:g} °C; stopped"
-                    )
-                current = moved
-                if current == target:
-                    break
-            if current != target:
-                raise self._blocked(f"the dial stopped at {current} °C, not {target} °C")
-            # Keep the sheet open past the app's 1 s debounce so the app sends
-            # the new target itself, then confirm the dial still shows it.
-            await self._sleep(_DIAL_FLUSH_S)
-            nodes, _cleared = await self._ch._dump_and_clear_overlays()
-            final, _lower, _higher = read_dial(nodes, strings)
-            if final != target:
-                raise self._blocked(f"the dial reads {final} °C after the change, not {target} °C")
-            self._ch._nav_cache["target_temperature"] = target
-            return target
 
     @property
     def _strings(self) -> StringResources:
@@ -455,6 +424,97 @@ class ClimateController:
         if not sheet.present or (row_title and sheet.pick_title != row_title):
             raise self._blocked("the requested mode is not selected on the sheet")
         return picker
+
+    async def _apply_dial(self, nodes: list[UiNode], target: float) -> list[UiNode]:
+        """Step the dial to ``target`` one neighbour at a time; return the last dump.
+
+        Every step is read back before the next. After a change the sheet stays
+        open past the app's 1 s debounce and the screen is dumped once more, so
+        the caller checks what the app settled on, not what the taps implied.
+        """
+        strings = self._strings
+        current, lower, higher = read_dial(nodes, strings)
+        if current is None:
+            raise self._blocked("could not read the temperature dial")
+        if not DIAL_MIN_C <= current <= DIAL_MAX_C:
+            # Not the °C dial this walk is mapped for (a Fahrenheit build,
+            # a changed layout): refuse before the first tap.
+            raise self._blocked(
+                f"the dial shows {current:g}, outside the {DIAL_MIN_C:g}-"
+                f"{DIAL_MAX_C:g} °C range this integration knows; not changing it"
+            )
+        if current == target:
+            return nodes
+        self._mark_write()
+        for _ in range(int((DIAL_MAX_C - DIAL_MIN_C) / DIAL_STEP_C) + 1):
+            neighbour = higher if target > current else lower
+            if neighbour is None or neighbour.tap_point is None:
+                raise self._blocked("the next temperature step is not on the dial")
+            await self._ch._t.tap(*neighbour.tap_point)
+            before = current
+            nodes = await self._screen(
+                lambda n: read_dial(n, strings)[0] not in (None, before)
+            )
+            moved, lower, higher = read_dial(nodes, strings)
+            if moved is None or moved == current:
+                raise self._blocked("the temperature dial did not move")
+            if abs(target - moved) >= abs(target - current):
+                # One step the wrong way is the most a misread dial costs.
+                raise self._blocked(
+                    f"the dial moved from {current:g} to {moved:g} °C, away from "
+                    f"{target:g} °C; stopped"
+                )
+            current = moved
+            if current == target:
+                break
+        if current != target:
+            raise self._blocked(f"the dial stopped at {current:g} °C, not {target:g} °C")
+        # Keep the sheet open past the app's 1 s debounce, then dump once more:
+        # the check before Start reads what the app settled on.
+        await self._sleep(_DIAL_FLUSH_S)
+        nodes, _cleared = await self._ch._dump_and_clear_overlays()
+        return nodes
+
+    def _check_ready(
+        self,
+        nodes: list[UiNode],
+        window_heating_only: bool,
+        mode_title: str,
+        target: float | None,
+    ) -> None:
+        """Read the mode and the dial back; refuse Start on any difference."""
+        sheet = read_sheet(nodes)
+        if not sheet.present:
+            raise self._blocked(
+                "the Air Conditioning sheet closed before Start; Start was not pressed"
+            )
+        wanted = "window heating only" if window_heating_only else "air conditioning"
+        wrong: list[str] = []
+        if sheet.ac_toggle is not None or sheet.wh_toggle is not None:
+            ac_on = sheet.ac_toggle is not None and sheet.ac_toggle.checked
+            wh_on = sheet.wh_toggle is not None and sheet.wh_toggle.checked
+            if ac_on == window_heating_only or wh_on != window_heating_only:
+                wrong.append(f"a mode other than {wanted}")
+        elif sheet.pick is not None:
+            # _select verified the title against the chosen row; it must not
+            # have changed since, and a recognised title must name the mode.
+            shown = climate_mode_is_window_heating(sheet.pick_title, self._strings)
+            if sheet.pick_title != mode_title or (
+                shown is not None and shown != window_heating_only
+            ):
+                wrong.append(f"the mode \"{sheet.pick_title}\", not {wanted}")
+        if target is not None:
+            dial = read_dial(nodes, self._strings)[0]
+            if dial != target:
+                wrong.append(
+                    f"{'no temperature' if dial is None else f'{dial:g} °C'}, "
+                    f"not {target:g} °C"
+                )
+        if wrong:
+            raise self._blocked(
+                f"the sheet shows {' and '.join(wrong)} after setting it; "
+                "Start was not pressed"
+            )
 
     def _ac_running(self, nodes: list[UiNode], sheet: ClimaSheet) -> bool:
         """While running, is it air conditioning (not window heating alone)?"""

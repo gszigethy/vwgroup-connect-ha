@@ -2082,6 +2082,13 @@
           "maximum": "Massima",
           "reduced": "Ridotta"
         }
+      },
+      "companion_climate_start_mode": {
+        "name": "Modalità di avvio clima desiderata",
+        "state": {
+          "air_conditioning": "Aria condizionata",
+          "window_heating": "Solo riscaldamento cristalli"
+        }
       }
     },
     "time": {

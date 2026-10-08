@@ -2082,6 +2082,13 @@
           "maximum": "Maksimum",
           "reduced": "Redusert"
         }
+      },
+      "companion_climate_start_mode": {
+        "name": "Ønsket startmodus for klima",
+        "state": {
+          "air_conditioning": "Klimaanlegg",
+          "window_heating": "Kun vindusoppvarming"
+        }
       }
     },
     "time": {
