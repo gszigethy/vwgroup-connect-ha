@@ -74,6 +74,21 @@ Since #6 both screens are read on one walk.
 On the Tiguan it shows only `Vehicle` / `Locked`: no doors, windows, bonnet or
 boot. Nothing beyond the overview tile to read.
 
+### Lock status is read-only (no lock/unlock)
+
+On the companion channel the lock status is a read-only sensor
+(`doors_locked`). Lock and unlock commands are deliberately not offered, for
+security:
+
+- Unlocking needs the S-PIN. It would have to be typed into the phone over ADB,
+  and Home Assistant would have to store it.
+- The app's lock control is a slider with no stable handle to target reliably.
+- A wrong or misread tap sends the opposite command: unlock instead of lock.
+- Repeated attempts risk an S-PIN lockout and spend the car's daily request
+  budget.
+
+If your brand's backend supports remote lock, use that channel instead.
+
 ## Departure times
 
 Nav read `departure_times` (opt-in, #15). Three timers. Each has a time
