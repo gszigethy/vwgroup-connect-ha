@@ -15,10 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from custom_components.vag_connect.companion.channel import (
-    _NAV_READ_INTERVAL_S,
-    CompanionChannel,
-)
+from custom_components.vag_connect.companion.channel import CompanionChannel
 from custom_components.vag_connect.companion.presets import PRESETS, coerce
 from custom_components.vag_connect.companion.screen import (
     find_sync_age,
@@ -185,23 +182,21 @@ class TestNavReadOptIn:
         assert t.taps == []
 
     @pytest.mark.asyncio
-    async def test_cadence_caches_between_navs(self) -> None:
+    async def test_nav_read_runs_on_every_app_refresh_tick(self) -> None:
+        # The app refresh interval is the only read cadence: there is no
+        # separate floor, so consecutive polls each walk the detail screen,
+        # however close together they are.
         now, tt = _clock()
         t = _NavTransport(_VW_OVERVIEW, _VW_DETAIL)
         ch = CompanionChannel(
             t, PRESETS["volkswagen"], time_fn=now, read_charge_detail=True,
         )
-        await ch.read()
-        assert len(t.taps) == 1
-        # a second read within the cadence window must NOT tap again, but must
-        # still expose the cached target_soc
-        got = await ch.read()
-        assert len(t.taps) == 1
-        assert got["target_soc"] == 80
-        # after the window, it navigates again
-        tt["v"] += _NAV_READ_INTERVAL_S + 1
-        await ch.read()
-        assert len(t.taps) == 2
+        for tick in range(1, 4):
+            got = await ch.read()
+            assert len(t.taps) == tick
+            assert t.backs == tick  # back on the overview after every walk
+            assert got["target_soc"] == 80
+            tt["v"] += 5 * 60  # the shortest app refresh slider step
 
 
 # ── CUPRA: grounded from the real #968 dump ──────────────────────────────────

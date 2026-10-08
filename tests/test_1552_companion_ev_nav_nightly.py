@@ -135,8 +135,7 @@ class TestNavRefreshNotFrozenByCache:
         # the transport reports its app version; the "refresh ran" assertion below
         # is what proves the gate opened.)
 
-        # A prior nav read left a value in the cache, and the cadence window has
-        # elapsed (last_nav_at is None => due).
+        # A prior nav read left a value in the cache; every poll refreshes.
         channel._nav_cache = {"battery_soc": 41}
 
         seen: dict[str, object] = {}
