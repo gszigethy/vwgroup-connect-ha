@@ -1418,11 +1418,12 @@ class CompanionChannel:
                 self._trip_rate_limit()
                 raise CompanionWriteBlocked(_LIMIT_REASON)
             rows = departure_rows(nodes) if cleared else []
-            if len(rows) < slot:
+            index = slot - 1
+            if not 0 <= index < len(rows):
                 raise CompanionWriteBlocked(
                     f"the app showed a message instead of switching departure timer {slot}"
                 )
-            if rows[slot - 1].enabled == enabled:
+            if rows[index].enabled == enabled:
                 if seen and xml == previous:
                     break
                 seen = True
