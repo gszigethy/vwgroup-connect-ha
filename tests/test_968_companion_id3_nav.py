@@ -545,7 +545,14 @@ class TestPresetShape:
             "sync_vehicle": "vehicle_settings",
         }
         assert all(a.app_versions == ("4.3.2",) for a in battery)
-        assert {a.action for a in _VW.actions} - {a.action for a in battery} == {
+        # Departure timers: the list switch (4.6.4 and 4.3.2 captures) and the
+        # timer page (4.6.4 captures only).
+        departure = {a.action: a.app_versions for a in _VW.actions if a.nav_read == "departure_times"}
+        assert departure == {
+            "toggle_departure_timer": ("4.6.4", "4.3.2"),
+            "edit_departure_timer": ("4.6.4",),
+        }
+        assert {a.action for a in _VW.actions} - {a.action for a in battery} - set(departure) == {
             "start_climate", "stop_climate", "start_window_heating",
             "stop_window_heating", "set_climate_temperature",
         }

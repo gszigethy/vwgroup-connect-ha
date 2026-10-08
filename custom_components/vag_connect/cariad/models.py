@@ -1476,6 +1476,15 @@ class VehicleData:
     departure_timer_2_time: str | None = None
     departure_timer_3_enabled: bool = False
     departure_timer_3_time: str | None = None
+    # Companion (ADB) only: each timer's days as Home Assistant weekday codes
+    # ("mon,tue,wed,thu,fri") and its Repeat switch, read from the VW app's
+    # timer page. No cloud parser fills these.
+    departure_timer_1_weekdays: str | None = None
+    departure_timer_1_repeat: bool | None = None
+    departure_timer_2_weekdays: str | None = None
+    departure_timer_2_repeat: bool | None = None
+    departure_timer_3_weekdays: str | None = None
+    departure_timer_3_repeat: bool | None = None
 
     # Window heating
     window_heating_front: bool | None = None

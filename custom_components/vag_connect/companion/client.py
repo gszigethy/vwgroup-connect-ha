@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import date
 from typing import Any, Awaitable, Callable
 
 from ..cariad.models import VehicleData
@@ -304,6 +305,64 @@ class CompanionClient:
         except CompanionWriteBlocked as err:
             raise VehicleCommandError("command_set_target_soc", str(err)) from err
 
+    async def command_set_departure_timer(
+        self,
+        vin: str,
+        timer_id: int,
+        enabled: bool | None = None,
+        departure_time: str | None = None,
+        recurring_on: list[str] | None = None,
+        charging: bool | None = None,
+        climatisation: bool | None = None,
+        target_soc_pct: int | None = None,
+        one_off_day: str | None = None,
+        **_k: Any,
+    ) -> None:
+        """One Departure times timer, through the VW app's own screens.
+
+        ``enabled`` is the list's switch; ``departure_time`` ("HH:MM" or an
+        ISO datetime, the car's local time), ``recurring_on`` (weekdays, with
+        Repeat on) and ``one_off_day`` (a date within the next week, Repeat
+        off: the app's one-time timer is a weekday, not a date) are set on
+        the timer's page. Charging, climatisation and target charge level are
+        not on that page in app 4.6.4, so they are refused, not ignored.
+        """
+        from ..cariad.exceptions import VehicleCommandError  # noqa: PLC0415
+
+        command = "command_set_departure_timer"
+        if not self.supports_command(command):
+            raise VehicleCommandError(
+                command, "this command is not available on the companion (ADB) channel"
+            )
+        if charging is not None or climatisation is not None or target_soc_pct is not None:
+            raise VehicleCommandError(
+                command,
+                "the app's departure timer page has no charging, climatisation or "
+                "target charge level setting; leave those empty on the companion channel",
+            )
+        if recurring_on and one_off_day:
+            raise VehicleCommandError(command, "give either recurring_on or one_off_day, not both")
+        time = departure_time
+        if isinstance(time, str) and "T" in time:
+            time = time.split("T", 1)[1][:5]
+        weekdays: list[str] | None = list(recurring_on) if recurring_on else None
+        repeat: bool | None = True if weekdays else None
+        if one_off_day:
+            day = _one_off_weekday(one_off_day)
+            if day is None:
+                raise VehicleCommandError(
+                    command,
+                    f"one_off_day '{one_off_day}' must be a date (YYYY-MM-DD) within the next "
+                    "seven days: the app's one-time timer runs on the next such weekday",
+                )
+            weekdays, repeat = [day], False
+        try:
+            await self._channel.set_departure_timer(
+                int(timer_id), enabled=enabled, time=time, weekdays=weekdays, repeat=repeat,
+            )
+        except CompanionWriteBlocked as err:
+            raise VehicleCommandError(command, str(err)) from err
+
     async def command_sync_vehicle(self, vin: str, *_a: Any, **_k: Any) -> bool:
         """Ask the car for fresh data via the app's "Synchronise now".
 
@@ -340,3 +399,27 @@ class CompanionClient:
 
     async def close(self) -> None:
         await self._transport.close()
+
+
+def _one_off_weekday(raw: str, today: "date | None" = None) -> str | None:
+    """The weekday code of a one-off date, if the app can express it.
+
+    The app's one-time timer is a weekday that fires at its next occurrence,
+    so only today and the six days after it map onto one. "Today" is Home
+    Assistant's local date: the car and Home Assistant are assumed to share a
+    time zone.
+    """
+    try:
+        day = date.fromisoformat(str(raw).strip()[:10])
+    except ValueError:
+        return None
+    if today is None:
+        try:
+            from homeassistant.util import dt as dt_util  # noqa: PLC0415
+
+            today = dt_util.now().date()
+        except ImportError:  # pragma: no cover - outside Home Assistant
+            today = date.today()
+    if not 0 <= (day - today).days <= 6:
+        return None
+    return ("mon", "tue", "wed", "thu", "fri", "sat", "sun")[day.weekday()]

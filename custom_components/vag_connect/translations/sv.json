@@ -633,6 +633,15 @@
       "departure_timer_3_time": {
         "name": "Avgångstimer 3"
       },
+      "departure_timer_1_weekdays": {
+        "name": "Avresetimer 1 veckodagar"
+      },
+      "departure_timer_2_weekdays": {
+        "name": "Avresetimer 2 veckodagar"
+      },
+      "departure_timer_3_weekdays": {
+        "name": "Avresetimer 3 veckodagar"
+      },
       "last_updated_at": {
         "name": "Senast uppdaterad"
       },
@@ -1722,6 +1731,15 @@
       },
       "departure_timer_3_enabled": {
         "name": "Avgångstimer 3 Aktiv"
+      },
+      "departure_timer_1_repeat": {
+        "name": "Avresetimer 1 upprepa"
+      },
+      "departure_timer_2_repeat": {
+        "name": "Avresetimer 2 upprepa"
+      },
+      "departure_timer_3_repeat": {
+        "name": "Avresetimer 3 upprepa"
       },
       "alarm_active": {
         "name": "Larm Aktivt"

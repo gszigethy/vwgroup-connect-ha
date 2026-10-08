@@ -633,6 +633,15 @@
       "departure_timer_3_time": {
         "name": "Harmonogram odjazdu 3"
       },
+      "departure_timer_1_weekdays": {
+        "name": "Timer odjazdu 1 dni tygodnia"
+      },
+      "departure_timer_2_weekdays": {
+        "name": "Timer odjazdu 2 dni tygodnia"
+      },
+      "departure_timer_3_weekdays": {
+        "name": "Timer odjazdu 3 dni tygodnia"
+      },
       "last_updated_at": {
         "name": "Ostatnia aktualizacja"
       },
@@ -1722,6 +1731,15 @@
       },
       "departure_timer_3_enabled": {
         "name": "Timer Odjazdu 3 Aktywny"
+      },
+      "departure_timer_1_repeat": {
+        "name": "Timer odjazdu 1 powtarzaj"
+      },
+      "departure_timer_2_repeat": {
+        "name": "Timer odjazdu 2 powtarzaj"
+      },
+      "departure_timer_3_repeat": {
+        "name": "Timer odjazdu 3 powtarzaj"
       },
       "alarm_active": {
         "name": "Alarm Aktywny"

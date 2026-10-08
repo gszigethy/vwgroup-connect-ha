@@ -883,6 +883,32 @@ SENSOR_DESCRIPTIONS: tuple[VagSensorDescription, ...] = (
         icon="mdi:clock-time-four-outline",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
+    # Companion (ADB) only — each timer's days from the VW app's timer page,
+    # as Home Assistant weekday codes ("mon,tue,wed,thu,fri").
+    VagSensorDescription(
+        key="departure_timer_1_weekdays",
+        translation_key="departure_timer_1_weekdays",
+        data_key="departure_timer_1_weekdays",
+        condition="electric",
+        icon="mdi:calendar-week",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="departure_timer_2_weekdays",
+        translation_key="departure_timer_2_weekdays",
+        data_key="departure_timer_2_weekdays",
+        condition="electric",
+        icon="mdi:calendar-week",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagSensorDescription(
+        key="departure_timer_3_weekdays",
+        translation_key="departure_timer_3_weekdays",
+        data_key="departure_timer_3_weekdays",
+        condition="electric",
+        icon="mdi:calendar-week",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
 
 
     VagSensorDescription(
@@ -4198,6 +4224,10 @@ _DATA_PRESENT_REQUIRED: frozenset[str] = frozenset({
     "departure_timer_1_time",
     "departure_timer_2_time",
     "departure_timer_3_time",
+    # Companion (ADB) only: the departure-times read fills them.
+    "departure_timer_1_weekdays",
+    "departure_timer_2_weekdays",
+    "departure_timer_3_weekdays",
     "battery_temp_max",             # VW EU + Audi only (CARIAD-BFF)
     # v2.2.0 Phase 7 PR #2 — VW EU + Audi only (CARIAD-BFF
     # departureTimers block). Other brands' parsers don't populate

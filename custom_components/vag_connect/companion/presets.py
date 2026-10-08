@@ -493,6 +493,21 @@ _VW = BrandPreset(
         # @gszigethy Tiguan, 4.3.2: "Synchronise now" under Vehicle data, at the
         # bottom of vehicle Settings, asks the car for fresh data. Matched by id
         # only: "Delete vehicle" (delete_cta) sits just below it.
+        # @gszigethy Tiguan, 4.6.4 captures: a timer's switch on the
+        # Departure times list sends at once (same list on 4.3.2), and its
+        # page sets time, days and Repeat, sent with the toolbar's Save.
+        # companion/departure.py finds every control; matched by id there.
+        ActionSelector(
+            action="toggle_departure_timer",
+            nav_read="departure_times",
+            app_versions=("4.6.4", "4.3.2"),
+        ),
+        ActionSelector(
+            action="edit_departure_timer",
+            resource_id="time_picker",
+            nav_read="departure_times",
+            app_versions=("4.6.4",),
+        ),
         ActionSelector(
             action="sync_vehicle",
             resource_id="subtitle_cta",
@@ -873,7 +888,9 @@ _VW = BrandPreset(
             # The overview's Departure times tile. Each timer row shows its
             # time and a switch whose ``checked`` state is the timer's on/off;
             # the switches are read, never tapped. ``read_departure_timers``
-            # does the reading, by layout rather than words.
+            # does the reading, by layout rather than words. Each row then
+            # opens its timer page for the days and Repeat (4.6.4 ids), and
+            # BACK returns to the list without saving anything.
             steps=(
                 ActionSelector(
                     action="open_departure_times",
@@ -885,7 +902,8 @@ _VW = BrandPreset(
             back_presses=1,
             opt_in="departure_times",
             resource_targets=tuple(
-                f"departure_timer_{i}_{part}" for i in (1, 2, 3) for part in ("enabled", "time")
+                f"departure_timer_{i}_{part}" for i in (1, 2, 3)
+                for part in ("enabled", "time", "weekdays", "repeat")
             ),
         ),
         NavReadSelector(
@@ -1376,4 +1394,8 @@ ACTION_TO_COMMAND: dict[str, str] = {
     "stop_window_heating": "command_stop_window_heating",
     "set_climate_temperature": "command_set_climate_temperature",
     "sync_vehicle": "command_sync_vehicle",
+    # Both halves of the one departure timer command: the list's switch and
+    # the timer page (time, days, Repeat).
+    "toggle_departure_timer": "command_set_departure_timer",
+    "edit_departure_timer": "command_set_departure_timer",
 }

@@ -639,6 +639,15 @@
       "departure_timer_3_time": {
         "name": "Timer di partenza 3"
       },
+      "departure_timer_1_weekdays": {
+        "name": "Timer di partenza 1 giorni"
+      },
+      "departure_timer_2_weekdays": {
+        "name": "Timer di partenza 2 giorni"
+      },
+      "departure_timer_3_weekdays": {
+        "name": "Timer di partenza 3 giorni"
+      },
       "last_updated_at": {
         "name": "Ultimo aggiornamento"
       },
@@ -1734,6 +1743,15 @@
       },
       "departure_timer_3_enabled": {
         "name": "Timer di partenza 3 abilitato"
+      },
+      "departure_timer_1_repeat": {
+        "name": "Timer di partenza 1 ripeti"
+      },
+      "departure_timer_2_repeat": {
+        "name": "Timer di partenza 2 ripeti"
+      },
+      "departure_timer_3_repeat": {
+        "name": "Timer di partenza 3 ripeti"
       },
       "alarm_active": {
         "name": "Allarme attivo"

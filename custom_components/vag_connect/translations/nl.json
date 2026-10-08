@@ -633,6 +633,15 @@
       "departure_timer_3_time": {
         "name": "Vertrektimer 3"
       },
+      "departure_timer_1_weekdays": {
+        "name": "Vertrektimer 1 weekdagen"
+      },
+      "departure_timer_2_weekdays": {
+        "name": "Vertrektimer 2 weekdagen"
+      },
+      "departure_timer_3_weekdays": {
+        "name": "Vertrektimer 3 weekdagen"
+      },
       "last_updated_at": {
         "name": "Laatste update"
       },
@@ -1722,6 +1731,15 @@
       },
       "departure_timer_3_enabled": {
         "name": "Vertrektimer 3 Actief"
+      },
+      "departure_timer_1_repeat": {
+        "name": "Vertrektimer 1 herhalen"
+      },
+      "departure_timer_2_repeat": {
+        "name": "Vertrektimer 2 herhalen"
+      },
+      "departure_timer_3_repeat": {
+        "name": "Vertrektimer 3 herhalen"
       },
       "alarm_active": {
         "name": "Alarm Actief"
