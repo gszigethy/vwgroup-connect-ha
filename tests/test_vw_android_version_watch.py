@@ -104,3 +104,39 @@ def test_issues_are_paginated_and_include_closed(monkeypatch):
 
     monkeypatch.setattr(watch.subprocess, "run", run)
     assert len(watch.github_issues(watch.REPOSITORY)) == 2
+
+
+def test_malformed_issue_history_does_not_allow_creation(monkeypatch):
+    monkeypatch.setattr(
+        watch.subprocess, "run", lambda args, **kw: subprocess.CompletedProcess(args, 0, "[]\n"),
+    )
+    with pytest.raises(ValueError, match="Unexpected GitHub issues response"):
+        watch.github_issues(watch.REPOSITORY)
+
+
+def test_cli_dry_run_writes_step_summary(monkeypatch, tmp_path, capsys):
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    monkeypatch.setattr(watch.sys, "argv", ["watch", "--repo", watch.REPOSITORY, "--dry-run"])
+
+    def check(repo, baseline, dry_run):
+        assert repo == watch.REPOSITORY and baseline == "4.6.4" and dry_run
+        return "No newer version detected."
+
+    monkeypatch.setattr(watch, "check", check)
+    watch.main()
+    assert "No newer version" in capsys.readouterr().out
+    assert "No newer version" in summary.read_text()
+
+
+def test_cli_failure_returns_nonzero(monkeypatch, capsys):
+    monkeypatch.setattr(watch.sys, "argv", ["watch", "--repo", watch.REPOSITORY])
+
+    def fail(*args):
+        raise RuntimeError("Google Play returned no version")
+
+    monkeypatch.setattr(watch, "check", fail)
+    with pytest.raises(SystemExit) as error:
+        watch.main()
+    assert error.value.code == 1
+    assert "Version watch failed" in capsys.readouterr().err

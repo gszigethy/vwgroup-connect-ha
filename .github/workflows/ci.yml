@@ -122,6 +122,7 @@ jobs:
           # are untested (will land in Sessions 2–4). See #62.
           python3 -m pytest tests/ -v --tb=long \
             --cov=custom_components/vag_connect \
+            --cov=scripts.watch_vw_android \
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml \
             --cov-fail-under=75 2>&1 | tee pytest_output.log
