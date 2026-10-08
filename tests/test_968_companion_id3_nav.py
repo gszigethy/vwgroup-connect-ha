@@ -544,9 +544,9 @@ class TestPresetShape:
             "set_charge_target": "vehicle_settings",
             "sync_vehicle": "vehicle_settings",
         }
-        assert all(a.app_versions == ("4.3.2",) for a in battery)
+        assert all(a.app_versions == ("4.6.4", "4.3.2") for a in battery)
         assert {a.action for a in _VW.actions} - {a.action for a in battery} == {
             "start_climate", "stop_climate", "start_window_heating",
             "stop_window_heating", "set_climate_temperature",
         }
-        assert CLIMATE_APP_VERSIONS == ("4.3.2",)
+        assert CLIMATE_APP_VERSIONS == ("4.6.4", "4.3.2")
