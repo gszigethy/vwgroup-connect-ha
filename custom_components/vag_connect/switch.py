@@ -480,6 +480,7 @@ class VagCompanionClimateSettingSwitch(VagConnectEntity, SwitchEntity):
         self._attr_icon = icon
         self._field = field
         self._command_id = command_id
+        self._command = command_id  # non-optional copy for the command call
 
     @property
     def is_on(self) -> bool | None:
@@ -494,7 +495,7 @@ class VagCompanionClimateSettingSwitch(VagConnectEntity, SwitchEntity):
 
     async def _set(self, enabled: bool) -> None:
         await self.coordinator._cariad_cmd_optimistic(
-            self._vin, self._command_id,
+            self._vin, self._command,
             optimistic={self._field: enabled},
             enabled=enabled,
         )
