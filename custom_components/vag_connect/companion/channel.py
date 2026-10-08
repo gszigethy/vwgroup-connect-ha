@@ -69,6 +69,16 @@ from .resources import (
     read_settings_resources,
     trip_carousel_row,
 )
+from .departure import (
+    TIMER_CANCEL,
+    TIMER_SAVE,
+    WEEKDAYS,
+    TimerPage,
+    departure_rows,
+    find_toolbar_text,
+    page_fields,
+    read_timer_page,
+)
 from .app_sync import find_sync_button
 from .sync_time import find_sync_line
 from .charge_target import (
@@ -117,6 +127,10 @@ _SYNC_SCROLLS = 3                  # swipes down vehicle Settings to reach
                                    # "Synchronise now" (one is enough on 4.3.2)
 _SCREEN_TRIES = 5                  # dumps to wait for the screen a tap should
                                    # produce (a dump is about a second on ADB)
+_DAY_TAPS = 16                     # weekday/Repeat taps, each read back, before
+                                   # giving up on a timer page without saving
+_CLOCK_TAPS = 40                   # one-step time wheel taps, each read back
+                                   # (24 h: up to 12 hour + 6 minute steps)
 
 
 _LIMIT_REASON = (
@@ -541,6 +555,8 @@ class CompanionChannel:
                 extra: dict[str, object] = {}
                 if self._preset.brand == "volkswagen" and nav.name == "driving_data":
                     extra = await self._read_driving_data(detail)
+                if self._preset.brand == "volkswagen" and nav.name == "departure_times":
+                    extra = await self._read_departure_pages(detail)
                 self._apply_nav_values(nav, detail, fields, extra)
                 here, done = detail, len(nav.path)
         except CompanionTransportError:
@@ -670,6 +686,54 @@ class CompanionChannel:
                 if key.startswith("refuel_trip_"):
                     out.setdefault(key, val)
         return out
+
+    async def _read_departure_pages(self, nodes: list[UiNode]) -> dict[str, object]:
+        """Each timer's days and Repeat, from its page; BACK after each.
+
+        Opening a page and leaving it with BACK sends nothing: the app saves
+        only from its toolbar's Save, which appears only after a change. A
+        page that does not open, or a list that does not come back, ends the
+        reading there; what was read is kept.
+        """
+        out: dict[str, object] = {}
+        for slot in range(1, min(3, len(departure_rows(nodes))) + 1):
+            page, nodes = await self._open_timer_page(nodes, slot)
+            if page is None:
+                if not departure_rows(nodes):
+                    await self._back_to_timer_list()  # off the list: one step back
+                break
+            out.update(page_fields(page, slot))
+            back = await self._back_to_timer_list()
+            if back is None:
+                break
+            nodes = back
+        return out
+
+    async def _open_timer_page(
+        self, nodes: list[UiNode], slot: int
+    ) -> tuple[TimerPage | None, list[UiNode]]:
+        """Tap the slot's row (its time text, clear of the switch) and read the page."""
+        rows = departure_rows(nodes)
+        if len(rows) < slot:
+            return None, nodes
+        point = rows[slot - 1].clock.tap_point
+        if point is None:
+            return None, nodes
+        await self._t.tap(*point)
+        settled = await self._settle(lambda n: read_timer_page(n) is not None)
+        page_nodes, cleared = await self._dump_and_clear_overlays(settled)
+        if not cleared or self._limit_on_screen(page_nodes):
+            return None, page_nodes
+        return read_timer_page(page_nodes), page_nodes
+
+    async def _back_to_timer_list(self) -> list[UiNode] | None:
+        """BACK from a timer page; the list's nodes once it shows again."""
+        await self._t.key_back()
+        settled = await self._settle(lambda n: bool(departure_rows(n)))
+        nodes, cleared = await self._dump_and_clear_overlays(settled)
+        if cleared and departure_rows(nodes) and read_timer_page(nodes) is None:
+            return nodes
+        return None
 
     async def _scroll_up(self, nodes: list[UiNode]) -> list[UiNode]:
         """Swipe the current screen up by half a display, best-effort.
@@ -910,6 +974,8 @@ class CompanionChannel:
             raise CompanionWriteBlocked("a vehicle sync runs through sync_vehicle")
         if action in CLIMATE_SETTING_ACTIONS.values():
             raise CompanionWriteBlocked("a climate setting needs its on/off value")
+        if action in ("toggle_departure_timer", "edit_departure_timer"):
+            raise CompanionWriteBlocked("a departure timer is set through set_departure_timer")
         spec, nodes = await self._command_gate(action)
         walked = 0
         nav = next((n for n in self._preset.nav_reads if n.name == spec.nav_read), None)
@@ -1298,6 +1364,309 @@ class CompanionChannel:
         # Zones → Settings → sheet → overview, stopping once home.
         await self._return_to_overview(3)
 
+    async def set_departure_timer(
+        self,
+        slot: int,
+        *,
+        enabled: bool | None = None,
+        time: str | None = None,
+        weekdays: "tuple[str, ...] | list[str] | None" = None,
+        repeat: bool | None = None,
+    ) -> None:
+        """Set one Departure times timer (1-3) the way the app does.
+
+        ``enabled`` taps the timer's switch on the list, which the app sends
+        at once. ``time`` ("HH:MM", 24-hour), ``weekdays`` (Home Assistant
+        codes, "mon" … "sun") and ``repeat`` are set on the timer's page, one
+        read-back tap at a time, and sent with the page's Save only when the
+        page shows exactly what was asked; otherwise the page is cancelled and
+        nothing is sent. Both are read back after sending. Assumes the car and
+        Home Assistant share a time zone: the time is the car's local time.
+        """
+        async with self._screen_lock:
+            await self._set_departure_timer_serialized(slot, enabled, time, weekdays, repeat)
+
+    async def _set_departure_timer_serialized(
+        self,
+        slot: int,
+        enabled: bool | None,
+        time: str | None,
+        weekdays: "tuple[str, ...] | list[str] | None",
+        repeat: bool | None,
+    ) -> None:
+        if slot not in (1, 2, 3):
+            raise CompanionWriteBlocked(f"there is no departure timer {slot}; the app has 1, 2 and 3")
+        clock = _hhmm(time) if time is not None else None
+        days = _weekdays(weekdays) if weekdays is not None else None
+        edit = clock is not None or days is not None or repeat is not None
+        if not edit and enabled is None:
+            raise CompanionWriteBlocked("nothing to set on the departure timer")
+        spec, nodes = await self._command_gate(
+            "edit_departure_timer" if edit else "toggle_departure_timer"
+        )
+        if edit and enabled is not None:
+            toggle = next((a for a in self._preset.actions if a.action == "toggle_departure_timer"), None)
+            if toggle is None or (toggle.app_versions and not app_version_covered(
+                self._live_app_version, toggle.app_versions
+            )):
+                raise CompanionWriteBlocked(
+                    f"switching a departure timer is not mapped for app version {self._live_app_version}"
+                )
+        nav = next((n for n in self._preset.nav_reads if n.name == spec.nav_read), None)
+        if nav is None:
+            raise CompanionWriteBlocked("the Departure times path is not mapped")
+        try:
+            listing: list[UiNode] | None = nodes if departure_rows(nodes) else None
+            if listing is None:
+                listing, _walked = await self._walk_to_detail(nav.path)
+                if listing is not None and self._limit_on_screen(listing):
+                    self._trip_rate_limit()
+                    raise CompanionWriteBlocked(_LIMIT_REASON)
+            if listing is None or len(departure_rows(listing)) < slot:
+                raise CompanionWriteBlocked(
+                    f"could not find departure timer {slot} on the Departure times screen"
+                )
+            if edit:
+                listing = await self._edit_timer(listing, slot, clock, days, repeat)
+            if enabled is not None:
+                await self._switch_timer(listing, slot, enabled)
+        except CompanionTransportError as err:
+            raise CompanionWriteBlocked(str(err)) from err
+        finally:
+            # Page → list → overview. Stops at the overview; BACK on a page
+            # never saves (only Save does), so nothing unconfirmed is sent.
+            await self._return_to_overview(3)
+
+    async def _edit_timer(
+        self,
+        listing: list[UiNode],
+        slot: int,
+        clock: tuple[int, int] | None,
+        days: tuple[str, ...] | None,
+        repeat: bool | None,
+    ) -> list[UiNode]:
+        """Set the timer's page, Save, and read it back; the list after."""
+        page, nodes = await self._open_timer_page(listing, slot)
+        if page is None:
+            raise CompanionWriteBlocked(f"could not open departure timer {slot} in the app")
+        want_clock = clock if clock is not None else (page.hour, page.minute)
+        want_days = days if days is not None else page.weekdays
+        want_repeat = page.repeat if repeat is None else repeat
+        want = (f"{want_clock[0]:02d}:{want_clock[1]:02d}", want_days, want_repeat)
+        if not want_repeat and len(want_days) != 1:
+            raise CompanionWriteBlocked(
+                "a departure timer without Repeat runs once, on exactly one weekday"
+            )
+        if want_clock[1] % page.minute_step:
+            raise CompanionWriteBlocked(
+                f"the app sets departure times in {page.minute_step}-minute steps"
+            )
+        if (page.time, page.weekdays, page.repeat) == want:
+            back = await self._back_to_timer_list()
+            if back is None:
+                raise CompanionWriteBlocked("the app did not return to the Departure times list")
+            return back  # nothing to change, nothing sent
+        try:
+            page, nodes = await self._set_timer_days(page, nodes, want_days, want_repeat)
+            page, nodes = await self._set_timer_clock(page, nodes, *want_clock)
+            if (page.time, page.weekdays, page.repeat) != want:
+                raise CompanionWriteBlocked(
+                    f"departure timer {slot} did not take the new setting; nothing was saved"
+                )
+            save = find_toolbar_text(nodes, self._toolbar_labels(TIMER_SAVE, "save"), page.top)
+            if save is None or save.tap_point is None:
+                raise CompanionWriteBlocked("the app did not offer Save for the departure timer")
+        except CompanionWriteBlocked:
+            await self._cancel_timer_page()
+            raise
+        # Save is the one tap that sends. Stamp first, so a transport that
+        # fails after delivery still blocks an immediate repeat.
+        self._last_write_at = self._now()
+        for part in ("time", "weekdays", "repeat"):
+            self._nav_cache.pop(f"departure_timer_{slot}_{part}", None)
+        self._nav_only.add("departure_times")
+        await self._t.tap(*save.tap_point)
+        listing = await self._await_timer_saved(slot, want[0])
+        # The list shows the time; the page shows days and Repeat.
+        page, nodes = await self._open_timer_page(listing, slot)
+        if page is None:
+            raise CompanionWriteBlocked(
+                f"departure timer {slot} was saved, but its page did not open to check it"
+            )
+        back = await self._back_to_timer_list()
+        if (page.time, page.weekdays, page.repeat) != want:
+            raise CompanionWriteBlocked(
+                f"the app shows departure timer {slot} as {page.time} "
+                f"{','.join(page.weekdays)} repeat={page.repeat} after saving"
+            )
+        for key, val in {f"departure_timer_{slot}_time": want[0], **page_fields(page, slot)}.items():
+            self._nav_cache[key] = val
+            self._nav_cache_from[key] = "departure_times"
+        if back is None:
+            raise CompanionWriteBlocked("the app did not return to the Departure times list")
+        return back
+
+    def _toolbar_labels(self, key: str, fallback: str) -> set[str]:
+        """The installed app's word for a toolbar item; English without tables."""
+        labels = {
+            label.strip().casefold() for label in self._app_strings.get(key, ()) if label.strip()
+        }
+        return labels or {fallback}
+
+    async def _tap_timer_page(self, node: UiNode) -> tuple[TimerPage, list[UiNode]]:
+        """Tap one control on the timer page and read the page back."""
+        if node.tap_point is None:
+            raise CompanionWriteBlocked("a departure timer control has no place on screen")
+        await self._t.tap(*node.tap_point)
+        nodes, cleared = await self._dump_and_clear_overlays(await self._settle())
+        if self._limit_on_screen(nodes):
+            self._trip_rate_limit()
+            raise CompanionWriteBlocked(_LIMIT_REASON)
+        page = read_timer_page(nodes) if cleared else None
+        if page is None:
+            raise CompanionWriteBlocked("a message covered the departure timer; nothing was saved")
+        return page, nodes
+
+    async def _set_timer_days(
+        self, page: TimerPage, nodes: list[UiNode], days: tuple[str, ...], repeat: bool
+    ) -> tuple[TimerPage, list[UiNode]]:
+        """Days first (add before removing, so one is always on), then Repeat.
+
+        The app refuses a timer without a day, and turns Repeat back on when
+        a second day is picked; reading the whole page after every tap lets
+        each step see what the app actually did.
+        """
+        for _ in range(_DAY_TAPS):
+            missing = [d for d in days if d not in page.weekdays]
+            extra = [d for d in page.weekdays if d not in days]
+            if missing:
+                node = page.days[missing[0]]
+            elif extra:
+                node = page.days[extra[0]]
+            elif page.repeat != repeat:
+                node = page.repeat_switch
+            else:
+                return page, nodes
+            page, nodes = await self._tap_timer_page(node)
+        raise CompanionWriteBlocked("the departure timer's days did not take; nothing was saved")
+
+    async def _set_timer_clock(
+        self, page: TimerPage, nodes: list[UiNode], hour: int, minute: int
+    ) -> tuple[TimerPage, list[UiNode]]:
+        """Step the wheels one value per tap: minutes, then hours, then AM/PM.
+
+        Every tap is read back from the wheels' own values, so a wheel that
+        carries over (minutes past :55, hours past 11 on a 12-hour phone)
+        is simply corrected by the next steps.
+        """
+        for _ in range(_CLOCK_TAPS):
+            node: UiNode | None
+            if page.minute != minute:
+                count = 60 // page.minute_step
+                forward = (minute // page.minute_step - page.minute // page.minute_step) % count
+                wheel = page.minute_wheel
+                node = wheel.following if forward <= count - forward else wheel.previous
+            elif page.meridiem_wheel is not None and page.hour % 12 == hour % 12 and page.hour != hour:
+                wheel = page.meridiem_wheel
+                node = wheel.following or wheel.previous
+            elif page.hour != hour:
+                count = 12 if page.meridiem_wheel is not None else 24
+                forward = (hour % count - page.hour % count) % count
+                wheel = page.hour_wheel
+                node = wheel.following if forward <= count - forward else wheel.previous
+            else:
+                return page, nodes
+            if node is None:
+                raise CompanionWriteBlocked("a departure time wheel cannot move; nothing was saved")
+            page, nodes = await self._tap_timer_page(node)
+        raise CompanionWriteBlocked("the departure time wheels did not settle; nothing was saved")
+
+    async def _cancel_timer_page(self) -> None:
+        """Undo unsaved changes with the page's own Cancel, best-effort."""
+        try:
+            nodes, _cleared = await self._dump_and_clear_overlays()
+            page = read_timer_page(nodes)
+            if page is None:
+                return
+            cancel = find_toolbar_text(nodes, self._toolbar_labels(TIMER_CANCEL, "cancel"), page.top)
+            if cancel is not None and cancel.tap_point is not None:
+                await self._t.tap(*cancel.tap_point)
+                await self._settle()
+        except CompanionTransportError:
+            pass
+
+    async def _await_timer_saved(self, slot: int, time: str) -> list[UiNode]:
+        """Wait for the app to send and return to the list; fail unless it does."""
+        for _ in range(_SAVE_POLLS):
+            nodes, cleared = await self._dump_and_clear_overlays()
+            if self._limit_on_screen(nodes):
+                self._trip_rate_limit()
+                raise CompanionWriteBlocked(_LIMIT_REASON)
+            if read_timer_page(nodes) is not None:
+                continue  # still sending, or the app kept the page
+            rows = departure_rows(nodes)
+            if cleared and len(rows) >= slot:
+                if rows[slot - 1].time != time:
+                    raise CompanionWriteBlocked(
+                        f"the app shows departure timer {slot} at {rows[slot - 1].time} "
+                        f"after saving, not {time}"
+                    )
+                return nodes
+            raise CompanionWriteBlocked(
+                f"the app reported a problem saving departure timer {slot}"
+            )
+        raise CompanionWriteBlocked(
+            f"the app did not confirm saving departure timer {slot}; check it in the app"
+        )
+
+    async def _switch_timer(self, listing: list[UiNode], slot: int, enabled: bool) -> None:
+        """Tap the list's switch, which the app sends at once, and watch it.
+
+        The app flips the switch straight away and flips it back if the car
+        refuses. The change counts once the switch shows the new state on two
+        identical dumps in a row; a flip back is a refusal.
+        """
+        row = departure_rows(listing)[slot - 1]
+        if row.enabled == enabled:
+            return  # nothing to change, nothing sent
+        if row.switch.tap_point is None:
+            raise CompanionWriteBlocked(f"departure timer {slot}'s switch has no place on screen")
+        key = f"departure_timer_{slot}_enabled"
+        self._last_write_at = self._now()
+        self._nav_cache.pop(key, None)
+        self._nav_cache.pop("departure_timer_enabled_count", None)
+        self._nav_only.add("departure_times")
+        await self._t.tap(*row.switch.tap_point)
+        seen = False
+        previous: str | None = None
+        for _ in range(_SAVE_POLLS):
+            xml = await self._t.dump_ui()
+            nodes, cleared = await self._dump_and_clear_overlays(xml)
+            if self._limit_on_screen(nodes):
+                self._trip_rate_limit()
+                raise CompanionWriteBlocked(_LIMIT_REASON)
+            rows = departure_rows(nodes) if cleared else []
+            index = slot - 1
+            if not 0 <= index < len(rows):
+                raise CompanionWriteBlocked(
+                    f"the app showed a message instead of switching departure timer {slot}"
+                )
+            if rows[index].enabled == enabled:
+                if seen and xml == previous:
+                    break
+                seen = True
+            elif seen:
+                raise CompanionWriteBlocked(
+                    f"the app switched departure timer {slot} back: the car did not accept it"
+                )
+            previous = xml
+        if not seen:
+            raise CompanionWriteBlocked(
+                f"the app did not switch departure timer {slot}; check it in the app"
+            )
+        self._nav_cache[key] = enabled
+        self._nav_cache_from[key] = "departure_times"
+
     async def sync_vehicle(self) -> bool:
         """Tap vehicle Settings → "Synchronise now", so the car sends fresh data.
 
@@ -1452,3 +1821,26 @@ class CompanionChannel:
             self._trip_rate_limit()
             raise CompanionWriteBlocked(_LIMIT_REASON)
         return spec, nodes
+
+
+def _hhmm(raw: str) -> tuple[int, int]:
+    """ "07:30" (or "07:30:00") as (hour, minute); refuses anything else."""
+    parts = raw.strip().split(":")
+    if len(parts) in (2, 3) and all(p.isdigit() for p in parts):
+        hour, minute = int(parts[0]), int(parts[1])
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return hour, minute
+    raise CompanionWriteBlocked(f"'{raw}' is not a departure time (HH:MM)")
+
+
+def _weekdays(raw: "tuple[str, ...] | list[str]") -> tuple[str, ...]:
+    """Day codes in the app's order; "MONDAY" and "mon" alike."""
+    picked = set()
+    for day in raw:
+        code = str(day).strip().lower()[:3]
+        if code not in WEEKDAYS:
+            raise CompanionWriteBlocked(f"'{day}' is not a weekday")
+        picked.add(code)
+    if not picked:
+        raise CompanionWriteBlocked("a departure timer needs at least one weekday")
+    return tuple(code for code in WEEKDAYS if code in picked)

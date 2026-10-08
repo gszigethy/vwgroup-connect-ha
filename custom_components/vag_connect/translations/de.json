@@ -648,6 +648,15 @@
       "departure_timer_3_time": {
         "name": "Abfahrtstimer 3"
       },
+      "departure_timer_1_weekdays": {
+        "name": "Abfahrtszeit 1 Wochentage"
+      },
+      "departure_timer_2_weekdays": {
+        "name": "Abfahrtszeit 2 Wochentage"
+      },
+      "departure_timer_3_weekdays": {
+        "name": "Abfahrtszeit 3 Wochentage"
+      },
       "last_updated_at": {
         "name": "Letzte Aktualisierung"
       },
@@ -1734,6 +1743,15 @@
       },
       "departure_timer_3_enabled": {
         "name": "Abfahrtstimer 3 aktiv"
+      },
+      "departure_timer_1_repeat": {
+        "name": "Abfahrtszeit 1 wiederholen"
+      },
+      "departure_timer_2_repeat": {
+        "name": "Abfahrtszeit 2 wiederholen"
+      },
+      "departure_timer_3_repeat": {
+        "name": "Abfahrtszeit 3 wiederholen"
       },
       "alarm_active": {
         "name": "Alarm aktiv"

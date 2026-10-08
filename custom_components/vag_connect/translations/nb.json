@@ -639,6 +639,15 @@
       "departure_timer_3_time": {
         "name": "Avgangstimer 3"
       },
+      "departure_timer_1_weekdays": {
+        "name": "Avgangstidtaker 1 ukedager"
+      },
+      "departure_timer_2_weekdays": {
+        "name": "Avgangstidtaker 2 ukedager"
+      },
+      "departure_timer_3_weekdays": {
+        "name": "Avgangstidtaker 3 ukedager"
+      },
       "last_updated_at": {
         "name": "Siste oppdatering"
       },
@@ -1734,6 +1743,15 @@
       },
       "departure_timer_3_enabled": {
         "name": "Avreisetimer 3 aktivert"
+      },
+      "departure_timer_1_repeat": {
+        "name": "Avgangstidtaker 1 gjenta"
+      },
+      "departure_timer_2_repeat": {
+        "name": "Avgangstidtaker 2 gjenta"
+      },
+      "departure_timer_3_repeat": {
+        "name": "Avgangstidtaker 3 gjenta"
       },
       "alarm_active": {
         "name": "Alarm aktiv"

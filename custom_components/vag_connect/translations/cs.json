@@ -633,6 +633,15 @@
       "departure_timer_3_time": {
         "name": "Časovač odjezdu 3"
       },
+      "departure_timer_1_weekdays": {
+        "name": "Časovač odjezdu 1 dny v týdnu"
+      },
+      "departure_timer_2_weekdays": {
+        "name": "Časovač odjezdu 2 dny v týdnu"
+      },
+      "departure_timer_3_weekdays": {
+        "name": "Časovač odjezdu 3 dny v týdnu"
+      },
       "last_updated_at": {
         "name": "Naposledy aktualizováno"
       },
@@ -1722,6 +1731,15 @@
       },
       "departure_timer_3_enabled": {
         "name": "Časovač Odjezdu 3 Aktivní"
+      },
+      "departure_timer_1_repeat": {
+        "name": "Časovač odjezdu 1 opakovat"
+      },
+      "departure_timer_2_repeat": {
+        "name": "Časovač odjezdu 2 opakovat"
+      },
+      "departure_timer_3_repeat": {
+        "name": "Časovač odjezdu 3 opakovat"
       },
       "alarm_active": {
         "name": "Alarm Aktivní"

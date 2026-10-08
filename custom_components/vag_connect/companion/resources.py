@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 import struct
 
+from .departure import TIMER_CANCEL, TIMER_SAVE, departure_rows
 from .presets import coerce
 from .screen import UiNode
 
@@ -126,7 +127,7 @@ _TRIP_KEYS = (
 DEPARTURE_TILE = "acc_vehicle_tab_label_departure_times"
 _SINGLE_KEYS = frozenset({
     "acc_common_hint_details", "acc_vehicle_tab_label_settings", *_LIMIT_KEYS,
-    DEPARTURE_TILE, *_TRIP_KEYS,
+    DEPARTURE_TILE, TIMER_SAVE, TIMER_CANCEL, *_TRIP_KEYS,
     SYNC_LAST_UPDATE, SYNC_JUST_NOW, SYNC_TOO_OLD, DATA_UNAVAILABLE, *_CLIMA_KEYS,
     *HEALTH_ROWS, HEALTH_NO_ISSUES, HEALTH_ISSUES, *SETTINGS_SWITCHES,
     *_TILE_KEYS,
@@ -422,56 +423,22 @@ def find_tile_entry(nodes: list[UiNode], resources: StringResources, key: str) -
     ), None)
 
 
-_TIMER_TIME_RE = re.compile(r"^(\d{1,2})[:.](\d{2})$")
-_TIMER_MERIDIEM_RE = re.compile(r"^([ap])\.?\s?m\.?$", re.I)
-
-
 def read_departure_timers(nodes: list[UiNode]) -> dict[str, object]:
     """The Departure times screen's timer rows, top to bottom, at most three.
 
-    A row is the clickable box around a switch. Its ``checked`` state is the
-    timer's on/off and its time is the clock text inside it ("07:25", with an
-    "AM"/"PM" beside it on a 12-hour phone), reported as 24-hour "HH:MM" like
-    the VW cloud's ``departureTime``. The words around them are not read, so
-    this works in any language. Rows without a time (charging locations) are
-    skipped. The count is set only when all three timers were on screen.
+    Each row's switch is the timer's on/off and its clock text the time,
+    reported as 24-hour "HH:MM" like the VW cloud's ``departureTime`` (see
+    ``departure.departure_rows``). The words around them are not read, so
+    this works in any language. The count is set only when all three timers
+    were on screen.
     """
-    switches: dict[tuple[int, int, int, int], UiNode] = {}
-    for node in nodes:
-        if node.checkable and node.bounds is not None:
-            switches.setdefault(node.bounds, node)
-    rows: list[tuple[int, bool, str]] = []
-    for box, switch in switches.items():
-        centre_y = (box[1] + box[3]) // 2
-        row = min(
-            (n for n in nodes if n.clickable and n.bounds is not None and not n.checkable
-             and n.bounds[1] <= centre_y <= n.bounds[3] and n.bounds[0] <= box[0]
-             and n.bounds[2] >= box[2]),
-            key=lambda n: (n.bounds[3] - n.bounds[1]) if n.bounds else 0,
-            default=None,
-        )
-        if row is None or row.bounds is None:
-            continue
-        inside = [n.text.strip() for n in nodes if n.text and _inside(n, row.bounds)]
-        clock = next((m for t in inside if (m := _TIMER_TIME_RE.match(t))), None)
-        if clock is None:
-            continue
-        hour, minute = int(clock.group(1)), int(clock.group(2))
-        meridiem = next((m.group(1).lower() for t in inside if (m := _TIMER_MERIDIEM_RE.match(t))), None)
-        if meridiem is not None:
-            if not 1 <= hour <= 12:
-                continue
-            hour = hour % 12 + (12 if meridiem == "p" else 0)
-        if hour > 23 or minute > 59:
-            continue
-        rows.append((row.bounds[1], switch.checked, f"{hour:02d}:{minute:02d}"))
-    rows.sort()
+    rows = departure_rows(nodes)
     out: dict[str, object] = {}
-    for index, (_top, enabled, time) in enumerate(rows[:3], start=1):
-        out[f"departure_timer_{index}_enabled"] = enabled
-        out[f"departure_timer_{index}_time"] = time
+    for index, row in enumerate(rows[:3], start=1):
+        out[f"departure_timer_{index}_enabled"] = row.enabled
+        out[f"departure_timer_{index}_time"] = row.time
     if len(rows) >= 3:
-        out["departure_timer_enabled_count"] = sum(1 for _top, on, _time in rows[:3] if on)
+        out["departure_timer_enabled_count"] = sum(1 for row in rows[:3] if row.enabled)
     return out
 
 

@@ -639,6 +639,15 @@
       "departure_timer_3_time": {
         "name": "Lähtöajastin 3"
       },
+      "departure_timer_1_weekdays": {
+        "name": "Lähtöajastin 1 viikonpäivät"
+      },
+      "departure_timer_2_weekdays": {
+        "name": "Lähtöajastin 2 viikonpäivät"
+      },
+      "departure_timer_3_weekdays": {
+        "name": "Lähtöajastin 3 viikonpäivät"
+      },
       "last_updated_at": {
         "name": "Viimeisin päivitys"
       },
@@ -1734,6 +1743,15 @@
       },
       "departure_timer_3_enabled": {
         "name": "Lähtöajastin 3 käytössä"
+      },
+      "departure_timer_1_repeat": {
+        "name": "Lähtöajastin 1 toista"
+      },
+      "departure_timer_2_repeat": {
+        "name": "Lähtöajastin 2 toista"
+      },
+      "departure_timer_3_repeat": {
+        "name": "Lähtöajastin 3 toista"
       },
       "alarm_active": {
         "name": "Hälytys aktiivinen"

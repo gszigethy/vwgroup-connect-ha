@@ -765,6 +765,15 @@
       "departure_timer_3_time": {
         "name": "Departure timer 3"
       },
+      "departure_timer_1_weekdays": {
+        "name": "Departure timer 1 weekdays"
+      },
+      "departure_timer_2_weekdays": {
+        "name": "Departure timer 2 weekdays"
+      },
+      "departure_timer_3_weekdays": {
+        "name": "Departure timer 3 weekdays"
+      },
       "last_updated_at": {
         "name": "Last Update"
       },
@@ -1779,6 +1788,15 @@
       },
       "departure_timer_3_enabled": {
         "name": "Departure Timer 3 Enabled"
+      },
+      "departure_timer_1_repeat": {
+        "name": "Departure timer 1 repeat"
+      },
+      "departure_timer_2_repeat": {
+        "name": "Departure timer 2 repeat"
+      },
+      "departure_timer_3_repeat": {
+        "name": "Departure timer 3 repeat"
       },
       "alarm_active": {
         "name": "Alarm Active"

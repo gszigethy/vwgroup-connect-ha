@@ -633,6 +633,15 @@
       "departure_timer_3_time": {
         "name": "Temporizador de salida 3"
       },
+      "departure_timer_1_weekdays": {
+        "name": "Temporizador de salida 1 días"
+      },
+      "departure_timer_2_weekdays": {
+        "name": "Temporizador de salida 2 días"
+      },
+      "departure_timer_3_weekdays": {
+        "name": "Temporizador de salida 3 días"
+      },
       "last_updated_at": {
         "name": "Última actualización"
       },
@@ -1722,6 +1731,15 @@
       },
       "departure_timer_3_enabled": {
         "name": "Temporizador 3 Activo"
+      },
+      "departure_timer_1_repeat": {
+        "name": "Temporizador de salida 1 repetir"
+      },
+      "departure_timer_2_repeat": {
+        "name": "Temporizador de salida 2 repetir"
+      },
+      "departure_timer_3_repeat": {
+        "name": "Temporizador de salida 3 repetir"
       },
       "alarm_active": {
         "name": "Alarma Activa"

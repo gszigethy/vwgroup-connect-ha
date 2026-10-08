@@ -57,7 +57,8 @@ async def async_setup_entry(
             is False
         ):
             return []
-        # v3.0.0a1 — client must implement it (companion/ADB does not).
+        # v3.0.0a1 — client must implement it (the VW companion maps it from
+        # app 4.6.4 on; other companion presets do not).
         if not coordinator.command_method_available("command_set_departure_timer"):
             return []
         return [VagDepartureTimerTime(coordinator, vin, tid) for tid in (1, 2, 3)]

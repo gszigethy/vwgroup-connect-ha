@@ -597,6 +597,32 @@ _NEW_BINARY: tuple[VagBinarySensorDescription, ...] = (
         icon="mdi:clock-outline",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
+    # Companion (ADB) only — the timer page's Repeat switch: off means the
+    # timer runs once, on its one weekday.
+    VagBinarySensorDescription(
+        key="departure_timer_1_repeat",
+        translation_key="departure_timer_1_repeat",
+        data_key="departure_timer_1_repeat",
+        condition="electric",
+        icon="mdi:repeat",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagBinarySensorDescription(
+        key="departure_timer_2_repeat",
+        translation_key="departure_timer_2_repeat",
+        data_key="departure_timer_2_repeat",
+        condition="electric",
+        icon="mdi:repeat",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    VagBinarySensorDescription(
+        key="departure_timer_3_repeat",
+        translation_key="departure_timer_3_repeat",
+        data_key="departure_timer_3_repeat",
+        condition="electric",
+        icon="mdi:repeat",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
     # v2.5.0 (#306 goncal Mii electric, parity with PyCupra) — three
     # boolean fields that were parsed into VehicleData since v1.x but
     # never surfaced as HA entities. PyCupra ships them as binary_sensors

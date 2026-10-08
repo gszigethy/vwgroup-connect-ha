@@ -633,6 +633,15 @@
       "departure_timer_3_time": {
         "name": "Minuterie de départ 3"
       },
+      "departure_timer_1_weekdays": {
+        "name": "Minuterie de départ 1 jours"
+      },
+      "departure_timer_2_weekdays": {
+        "name": "Minuterie de départ 2 jours"
+      },
+      "departure_timer_3_weekdays": {
+        "name": "Minuterie de départ 3 jours"
+      },
       "last_updated_at": {
         "name": "Dernière mise à jour"
       },
@@ -1722,6 +1731,15 @@
       },
       "departure_timer_3_enabled": {
         "name": "Minuterie de Départ 3 Activée"
+      },
+      "departure_timer_1_repeat": {
+        "name": "Minuterie de départ 1 répéter"
+      },
+      "departure_timer_2_repeat": {
+        "name": "Minuterie de départ 2 répéter"
+      },
+      "departure_timer_3_repeat": {
+        "name": "Minuterie de départ 3 répéter"
       },
       "alarm_active": {
         "name": "Alarme Active"
