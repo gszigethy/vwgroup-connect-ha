@@ -42,6 +42,44 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0-10] - 2026-10-08 — Companion climate, settings and departure timers on VW app 4.6.4
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.11.0** plus fork release **10**, on top of 4.11.0-9.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a regular release — select `v4.11.0-10`, download, and restart Home Assistant.
+
+### Added
+- **Companion: climate Start uses the mode and temperature you set in HA.** New select *Desired Climate Start Mode*
+  (air conditioning / window heating only); *Desired Temperature* is unavailable in window-heating mode. Changing either
+  only stores the value and survives a restart. Start sets the app's mode picker and dial, reads both back, and presses
+  Start only when they match. The app's own values stay visible as read-only sensors. (#40)
+- **Companion: Climate Settings are switches.** Auxiliary air conditioning, automatic window heating, and zones front
+  left / front right. Each change taps the app's Save and reads the page back; a value already in place sends nothing.
+  VW app 4.6.4 only. (#41)
+- **Companion: departure timers can be read and set.** With the departure-times read on, each timer also shows its
+  weekdays and Repeat. The existing departure timer switch, time entity and `set_departure_timer` service now work on a
+  companion entry: the list switch on 4.6.4 and 4.3.2; time, days and Repeat on 4.6.4. A timer page is saved only when
+  it shows exactly what was asked. (#42)
+
+### Changed
+- **Companion: screen reads follow the app refresh slider.** The fixed 15-minute minimum between detail-screen reads is
+  gone; these reads only tap the phone and never reach the car. (#38)
+- **Companion: VW app 4.6.4 listed as verified** for climate, start/stop charging, charge target and Synchronise now.
+  (#37)
+
+### Fixed
+- **Companion: remaining charging time counts the hours.** "One hour and 40 minutes" read as 40 instead of 100 minutes.
+  (#39)
+
+### Docs
+- **Companion: why lock/unlock is a read-only sensor** (S-PIN over ADB, no reliable slider target, risk of the opposite
+  command and of S-PIN lockout). (#36)
+
+**Not yet confirmed on a live car (4.6.4):** climate Start/Stop, Climate Settings Save for the two toggles, departure
+timer Save, charge target Save, Start charging, Synchronise now.
+
 ## [4.11.0-9] - 2026-10-07 — Companion taps survive app updates
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
