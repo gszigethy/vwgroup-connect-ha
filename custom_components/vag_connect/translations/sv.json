@@ -2094,6 +2094,13 @@
           "maximum": "Maximal",
           "reduced": "Reducerad"
         }
+      },
+      "companion_climate_start_mode": {
+        "name": "Önskat startläge för klimat",
+        "state": {
+          "air_conditioning": "Luftkonditionering",
+          "window_heating": "Endast rutvärme"
+        }
       }
     },
     "time": {

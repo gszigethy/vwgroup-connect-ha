@@ -2094,6 +2094,13 @@
           "maximum": "Maximální",
           "reduced": "Snížený"
         }
+      },
+      "companion_climate_start_mode": {
+        "name": "Požadovaný režim spuštění klimatizace",
+        "state": {
+          "air_conditioning": "Klimatizace",
+          "window_heating": "Pouze vyhřívání oken"
+        }
       }
     },
     "time": {

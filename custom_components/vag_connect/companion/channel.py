@@ -110,10 +110,6 @@ _SETTLE_MAX_DUMPS = 2              # dumps spent waiting for a Compose screen to
                                    # uiautomator dump is a round trip of a
                                    # second or more, so a four-step walk would
                                    # otherwise spend half a minute dumping.
-_NAV_READ_INTERVAL_S = 900.0       # C9: a forward-nav READ (into charge detail)
-                                   # runs at most every 15 min, NOT every poll —
-                                   # it taps the app, so it stays infrequent and
-                                   # the value is cached in between
 _SLIDER_TRIES = 3                  # charge-limit taps, each read back, before
                                    # giving up without saving
 _SAVE_POLLS = 15                   # dumps to wait for the app to confirm a save
@@ -189,15 +185,17 @@ class CompanionChannel:
         # version_ok True but no writes.
         self._version_ok: bool | None = None
         self._last_write_at: float | None = None  # write min-interval (ckomma #21)
-        # C9 nav-read cadence + cache: nav taps at most every _NAV_READ_INTERVAL_S
-        # and the values persist in between so the sensors don't flap.
+        # C9 nav-read cache: the opted-in detail screens are re-read on every
+        # app refresh (the poll interval is the only read cadence), and the
+        # values persist between reads so a walk that misses one does not make
+        # the sensors flap.
         self._nav_cache: dict[str, object] = {}
         # Which nav read last supplied each cached key, so switching a read off
         # drops exactly its values.
         self._nav_cache_from: dict[str, str] = {}
-        self._last_nav_at: float | None = None
         # After a command, only the detail path that command used is re-read on
-        # the next poll; the other opted-in paths keep their own cadence.
+        # the readback poll that follows it; every other poll walks all of the
+        # opted-in paths.
         self._nav_only: set[str] = set()
         self._screen_lock = asyncio.Lock()
         self._app_strings: dict[str, set[str]] = {}
@@ -256,8 +254,7 @@ class CompanionChannel:
     def set_nav_opt_in(self, opt_in: str, enabled: bool) -> None:
         """Turn one nav-read opt-in on or off while running.
 
-        On: its paths are read on the next poll, without waiting for the
-        cadence. Off: the values it supplied leave the cache, so its entities
+        On: its paths are read on the next poll. Off: the values it supplied leave the cache, so its entities
         stop showing a reading nobody refreshes any more.
         """
         opt_ins = set(self._nav_opt_ins)
@@ -271,13 +268,6 @@ class CompanionChannel:
                 self._nav_cache_from.pop(key, None)
         self._nav_opt_ins = frozenset(opt_ins)
         self._read_charge_detail = "charge_detail" in self._nav_opt_ins
-
-    def _nav_due(self) -> bool:
-        """True when a nav-read has never run or the cadence window elapsed."""
-        return (
-            self._last_nav_at is None
-            or self._now() - self._last_nav_at >= _NAV_READ_INTERVAL_S
-        )
 
     # -- rate-limit backoff (ckomma #21), wall-clock so it can be persisted ----
 
@@ -432,16 +422,16 @@ class CompanionChannel:
             fields["companion_app_synced_at"] = self._seen_at
         # v2.26.0 (C9) — values behind a detail screen (charge target/power/time
         # on VW) are read by tapping a tile, reading, and coming BACK. Only tap
-        # when it is opted in, the version gate holds, and the cadence window has
-        # elapsed; between those refreshes the cache re-supplies the detail values
-        # so the sensors don't flap.
+        # when it is opted in and the version gate holds; the app refresh
+        # interval is the cadence, with no separate floor. When a walk misses a
+        # value the cache re-supplies it so the sensors don't flap.
         # #1552 — run the scheduled refresh BEFORE re-applying the cache. Filling
         # from the cache first made _augment_via_nav see every target already
         # populated (its all()-guard) and skip the walk forever after the first
         # read, so the detail sensors froze. Refresh first (against the true
         # overview state), then let the cache only backfill gaps on non-due polls.
         if self._preset.nav_reads:
-            if self.nav_reads_enabled and (self._nav_due() or self._nav_only):
+            if self.nav_reads_enabled:
                 await self._augment_via_nav(fields)
             for key, val in self._nav_cache.items():
                 fields.setdefault(key, val)
@@ -500,9 +490,6 @@ class CompanionChannel:
         Successful values are cached and re-applied on later polls.
         """
         only, self._nav_only = self._nav_only, set()
-        if not only or self._nav_due():
-            only = set()
-            self._last_nav_at = self._now()
         def wanted(nav: NavReadSelector) -> bool:
             if not self._nav_allowed(nav):
                 return False  # this path's own opt-in is off
@@ -960,8 +947,9 @@ class CompanionChannel:
             self._last_write_at = self._now()
             # Re-read this command's own detail path on the next poll: a
             # delivered tap is not proof that the vehicle accepted it, and the
-            # cached pre-command values are not readback. Other paths keep
-            # their cadence, so a command never triggers a walk of every screen.
+            # cached pre-command values are not readback. Only that path is
+            # walked on the readback, so a command never triggers a walk of
+            # every screen; the next app refresh walks them all as usual.
             if nav is not None:
                 for value in nav.values:
                     self._nav_cache.pop(value.target, None)

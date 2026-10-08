@@ -2094,6 +2094,13 @@
           "maximum": "Maksimi",
           "reduced": "Alennettu"
         }
+      },
+      "companion_climate_start_mode": {
+        "name": "Haluttu ilmastoinnin käynnistystila",
+        "state": {
+          "air_conditioning": "Ilmastointi",
+          "window_heating": "Vain ikkunalämmitys"
+        }
       }
     },
     "time": {

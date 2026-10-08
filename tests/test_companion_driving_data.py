@@ -129,6 +129,5 @@ async def test_walk_runs_only_when_opted_in_and_until_the_trips_are_known():
     on._walk_to_detail, on._return_to_overview = fake_walk, noop
     await on._augment_via_nav({})
     assert walked == ["open_driving_data"]
-    on._last_nav_at = 0
     await on._augment_via_nav({t: 1 for t in NAV.resource_targets})
     assert walked == ["open_driving_data"]

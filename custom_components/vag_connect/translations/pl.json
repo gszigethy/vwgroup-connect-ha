@@ -2094,6 +2094,13 @@
           "maximum": "Maksymalny",
           "reduced": "Zmniejszony"
         }
+      },
+      "companion_climate_start_mode": {
+        "name": "Żądany tryb uruchamiania klimatyzacji",
+        "state": {
+          "air_conditioning": "Klimatyzacja",
+          "window_heating": "Tylko ogrzewanie szyb"
+        }
       }
     },
     "time": {

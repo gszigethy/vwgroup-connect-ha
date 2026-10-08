@@ -2094,6 +2094,13 @@
           "maximum": "Máxima",
           "reduced": "Reducida"
         }
+      },
+      "companion_climate_start_mode": {
+        "name": "Modo de inicio de climatización deseado",
+        "state": {
+          "air_conditioning": "Aire acondicionado",
+          "window_heating": "Solo calefacción de lunas"
+        }
       }
     },
     "time": {

@@ -102,6 +102,14 @@ class VagClimate(VagConnectEntity, ClimateEntity):
 
     @property
     def target_temperature(self) -> float | None:
+        # Companion: the temperature held in HA for the next Start (the poll
+        # reads what the app's dial shows, which Start overwrites).
+        if self.coordinator.is_companion():
+            from .companion.client import climate_targets_of  # noqa: PLC0415
+
+            targets = climate_targets_of(self.coordinator)
+            if targets is not None and targets.temp_c is not None:
+                return targets.temp_c
         t = self._vehicle.get("target_temperature")
         return float(t) if t is not None else DEFAULT_TEMP
 

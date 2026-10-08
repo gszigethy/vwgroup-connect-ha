@@ -105,7 +105,6 @@ async def test_walk_runs_only_when_opted_in_and_until_all_six_values_are_known()
     await on._augment_via_nav({})
     assert walked == ["open_departure_times"]
     known = {t: "x" for t in NAV.resource_targets}
-    on._last_nav_at = 0
     await on._augment_via_nav(known)
     assert walked == ["open_departure_times"]
 

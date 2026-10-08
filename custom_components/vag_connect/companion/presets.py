@@ -25,6 +25,18 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, replace
 
+# The app's plural resources spell small counts out ("One hour and. 40 minutes
+# of charging time left", "Zero hours and", VW 4.6.4 / 4.3.2). Words map to
+# their value; anything else in a count slot must be digits.
+_COUNT_WORDS = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+    "null": 0, "eine": 1, "einer": 1, "ein": 1, "eins": 1, "zwei": 2, "drei": 3,
+    "vier": 4, "fünf": 5, "sechs": 6, "sieben": 7, "acht": 8, "neun": 9,
+    "zehn": 10, "elf": 11, "zwölf": 12,
+}
+_COUNT_RE = r"(?:\d{1,4}|\b(?:" + "|".join(sorted(_COUNT_WORDS, key=len, reverse=True)) + r")\b)"
+
 
 @dataclass(frozen=True)
 class FieldSelector:
@@ -467,19 +479,20 @@ _VW = BrandPreset(
     # walks that two-step path. Vehicle execution remains pending validation.
     # Runtime APK resources supply localized labels; these are the legacy
     # English fallback. Climate commands remain unmapped. Read compatibility
-    # with older builds does not arm their charge controls.
+    # with older builds does not arm their charge controls. 4.6.4 dumps show
+    # the same selectors (phone-ui-capture-4.6.4/charging, settings-save).
     actions=(
         ActionSelector(
             action="start_charging",
             content_desc_re=r"^Start charging(?:\.|$)",
             nav_read="charge_detail",
-            app_versions=("4.3.2",),
+            app_versions=("4.6.4", "4.3.2"),
         ),
         ActionSelector(
             action="stop_charging",
             content_desc_re=r"^Stop charging(?:\.|$)",
             nav_read="charge_detail",
-            app_versions=("4.3.2",),
+            app_versions=("4.6.4", "4.3.2"),
         ),
         # @gszigethy Tiguan, 4.3.2: the "Charging up to" slider on vehicle
         # Settings. The slider has no node; companion/charge_target.py places
@@ -488,7 +501,7 @@ _VW = BrandPreset(
             action="set_charge_target",
             resource_id="vwd_save_button",
             nav_read="vehicle_settings",
-            app_versions=("4.3.2",),
+            app_versions=("4.6.4", "4.3.2"),
         ),
         # @gszigethy Tiguan, 4.3.2: "Synchronise now" under Vehicle data, at the
         # bottom of vehicle Settings, asks the car for fresh data. Matched by id
@@ -497,7 +510,7 @@ _VW = BrandPreset(
             action="sync_vehicle",
             resource_id="subtitle_cta",
             nav_read="vehicle_settings",
-            app_versions=("4.3.2",),
+            app_versions=("4.6.4", "4.3.2"),
         ),
     ),
     # v2.26.0 (C9) — charge target / power / remaining-time live behind the
@@ -580,9 +593,10 @@ _VW = BrandPreset(
                 ),
                 FieldSelector(
                     target="remaining_charge_time_min",
+                    # 4.6.4 spells the hour out: "One hour and. 40 minutes".
                     content_desc_re=(
-                        r"(?:\d{1,2}\s*(?:Stunden?|hours?)|\d{1,2}:\d{2}\s*h"
-                        r"|(?:noch|remaining)\s*\d|\d{1,4}\s*(?:minutes?|Minuten?)\b)"
+                        r"(?:" + _COUNT_RE + r"\s*(?:Stunden?|hours?)\b|\d{1,2}:\d{2}\s*h"
+                        r"|(?:noch|remaining)\s*\d|" + _COUNT_RE + r"\s*(?:minutes?|Minuten?)\b)"
                     ),
                     parse="hm_minutes",
                 ),
@@ -1357,20 +1371,24 @@ def coerce(parse: str, raw: str | None) -> object | None:
         # v2.26.0 (C9, ckomma-grounded) — the charge-detail remaining-time line:
         # "2 hours and 15 minutes" / "2 Stunden und 15 Minuten" / "1:45 h" /
         # "noch 90 min". Return whole minutes.
-        m = re.search(
-            r"(\d{1,2})\s*(?:Stunden?|hours?)\s*(?:und[.\s]*|and[.\s]*)?(\d{1,2})?\s*"
-            r"(?:Minuten?|minutes?)?",
-            raw, re.I,
-        )
-        if m and re.search(r"Stunden?|hours?", raw, re.I):
-            return int(m.group(1)) * 60 + int(m.group(2) or 0)
+        # 4.6.4 spells a count of one out ("One hour and. 40 minutes of charging
+        # time left"): reading only the digits gave 40 instead of 100. Hours and
+        # minutes are found separately and summed, each optional.
         m = re.search(r"(\d{1,2}):(\d{2})\s*h", raw, re.I)
         if m:
             return int(m.group(1)) * 60 + int(m.group(2))
-        m = re.search(r"(\d{1,4})\s*min", raw, re.I)
-        if m:
-            return int(m.group(1))
-        return None
+        hours = re.search(r"(" + _COUNT_RE + r")\s*(?:Stunden?|hours?)\b", raw, re.I)
+        minutes = re.search(r"(" + _COUNT_RE + r")\s*min", raw, re.I)
+        if hours is None and minutes is None:
+            return None
+
+        def _count(match: re.Match[str] | None) -> int:
+            if match is None:
+                return 0
+            word = match.group(1)
+            return int(word) if word.isdigit() else _COUNT_WORDS[word.casefold()]
+
+        return _count(hours) * 60 + _count(minutes)
     if parse == "bool_locked":
         # v2.26.0 (#968) — "Vehicle unlocked" / "Fahrzeug entriegelt" is False;
         # "Vehicle locked" / "verriegelt" / "geschlossen" is True. Check the

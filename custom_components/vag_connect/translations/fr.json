@@ -2094,6 +2094,13 @@
           "maximum": "Maximum",
           "reduced": "Réduit"
         }
+      },
+      "companion_climate_start_mode": {
+        "name": "Mode de démarrage de la climatisation souhaité",
+        "state": {
+          "air_conditioning": "Climatisation",
+          "window_heating": "Dégivrage des vitres uniquement"
+        }
       }
     },
     "time": {

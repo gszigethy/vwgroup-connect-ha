@@ -2094,6 +2094,13 @@
           "maximum": "Maximaal",
           "reduced": "Gereduceerd"
         }
+      },
+      "companion_climate_start_mode": {
+        "name": "Gewenste startmodus klimaatregeling",
+        "state": {
+          "air_conditioning": "Airconditioning",
+          "window_heating": "Alleen ruitverwarming"
+        }
       }
     },
     "time": {
