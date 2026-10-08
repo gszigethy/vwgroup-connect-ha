@@ -1971,6 +1971,18 @@
       "auto_unlock_plug_switch": {
         "name": "Desbloqueo automático del conector de carga"
       },
+      "climate_at_unlock_switch": {
+        "name": "Climatización auxiliar al desbloquear"
+      },
+      "window_heating_auto_switch": {
+        "name": "Calefacción automática de ventanas"
+      },
+      "climate_zone_front_left_switch": {
+        "name": "Zona de climatización delantera izquierda"
+      },
+      "climate_zone_front_right_switch": {
+        "name": "Zona de climatización delantera derecha"
+      },
       "active_ventilation_switch": {
         "name": "Ventilación activa"
       },

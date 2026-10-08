@@ -1971,6 +1971,18 @@
       "auto_unlock_plug_switch": {
         "name": "Déverrouillage auto de la prise de charge"
       },
+      "climate_at_unlock_switch": {
+        "name": "Climatisation auxiliaire au déverrouillage"
+      },
+      "window_heating_auto_switch": {
+        "name": "Dégivrage automatique des vitres"
+      },
+      "climate_zone_front_left_switch": {
+        "name": "Zone climatique avant gauche"
+      },
+      "climate_zone_front_right_switch": {
+        "name": "Zone climatique avant droite"
+      },
       "active_ventilation_switch": {
         "name": "Ventilation active"
       },

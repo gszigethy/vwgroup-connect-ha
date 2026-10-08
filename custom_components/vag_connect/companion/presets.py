@@ -824,8 +824,9 @@ _VW = BrandPreset(
             name="climate_settings",
             # One tap past the Air Conditioning sheet: its "Settings" row opens
             # a Compose sheet whose switches carry their setting as test tags
-            # (@gszigethy Tiguan, live 4.3.2). Reads only — the app applies
-            # changes on an explicit Save, which this integration never taps.
+            # (@gszigethy Tiguan, live 4.3.2). The read never changes them;
+            # the app applies a change only on its explicit Save, which only
+            # ``set_climate_setting`` taps (CLIMATE_SETTING_ACTIONS below).
             steps=(
                 ActionSelector(
                     action="open_climate_detail",
@@ -1027,6 +1028,31 @@ _VW_CLIMATE_ACTIONS = (
     ActionSelector(action="set_climate_temperature", resource_id="clima_compose_view"),
 )
 _VW = replace(_VW, actions=_VW.actions + _VW_CLIMATE_ACTIONS)
+
+# The Climate Settings page behind the sheet's Settings row: two switches and
+# the Zones row. Changing any of them only stages it; the page's own Save
+# (``climatisationSettingsTrailing``, shown while the page differs from what
+# is saved) sends. ``CompanionChannel.set_climate_setting`` walks it and reads
+# the saved state back. Mapped against the 4.6.4 captures; on 4.3.2 the page
+# itself is identical, but its Zones page and Save were never captured there.
+CLIMATE_SETTINGS_APP_VERSIONS: tuple[str, ...] = ("4.6.4",)
+# Setting (the VehicleData field the read fills) → its logical action.
+CLIMATE_SETTING_ACTIONS: dict[str, str] = {
+    "climate_at_unlock": "set_climate_at_unlock",
+    "window_heating_enabled": "set_window_heating_auto",
+    "climate_zone_front_left": "set_climate_zone_front_left",
+    "climate_zone_front_right": "set_climate_zone_front_right",
+}
+_VW_CLIMATE_SETTING_ACTIONS = tuple(
+    ActionSelector(
+        action=action,
+        resource_id="climatisationSettingsTrailing",
+        nav_read="climate_settings",
+        app_versions=CLIMATE_SETTINGS_APP_VERSIONS,
+    )
+    for action in CLIMATE_SETTING_ACTIONS.values()
+)
+_VW = replace(_VW, actions=_VW.actions + _VW_CLIMATE_SETTING_ACTIONS)
 
 # ── The four unverified brands — structure present, selectors best-effort ────
 #
@@ -1394,4 +1420,8 @@ ACTION_TO_COMMAND: dict[str, str] = {
     "stop_window_heating": "command_stop_window_heating",
     "set_climate_temperature": "command_set_climate_temperature",
     "sync_vehicle": "command_sync_vehicle",
+    "set_climate_at_unlock": "command_set_climate_at_unlock",
+    "set_window_heating_auto": "command_set_window_heating_auto",
+    "set_climate_zone_front_left": "command_set_climate_zone_front_left",
+    "set_climate_zone_front_right": "command_set_climate_zone_front_right",
 }

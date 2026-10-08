@@ -1,0 +1,68 @@
+[
+  {
+    "fixture": "overview.xml",
+    "contributor": "gszigethy",
+    "original_file": "phone-ui-capture-4.6.4/settings-save/00-start.xml",
+    "note": "Tiguan 1.5 l eHybrid, VW 4.6.4, live ADB capture 2026-10-08. Overview before opening Air Conditioning."
+  },
+  {
+    "fixture": "sheet.xml",
+    "contributor": "gszigethy",
+    "original_file": "phone-ui-capture-4.6.4/settings-save/07-exit.xml",
+    "note": "Tiguan 1.5 l eHybrid, VW 4.6.4, live ADB capture 2026-10-08. Air Conditioning sheet after leaving Settings unchanged. Town redacted."
+  },
+  {
+    "fixture": "settings.xml",
+    "contributor": "gszigethy",
+    "original_file": "phone-ui-capture-4.6.4/settings-save/02-settings.xml",
+    "note": "Tiguan 1.5 l eHybrid, VW 4.6.4, live ADB capture 2026-10-08. Climate Settings as saved: both switches off, Zones 'Front left'. No Save."
+  },
+  {
+    "fixture": "settings_aux_staged.xml",
+    "contributor": "gszigethy",
+    "original_file": "phone-ui-capture-4.6.4/settings-save/03-aux-on.xml",
+    "note": "Tiguan 1.5 l eHybrid, VW 4.6.4, live ADB capture 2026-10-08. Auxiliary air conditioning switched on, not saved: Save appears."
+  },
+  {
+    "fixture": "settings_aux_unstaged.xml",
+    "contributor": "gszigethy",
+    "original_file": "phone-ui-capture-4.6.4/settings-save/04-aux-back.xml",
+    "note": "Tiguan 1.5 l eHybrid, VW 4.6.4, live ADB capture 2026-10-08. The same switch switched back: Save disappears."
+  },
+  {
+    "fixture": "settings_wh_staged.xml",
+    "contributor": "gszigethy",
+    "original_file": "phone-ui-capture-4.6.4/settings-save/05-wh-on.xml",
+    "note": "Tiguan 1.5 l eHybrid, VW 4.6.4, live ADB capture 2026-10-08. Automatic window heating switched on, not saved: Save appears."
+  },
+  {
+    "fixture": "zones.xml",
+    "contributor": "gszigethy",
+    "original_file": "phone-ui-capture-4.6.4/64-zones.xml",
+    "note": "Tiguan 1.5 l eHybrid, VW 4.6.4, live ADB capture 2026-10-08. Zones page: front left on, front right off."
+  },
+  {
+    "fixture": "zones_fr_on.xml",
+    "contributor": "gszigethy",
+    "original_file": "phone-ui-capture-4.6.4/65-fr-on.xml",
+    "note": "Tiguan 1.5 l eHybrid, VW 4.6.4, live ADB capture 2026-10-08. Zones page after tapping front right."
+  },
+  {
+    "fixture": "settings_2zones_staged.xml",
+    "contributor": "gszigethy",
+    "original_file": "phone-ui-capture-4.6.4/66-staged1.xml",
+    "note": "Tiguan 1.5 l eHybrid, VW 4.6.4, live ADB capture 2026-10-08. Settings after the Zones page's toolbar arrow: '2 zones' staged, Save shown."
+  },
+  {
+    "fixture": "sheet_after_save.xml",
+    "contributor": "gszigethy",
+    "original_file": "phone-ui-capture-4.6.4/67-s1-0s.xml",
+    "note": "Tiguan 1.5 l eHybrid, VW 4.6.4, live ADB capture 2026-10-08. Right after Save: the app closed Settings onto the sheet. Town redacted."
+  },
+  {
+    "fixture": "settings_2zones_saved.xml",
+    "contributor": "gszigethy",
+    "original_file": "phone-ui-capture-4.6.4/71-s1-reenter-settings.xml",
+    "note": "Tiguan 1.5 l eHybrid, VW 4.6.4, live ADB capture 2026-10-08. Settings opened again after Save: '2 zones' saved, no Save."
+  }
+]
