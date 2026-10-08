@@ -25,6 +25,18 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, replace
 
+# The app's plural resources spell small counts out ("One hour and. 40 minutes
+# of charging time left", "Zero hours and", VW 4.6.4 / 4.3.2). Words map to
+# their value; anything else in a count slot must be digits.
+_COUNT_WORDS = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+    "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+    "null": 0, "eine": 1, "einer": 1, "ein": 1, "eins": 1, "zwei": 2, "drei": 3,
+    "vier": 4, "fünf": 5, "sechs": 6, "sieben": 7, "acht": 8, "neun": 9,
+    "zehn": 10, "elf": 11, "zwölf": 12,
+}
+_COUNT_RE = r"(?:\d{1,4}|\b(?:" + "|".join(sorted(_COUNT_WORDS, key=len, reverse=True)) + r")\b)"
+
 
 @dataclass(frozen=True)
 class FieldSelector:
@@ -467,19 +479,20 @@ _VW = BrandPreset(
     # walks that two-step path. Vehicle execution remains pending validation.
     # Runtime APK resources supply localized labels; these are the legacy
     # English fallback. Climate commands remain unmapped. Read compatibility
-    # with older builds does not arm their charge controls.
+    # with older builds does not arm their charge controls. 4.6.4 dumps show
+    # the same selectors (phone-ui-capture-4.6.4/charging, settings-save).
     actions=(
         ActionSelector(
             action="start_charging",
             content_desc_re=r"^Start charging(?:\.|$)",
             nav_read="charge_detail",
-            app_versions=("4.3.2",),
+            app_versions=("4.6.4", "4.3.2"),
         ),
         ActionSelector(
             action="stop_charging",
             content_desc_re=r"^Stop charging(?:\.|$)",
             nav_read="charge_detail",
-            app_versions=("4.3.2",),
+            app_versions=("4.6.4", "4.3.2"),
         ),
         # @gszigethy Tiguan, 4.3.2: the "Charging up to" slider on vehicle
         # Settings. The slider has no node; companion/charge_target.py places
@@ -488,7 +501,7 @@ _VW = BrandPreset(
             action="set_charge_target",
             resource_id="vwd_save_button",
             nav_read="vehicle_settings",
-            app_versions=("4.3.2",),
+            app_versions=("4.6.4", "4.3.2"),
         ),
         # @gszigethy Tiguan, 4.3.2: "Synchronise now" under Vehicle data, at the
         # bottom of vehicle Settings, asks the car for fresh data. Matched by id
@@ -512,7 +525,7 @@ _VW = BrandPreset(
             action="sync_vehicle",
             resource_id="subtitle_cta",
             nav_read="vehicle_settings",
-            app_versions=("4.3.2",),
+            app_versions=("4.6.4", "4.3.2"),
         ),
     ),
     # v2.26.0 (C9) — charge target / power / remaining-time live behind the
@@ -595,9 +608,10 @@ _VW = BrandPreset(
                 ),
                 FieldSelector(
                     target="remaining_charge_time_min",
+                    # 4.6.4 spells the hour out: "One hour and. 40 minutes".
                     content_desc_re=(
-                        r"(?:\d{1,2}\s*(?:Stunden?|hours?)|\d{1,2}:\d{2}\s*h"
-                        r"|(?:noch|remaining)\s*\d|\d{1,4}\s*(?:minutes?|Minuten?)\b)"
+                        r"(?:" + _COUNT_RE + r"\s*(?:Stunden?|hours?)\b|\d{1,2}:\d{2}\s*h"
+                        r"|(?:noch|remaining)\s*\d|" + _COUNT_RE + r"\s*(?:minutes?|Minuten?)\b)"
                     ),
                     parse="hm_minutes",
                 ),
@@ -825,8 +839,9 @@ _VW = BrandPreset(
             name="climate_settings",
             # One tap past the Air Conditioning sheet: its "Settings" row opens
             # a Compose sheet whose switches carry their setting as test tags
-            # (@gszigethy Tiguan, live 4.3.2). Reads only — the app applies
-            # changes on an explicit Save, which this integration never taps.
+            # (@gszigethy Tiguan, live 4.3.2). The read never changes them;
+            # the app applies a change only on its explicit Save, which only
+            # ``set_climate_setting`` taps (CLIMATE_SETTING_ACTIONS below).
             steps=(
                 ActionSelector(
                     action="open_climate_detail",
@@ -1031,6 +1046,31 @@ _VW_CLIMATE_ACTIONS = (
     ActionSelector(action="set_climate_temperature", resource_id="clima_compose_view"),
 )
 _VW = replace(_VW, actions=_VW.actions + _VW_CLIMATE_ACTIONS)
+
+# The Climate Settings page behind the sheet's Settings row: two switches and
+# the Zones row. Changing any of them only stages it; the page's own Save
+# (``climatisationSettingsTrailing``, shown while the page differs from what
+# is saved) sends. ``CompanionChannel.set_climate_setting`` walks it and reads
+# the saved state back. Mapped against the 4.6.4 captures; on 4.3.2 the page
+# itself is identical, but its Zones page and Save were never captured there.
+CLIMATE_SETTINGS_APP_VERSIONS: tuple[str, ...] = ("4.6.4",)
+# Setting (the VehicleData field the read fills) → its logical action.
+CLIMATE_SETTING_ACTIONS: dict[str, str] = {
+    "climate_at_unlock": "set_climate_at_unlock",
+    "window_heating_enabled": "set_window_heating_auto",
+    "climate_zone_front_left": "set_climate_zone_front_left",
+    "climate_zone_front_right": "set_climate_zone_front_right",
+}
+_VW_CLIMATE_SETTING_ACTIONS = tuple(
+    ActionSelector(
+        action=action,
+        resource_id="climatisationSettingsTrailing",
+        nav_read="climate_settings",
+        app_versions=CLIMATE_SETTINGS_APP_VERSIONS,
+    )
+    for action in CLIMATE_SETTING_ACTIONS.values()
+)
+_VW = replace(_VW, actions=_VW.actions + _VW_CLIMATE_SETTING_ACTIONS)
 
 # ── The four unverified brands — structure present, selectors best-effort ────
 #
@@ -1349,20 +1389,24 @@ def coerce(parse: str, raw: str | None) -> object | None:
         # v2.26.0 (C9, ckomma-grounded) — the charge-detail remaining-time line:
         # "2 hours and 15 minutes" / "2 Stunden und 15 Minuten" / "1:45 h" /
         # "noch 90 min". Return whole minutes.
-        m = re.search(
-            r"(\d{1,2})\s*(?:Stunden?|hours?)\s*(?:und[.\s]*|and[.\s]*)?(\d{1,2})?\s*"
-            r"(?:Minuten?|minutes?)?",
-            raw, re.I,
-        )
-        if m and re.search(r"Stunden?|hours?", raw, re.I):
-            return int(m.group(1)) * 60 + int(m.group(2) or 0)
+        # 4.6.4 spells a count of one out ("One hour and. 40 minutes of charging
+        # time left"): reading only the digits gave 40 instead of 100. Hours and
+        # minutes are found separately and summed, each optional.
         m = re.search(r"(\d{1,2}):(\d{2})\s*h", raw, re.I)
         if m:
             return int(m.group(1)) * 60 + int(m.group(2))
-        m = re.search(r"(\d{1,4})\s*min", raw, re.I)
-        if m:
-            return int(m.group(1))
-        return None
+        hours = re.search(r"(" + _COUNT_RE + r")\s*(?:Stunden?|hours?)\b", raw, re.I)
+        minutes = re.search(r"(" + _COUNT_RE + r")\s*min", raw, re.I)
+        if hours is None and minutes is None:
+            return None
+
+        def _count(match: re.Match[str] | None) -> int:
+            if match is None:
+                return 0
+            word = match.group(1)
+            return int(word) if word.isdigit() else _COUNT_WORDS[word.casefold()]
+
+        return _count(hours) * 60 + _count(minutes)
     if parse == "bool_locked":
         # v2.26.0 (#968) — "Vehicle unlocked" / "Fahrzeug entriegelt" is False;
         # "Vehicle locked" / "verriegelt" / "geschlossen" is True. Check the
@@ -1394,6 +1438,10 @@ ACTION_TO_COMMAND: dict[str, str] = {
     "stop_window_heating": "command_stop_window_heating",
     "set_climate_temperature": "command_set_climate_temperature",
     "sync_vehicle": "command_sync_vehicle",
+    "set_climate_at_unlock": "command_set_climate_at_unlock",
+    "set_window_heating_auto": "command_set_window_heating_auto",
+    "set_climate_zone_front_left": "command_set_climate_zone_front_left",
+    "set_climate_zone_front_right": "command_set_climate_zone_front_right",
     # Both halves of the one departure timer command: the list's switch and
     # the timer page (time, days, Repeat).
     "toggle_departure_timer": "command_set_departure_timer",

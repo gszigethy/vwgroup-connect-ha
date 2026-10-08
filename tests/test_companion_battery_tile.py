@@ -274,7 +274,6 @@ async def test_command_readback_walks_only_its_own_detail_path():
     phone = Phone()
     channel = CompanionChannel(phone, VW, time_fn=time.monotonic,
                                nav_opt_ins={"charge_detail", "vehicle_health", "climate_detail"})
-    channel._last_nav_at = time.monotonic()  # cadence not due
     channel._nav_only = {"charge_detail"}
     walked = []
 

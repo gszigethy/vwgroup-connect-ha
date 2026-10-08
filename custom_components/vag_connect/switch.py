@@ -102,6 +102,14 @@ async def async_setup_entry(
                 and vehicle.get("auto_unlock_when_charged") is not None
             ):
                 entities.append(VagAutoUnlockPlugSwitch(coordinator, vin))
+        # Companion: the Air Conditioning Settings page. Only the companion
+        # client has these commands; each switch appears once the climate
+        # settings read has shown the value, so a car without it gets none.
+        for key, field, command_id, icon in COMPANION_CLIMATE_SETTINGS:
+            if _supported(vin, command_id) and vehicle.get(field) is not None:
+                entities.append(VagCompanionClimateSettingSwitch(
+                    coordinator, vin, key, field, command_id, icon,
+                ))
         return entities
 
     register_dynamic_spawner(entry, coordinator, async_add_entities, _build_for_vin)
@@ -436,6 +444,61 @@ class VagAuxHeatingSwitch(VagConnectEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs: object) -> None:
         await self.coordinator.async_stop_aux_heating(self._vin)
+
+
+# Companion Air Conditioning Settings switches: (entity key, VehicleData field
+# the climate settings read fills, client command, icon). The fields are the
+# ones the read-only binary sensors show; these keys keep the unique ids apart.
+COMPANION_CLIMATE_SETTINGS: tuple[tuple[str, str, str, str], ...] = (
+    ("climate_at_unlock_switch", "climate_at_unlock",
+     "command_set_climate_at_unlock", "mdi:car-electric"),
+    ("window_heating_auto_switch", "window_heating_enabled",
+     "command_set_window_heating_auto", "mdi:car-defrost-front"),
+    ("climate_zone_front_left_switch", "climate_zone_front_left",
+     "command_set_climate_zone_front_left", "mdi:car-seat"),
+    ("climate_zone_front_right_switch", "climate_zone_front_right",
+     "command_set_climate_zone_front_right", "mdi:car-seat"),
+)
+
+
+class VagCompanionClimateSettingSwitch(VagConnectEntity, SwitchEntity):
+    """One switch of the app's Air Conditioning Settings page (companion).
+
+    The companion switches it in the app, taps the page's Save and opens the
+    page again to read the saved value back; a value already in place sends
+    nothing. The state is the climate settings read.
+    """
+
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(
+        self, coordinator: VagConnectCoordinator, vin: str,
+        key: str, field: str, command_id: str, icon: str,
+    ) -> None:
+        super().__init__(coordinator, vin, key)
+        self._attr_translation_key = key
+        self._attr_icon = icon
+        self._field = field
+        self._command_id = command_id
+        self._command = command_id  # non-optional copy for the command call
+
+    @property
+    def is_on(self) -> bool | None:
+        val = self._vehicle.get(self._field)
+        return bool(val) if val is not None else None
+
+    async def async_turn_on(self, **kwargs: object) -> None:
+        await self._set(True)
+
+    async def async_turn_off(self, **kwargs: object) -> None:
+        await self._set(False)
+
+    async def _set(self, enabled: bool) -> None:
+        await self.coordinator._cariad_cmd_optimistic(
+            self._vin, self._command,
+            optimistic={self._field: enabled},
+            enabled=enabled,
+        )
 
 
 # The companion's nav reads, each a CONFIG switch on the settings device next

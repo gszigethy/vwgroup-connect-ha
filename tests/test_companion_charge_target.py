@@ -286,6 +286,23 @@ async def test_other_app_version_is_refused_before_any_tap():
 
 
 @pytest.mark.asyncio
+async def test_4_6_4_saves_like_4_3_2():
+    # 4.6.4 (phone-ui-capture-4.6.4/charging/04-slider70.xml) keeps the
+    # "Charging up to" row and the toolbar's vwd_save_button.
+    phone = SettingsPhone(version="4.6.4")
+    assert await channel_for(phone).set_charge_target(60) == 60
+    assert kinds(phone) == ["settings", "slider", "save", "toolbar"]
+
+
+@pytest.mark.asyncio
+async def test_unlisted_build_below_4_6_4_is_refused_before_any_tap():
+    phone = SettingsPhone(version="4.5.0")
+    with pytest.raises(CompanionWriteBlocked, match="app version"):
+        await channel_for(phone).set_charge_target(60)
+    assert phone.taps == []
+
+
+@pytest.mark.asyncio
 async def test_unknown_language_reaches_settings_through_resources():
     phone = SettingsPhone(strings={"acc_vehicle_tab_label_settings": {"Paramètres"},
                                    "acc_common_hint_details": {"Afficher les détails"}})

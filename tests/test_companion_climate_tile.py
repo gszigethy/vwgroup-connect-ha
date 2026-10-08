@@ -346,10 +346,9 @@ async def test_a_command_drops_only_the_climate_values_from_the_cache():
     phone = FakePhone(layout="pick")
     channel, ctrl = _controller(phone)
     channel._nav_cache = {"climatisation_active": False, "battery_soc": 80, "target_temperature": 22.0}
-    channel._last_nav_at = 123.0
     await ctrl.start()
     assert channel._nav_cache == {"battery_soc": 80, "target_temperature": 22.0}
-    assert channel._last_nav_at == 123.0  # no walk of every opted-in screen
+    assert phone.taps == ["tile", "start"]  # no walk of every opted-in screen
 
 
 @pytest.mark.asyncio
@@ -441,6 +440,31 @@ async def test_other_app_versions_are_never_tapped():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("version", ["4.6.4", "4.3.2"])
+async def test_verified_builds_start_and_stop(version):
+    # 4.6.4 climate sheet dumps carry the same cta_start, clima_compose_view and
+    # clima_air_conditioning_pick ids as 4.3.2.
+    phone = FakePhone(layout="pick", version=version)
+    _ch, ctrl = _controller(phone)
+    await ctrl.start()
+    assert phone.taps == ["tile", "start"] and phone.running == "ac"
+    phone = FakePhone(layout="pick", version=version, running="ac")
+    _ch, ctrl = _controller(phone)
+    await ctrl.stop()
+    assert phone.taps == ["tile", "stop"] and phone.running is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", ["4.4.0", "4.6.3"])
+async def test_unlisted_builds_below_4_6_4_are_never_tapped(version):
+    phone = FakePhone(version=version)
+    _ch, ctrl = _controller(phone)
+    with pytest.raises(CompanionWriteBlocked, match="4.6.4/4.3.2"):
+        await ctrl.start()
+    assert phone.taps == []
+
+
+@pytest.mark.asyncio
 async def test_commands_keep_the_minimum_interval():
     phone = FakePhone(layout="pick")
     _ch, ctrl = _controller(phone)
@@ -456,30 +480,105 @@ async def test_commands_keep_the_minimum_interval():
     (16.0, 15.5, ["dial:15.5"]),          # LO
     (29.5, 30.0, ["dial:30.0"]),          # HI
 ])
-async def test_set_temperature_steps_the_dial_and_reads_it_back(start, target, steps):
+async def test_start_steps_the_dial_reads_it_back_then_starts(start, target, steps):
     phone = FakePhone(temp=start)
     channel, ctrl = _controller(phone)
-    assert await ctrl.set_temperature(target) == target
-    assert phone.taps == ["tile", *steps, "up"]
-    assert phone.temp == target and phone.screen == "overview"
+    await ctrl.start(temp_c=target)
+    # The dial is set before Start, never after.
+    assert phone.taps == ["tile", *steps, "start"]
+    assert phone.temp == target and phone.running == "ac"
     assert channel._nav_cache["target_temperature"] == target
 
 
 @pytest.mark.asyncio
-async def test_set_temperature_already_there_sends_nothing():
+async def test_start_with_the_dial_already_there_only_taps_start():
     phone = FakePhone(temp=21.5)
     _ch, ctrl = _controller(phone)
-    await ctrl.set_temperature(21.4)  # snaps to 21.5
-    assert phone.taps == ["tile", "up"]
+    await ctrl.start(temp_c=21.4)  # snaps to 21.5
+    assert phone.taps == ["tile", "start"]
 
 
 @pytest.mark.asyncio
-async def test_a_locked_dial_is_reported_not_retried():
+async def test_a_locked_dial_is_reported_not_retried_and_start_is_not_pressed():
     phone = FakePhone(temp=22.0, dial_locked=True)
     _ch, ctrl = _controller(phone)
     with pytest.raises(CompanionWriteBlocked, match="did not move"):
-        await ctrl.set_temperature(24.0)
+        await ctrl.start(temp_c=24.0)
     assert phone.taps == ["tile", "dial:22.5", "up"]
+    assert phone.running is None
+
+
+@pytest.mark.asyncio
+async def test_start_sets_the_mode_before_the_dial():
+    phone = FakePhone(layout="pick", mode="wh", temp=22.0)
+    _ch, ctrl = _controller(phone)
+    await ctrl.start(temp_c=23.0)
+    assert phone.taps == ["tile", "pick", "row:ac", "dial:22.5", "dial:23.0", "start"]
+    assert phone.running == "ac" and phone.temp == 23.0
+
+
+@pytest.mark.asyncio
+async def test_window_heating_start_never_touches_the_dial():
+    phone = FakePhone(layout="pick", temp=22.0)
+    _ch, ctrl = _controller(phone)
+    await ctrl.start(window_heating_only=True, temp_c=25.0)
+    assert phone.taps == ["tile", "pick", "row:wh", "start"]
+    assert phone.temp == 22.0 and phone.running == "wh"
+
+
+@pytest.mark.asyncio
+async def test_a_dial_that_springs_back_aborts_before_start():
+    phone = FakePhone(temp=22.0)
+    channel = CompanionChannel(phone, VW, time_fn=lambda: 10_000.0,
+                               nav_opt_ins={"climate_detail"})
+
+    async def app_reverts(_s):
+        phone.temp = 22.0  # the app settles back on the old target
+
+    ctrl = ClimateController(channel, sleep=app_reverts)
+    with pytest.raises(CompanionWriteBlocked, match=r"22 °C, not 23 °C.*Start was not pressed"):
+        await ctrl.start(temp_c=23.0)
+    assert "start" not in phone.taps and phone.running is None
+    assert phone.screen == "overview"
+
+
+@pytest.mark.asyncio
+async def test_a_mode_that_changes_under_the_dial_aborts_before_start():
+    phone = FakePhone(layout="pick", temp=22.0)
+    channel = CompanionChannel(phone, VW, time_fn=lambda: 10_000.0,
+                               nav_opt_ins={"climate_detail"})
+
+    async def mode_flips(_s):
+        phone.mode = "wh"
+
+    ctrl = ClimateController(channel, sleep=mode_flips)
+    with pytest.raises(CompanionWriteBlocked, match="not air conditioning.*Start was not pressed"):
+        await ctrl.start(temp_c=22.5)
+    assert "start" not in phone.taps and phone.running is None
+
+
+@pytest.mark.asyncio
+async def test_toggle_layout_mismatch_aborts_before_start():
+    phone = FakePhone(layout="toggles", temp=22.0)
+    channel = CompanionChannel(phone, VW, time_fn=lambda: 10_000.0,
+                               nav_opt_ins={"climate_detail"})
+
+    async def wh_toggle_on(_s):
+        phone.wh_toggle = True
+
+    ctrl = ClimateController(channel, sleep=wh_toggle_on)
+    with pytest.raises(CompanionWriteBlocked, match="mode other than air conditioning"):
+        await ctrl.start(temp_c=22.5)
+    assert "start" not in phone.taps
+
+
+@pytest.mark.asyncio
+async def test_a_running_climate_is_not_re_applied():
+    phone = FakePhone(layout="pick", running="ac", temp=22.0)
+    _ch, ctrl = _controller(phone)
+    await ctrl.start(temp_c=25.0)
+    assert not any(t.startswith(("dial", "pick", "row")) for t in phone.taps)
+    assert phone.temp == 22.0
 
 
 def test_snap_to_the_app_grid():
@@ -521,10 +620,6 @@ class _RecordingController:
     async def stop(self, **kw):
         self.calls.append(("stop", kw))
 
-    async def set_temperature(self, temp_c):
-        self.calls.append(("set_temperature", temp_c))
-        return temp_c
-
 
 def _client_with(ctrl):
     from custom_components.vag_connect.companion.client import CompanionClient
@@ -545,12 +640,22 @@ async def test_client_dispatches_each_climate_command_to_the_sheet():
     await client.command_stop_climate("VIN")
     await client.command_start_window_heating("VIN")
     await client.command_stop_window_heating("VIN")
-    await client.command_set_climate_temperature("VIN", temp_c=21.5)
+    await client.command_set_climate_temperature("VIN", temp_c=21.4)
+    held = {"window_heating_only": False, "temp_c": None}
     assert ctrl.calls == [
-        ("start", {}), ("start", {}), ("stop", {}),
+        ("start", held), ("start", held), ("stop", {}),
         ("start", {"window_heating_only": True}), ("stop", {"window_heating_only": True}),
-        ("set_temperature", 21.5),
     ]
+    # Setting the temperature only stores it (snapped to the dial's grid).
+    assert client.climate_targets.temp_c == 21.5
+    client.store_climate_start_mode(True)
+    await client.command_start_climate("VIN")
+    assert ctrl.calls[-1] == ("start", {"window_heating_only": True, "temp_c": 21.5})
+    # The window-heating command is a one-off override; the held mode stays.
+    client.store_climate_start_mode(False)
+    await client.command_start_window_heating("VIN")
+    assert ctrl.calls[-1] == ("start", {"window_heating_only": True})
+    assert client.climate_targets.window_heating_only is False
 
 
 @pytest.mark.asyncio
@@ -563,22 +668,27 @@ async def test_a_blocked_sheet_surfaces_as_a_command_error():
 
 
 @pytest.mark.asyncio
-async def test_coordinator_routes_the_temperature_to_the_companion_client():
+async def test_coordinator_stores_the_temperature_on_the_companion_client():
     from types import SimpleNamespace
 
     from custom_components.vag_connect.coordinator import VagConnectCoordinator
 
     ctrl = _RecordingController()
+    client = _client_with(ctrl)
     sent: list[tuple] = []
+    updates: list[bool] = []
 
-    async def fake_cmd(vin, method, **kwargs):
+    async def fake_cmd(vin, method, **kwargs):  # pragma: no cover - must not run
         sent.append((vin, method, kwargs))
-        await getattr(_client_with(ctrl), method)(vin, **kwargs)
 
-    coord = SimpleNamespace(_cariad_cmd=fake_cmd)
+    coord = SimpleNamespace(
+        _cariad_cmd=fake_cmd, _cariad_client=client, is_companion=lambda: True,
+        async_update_listeners=lambda: updates.append(True),
+    )
     await VagConnectCoordinator.async_set_climatisation_temperature(coord, "VIN", 22.5)
-    assert sent == [("VIN", "command_set_climate_temperature", {"temp_c": 22.5})]
-    assert ctrl.calls == [("set_temperature", 22.5)]
+    # No command, no refresh (which would read the phone): only stored.
+    assert sent == [] and ctrl.calls == []
+    assert client.climate_targets.temp_c == 22.5 and updates == [True]
 
 
 @pytest.mark.parametrize(("mode", "expected"), [("ac", False), ("wh", True)])

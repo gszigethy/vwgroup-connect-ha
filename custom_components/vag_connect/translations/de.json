@@ -1989,6 +1989,18 @@
       "auto_unlock_plug_switch": {
         "name": "Ladestecker automatisch entriegeln"
       },
+      "climate_at_unlock_switch": {
+        "name": "Zusatzklimatisierung beim Entriegeln"
+      },
+      "window_heating_auto_switch": {
+        "name": "Automatische Scheibenheizung"
+      },
+      "climate_zone_front_left_switch": {
+        "name": "Klimazone vorne links"
+      },
+      "climate_zone_front_right_switch": {
+        "name": "Klimazone vorne rechts"
+      },
       "active_ventilation_switch": {
         "name": "Aktive Belüftung"
       },
@@ -2099,6 +2111,13 @@
         "state": {
           "maximum": "Maximum",
           "reduced": "Reduziert"
+        }
+      },
+      "companion_climate_start_mode": {
+        "name": "Gewünschter Klima-Startmodus",
+        "state": {
+          "air_conditioning": "Klimatisierung",
+          "window_heating": "Nur Scheibenheizung"
         }
       }
     },

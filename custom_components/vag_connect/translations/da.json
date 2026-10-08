@@ -1989,6 +1989,18 @@
       "auto_unlock_plug_switch": {
         "name": "Lås ladestikket op automatisk"
       },
+      "climate_at_unlock_switch": {
+        "name": "Ekstra klimaanlæg ved oplåsning"
+      },
+      "window_heating_auto_switch": {
+        "name": "Automatisk rudevarme"
+      },
+      "climate_zone_front_left_switch": {
+        "name": "Klimazone foran venstre"
+      },
+      "climate_zone_front_right_switch": {
+        "name": "Klimazone foran højre"
+      },
       "active_ventilation_switch": {
         "name": "Aktiv ventilation"
       },
@@ -2099,6 +2111,13 @@
         "state": {
           "maximum": "Maksimum",
           "reduced": "Reduceret"
+        }
+      },
+      "companion_climate_start_mode": {
+        "name": "Ønsket starttilstand for klima",
+        "state": {
+          "air_conditioning": "Aircondition",
+          "window_heating": "Kun rudeopvarmning"
         }
       }
     },

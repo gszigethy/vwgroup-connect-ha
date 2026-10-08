@@ -17,16 +17,36 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import date
 from typing import Any, Awaitable, Callable
 
 from ..cariad.models import VehicleData
 from .channel import CompanionChannel, CompanionWriteBlocked
-from .climate import ClimateController
+from .climate import ClimateController, snap_temperature
 from .presets import ACTION_TO_COMMAND, PRESETS
 from .transport import NetworkAdbTransport
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass
+class ClimateTargets:
+    """The climate Start's mode and temperature, as HA holds them.
+
+    ``temp_c`` None means none was set yet: Start leaves the dial alone.
+    """
+
+    window_heating_only: bool = False
+    temp_c: float | None = None
+
+
+def climate_targets_of(coordinator: Any) -> ClimateTargets | None:
+    """The companion client's held climate targets, or None for any other entry."""
+    if not coordinator.is_companion():
+        return None
+    targets = getattr(getattr(coordinator, "_cariad_client", None), "climate_targets", None)
+    return targets if isinstance(targets, ClimateTargets) else None
 
 
 # VehicleData flags that default to False; only the opt-in departure-times
@@ -245,18 +265,50 @@ class CompanionClient:
         except CompanionWriteBlocked as err:
             raise VehicleCommandError(command_name, str(err)) from err
 
+    # -- what the next climate Start applies (held in HA) -----------------------
+
+    @property
+    def climate_targets(self) -> ClimateTargets:
+        """The mode and temperature the next climate Start applies.
+
+        Set by the HA select / number (restored across restarts by those
+        entities); never written by a poll. Storing them sends nothing.
+        """
+        targets = self.__dict__.get("_climate_targets")
+        if targets is None:
+            targets = self.__dict__["_climate_targets"] = ClimateTargets()
+        return targets
+
+    def store_climate_start_mode(self, window_heating_only: bool) -> None:
+        """Store the mode for the next Start. No phone or car traffic."""
+        self.climate_targets.window_heating_only = bool(window_heating_only)
+
+    def store_climate_target_temperature(self, temp_c: float) -> float:
+        """Store the temperature for the next Start, on the app's 0.5 °C grid."""
+        target = snap_temperature(float(temp_c))
+        self.climate_targets.temp_c = target
+        return target
+
+    def _start_with_targets(self) -> Awaitable[None]:
+        targets = self.climate_targets
+        return self._climate.start(
+            window_heating_only=targets.window_heating_only, temp_c=targets.temp_c,
+        )
+
     async def command_start_climate(self, vin: str, *_a: Any, **_k: Any) -> None:
-        await self._climate_command("command_start_climate", self._climate.start)
+        await self._climate_command("command_start_climate", self._start_with_targets)
 
     async def command_start_climate_control(self, vin: str, *_a: Any, **_k: Any) -> None:
-        # The rich payload (seats, zones, mode) has no sheet control; start
-        # with whatever the car's own settings say.
-        await self._climate_command("command_start_climate", self._climate.start)
+        # The rich payload (seats, zones) has no sheet control; start with the
+        # mode and temperature held in HA, like the plain start.
+        await self._climate_command("command_start_climate", self._start_with_targets)
 
     async def command_stop_climate(self, vin: str, *_a: Any, **_k: Any) -> None:
         await self._climate_command("command_stop_climate", self._climate.stop)
 
     async def command_start_window_heating(self, vin: str, *_a: Any, **_k: Any) -> None:
+        # A one-off override: window heating alone, whatever mode HA holds for
+        # the climate Start, and the held mode is left as it is.
         await self._climate_command(
             "command_start_window_heating",
             lambda: self._climate.start(window_heating_only=True),
@@ -271,16 +323,20 @@ class CompanionClient:
     async def command_set_climate_temperature(
         self, vin: str, *_a: Any, temp_c: float | None = None, **_k: Any
     ) -> None:
-        if temp_c is None:
-            from ..cariad.exceptions import VehicleCommandError  # noqa: PLC0415
+        from ..cariad.exceptions import VehicleCommandError  # noqa: PLC0415
 
+        if not self.supports_command("command_set_climate_temperature"):
+            raise VehicleCommandError(
+                "command_set_climate_temperature",
+                "this command is not available on the companion (ADB) channel",
+            )
+        if temp_c is None:
             raise VehicleCommandError(
                 "command_set_climate_temperature", "no target temperature given"
             )
-        await self._climate_command(
-            "command_set_climate_temperature",
-            lambda: self._climate.set_temperature(float(temp_c)),
-        )
+        # The sheet has no Save: Start applies the dial. So this only stores the
+        # temperature for the next Start; it never opens the app.
+        self.store_climate_target_temperature(float(temp_c))
 
     async def command_start_charging(self, vin: str, *_a: Any, **_k: Any) -> None:
         await self._dispatch("command_start_charging")
@@ -304,6 +360,47 @@ class CompanionClient:
             await self._channel.set_charge_target(target)
         except CompanionWriteBlocked as err:
             raise VehicleCommandError("command_set_target_soc", str(err)) from err
+
+    async def _climate_setting(self, command_name: str, key: str, enabled: bool) -> None:
+        """One Climate Settings switch, saved and read back by the channel."""
+        from ..cariad.exceptions import VehicleCommandError  # noqa: PLC0415
+
+        if not self.supports_command(command_name):
+            raise VehicleCommandError(
+                command_name,
+                "this command is not available on the companion (ADB) channel",
+            )
+        try:
+            # The channel's screen lock keeps polls and other commands out.
+            await self._channel.set_climate_setting(key, enabled)
+        except CompanionWriteBlocked as err:
+            raise VehicleCommandError(command_name, str(err)) from err
+
+    async def command_set_climate_at_unlock(
+        self, vin: str, *_a: Any, enabled: bool, **_k: Any
+    ) -> None:
+        await self._climate_setting("command_set_climate_at_unlock", "climate_at_unlock", enabled)
+
+    async def command_set_window_heating_auto(
+        self, vin: str, *_a: Any, enabled: bool, **_k: Any
+    ) -> None:
+        await self._climate_setting(
+            "command_set_window_heating_auto", "window_heating_enabled", enabled
+        )
+
+    async def command_set_climate_zone_front_left(
+        self, vin: str, *_a: Any, enabled: bool, **_k: Any
+    ) -> None:
+        await self._climate_setting(
+            "command_set_climate_zone_front_left", "climate_zone_front_left", enabled
+        )
+
+    async def command_set_climate_zone_front_right(
+        self, vin: str, *_a: Any, enabled: bool, **_k: Any
+    ) -> None:
+        await self._climate_setting(
+            "command_set_climate_zone_front_right", "climate_zone_front_right", enabled
+        )
 
     async def command_set_departure_timer(
         self,

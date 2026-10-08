@@ -2022,6 +2022,18 @@
       "auto_unlock_plug_switch": {
         "name": "Auto-unlock charging plug"
       },
+      "climate_at_unlock_switch": {
+        "name": "Auxiliary air conditioning at unlock"
+      },
+      "window_heating_auto_switch": {
+        "name": "Automatic window heating"
+      },
+      "climate_zone_front_left_switch": {
+        "name": "Climate zone front left"
+      },
+      "climate_zone_front_right_switch": {
+        "name": "Climate zone front right"
+      },
       "active_ventilation_switch": {
         "name": "Active ventilation"
       },
@@ -2132,6 +2144,13 @@
         "state": {
           "maximum": "Maximum",
           "reduced": "Reduced"
+        }
+      },
+      "companion_climate_start_mode": {
+        "name": "Desired Climate Start Mode",
+        "state": {
+          "air_conditioning": "Air conditioning",
+          "window_heating": "Window heating only"
         }
       }
     },

@@ -544,7 +544,15 @@ class TestPresetShape:
             "set_charge_target": "vehicle_settings",
             "sync_vehicle": "vehicle_settings",
         }
-        assert all(a.app_versions == ("4.3.2",) for a in battery)
+        assert all(a.app_versions == ("4.6.4", "4.3.2") for a in battery)
+        # The Climate Settings switches and zones: grounded in the 4.6.4
+        # captures (settings-save and the zone round trips), pinned to 4.6.4.
+        settings = {a for a in _VW.actions if a.nav_read == "climate_settings"}
+        assert {a.action for a in settings} == {
+            "set_climate_at_unlock", "set_window_heating_auto",
+            "set_climate_zone_front_left", "set_climate_zone_front_right",
+        }
+        assert all(a.app_versions == ("4.6.4",) for a in settings)
         # Departure timers: the list switch (4.6.4 and 4.3.2 captures) and the
         # timer page (4.6.4 captures only).
         departure = {a.action: a.app_versions for a in _VW.actions if a.nav_read == "departure_times"}
@@ -552,8 +560,8 @@ class TestPresetShape:
             "toggle_departure_timer": ("4.6.4", "4.3.2"),
             "edit_departure_timer": ("4.6.4",),
         }
-        assert {a.action for a in _VW.actions} - {a.action for a in battery} - set(departure) == {
+        assert {a.action for a in _VW.actions} - {a.action for a in battery | settings} - set(departure) == {
             "start_climate", "stop_climate", "start_window_heating",
             "stop_window_heating", "set_climate_temperature",
         }
-        assert CLIMATE_APP_VERSIONS == ("4.3.2",)
+        assert CLIMATE_APP_VERSIONS == ("4.6.4", "4.3.2")

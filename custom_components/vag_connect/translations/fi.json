@@ -1989,6 +1989,18 @@
       "auto_unlock_plug_switch": {
         "name": "Avaa latauspistoke automaattisesti"
       },
+      "climate_at_unlock_switch": {
+        "name": "Lisäilmastointi avattaessa"
+      },
+      "window_heating_auto_switch": {
+        "name": "Automaattinen ikkunanlämmitys"
+      },
+      "climate_zone_front_left_switch": {
+        "name": "Ilmastointivyöhyke vasen etu"
+      },
+      "climate_zone_front_right_switch": {
+        "name": "Ilmastointivyöhyke oikea etu"
+      },
       "active_ventilation_switch": {
         "name": "Aktiivinen tuuletus"
       },
@@ -2099,6 +2111,13 @@
         "state": {
           "maximum": "Maksimi",
           "reduced": "Alennettu"
+        }
+      },
+      "companion_climate_start_mode": {
+        "name": "Haluttu ilmastoinnin käynnistystila",
+        "state": {
+          "air_conditioning": "Ilmastointi",
+          "window_heating": "Vain ikkunalämmitys"
         }
       }
     },
