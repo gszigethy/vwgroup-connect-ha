@@ -184,6 +184,26 @@ async def test_start_walks_to_detail_and_returns_without_claiming_vehicle_succes
 
 
 @pytest.mark.asyncio
+async def test_command_started_on_the_sheet_closes_it():
+    # Review B12: with no forward walk the sheet was left open.
+    phone = Phone()
+    phone.screen = phone.detail
+    channel = CompanionChannel(phone, VW, time_fn=time.monotonic)
+    original = phone.tap
+
+    async def tap(x, y):
+        await original(x, y)
+        if len(phone.taps) >= 2:
+            phone.screen = dump("gte_overview")
+
+    phone.tap = tap
+    await channel.do_action("start_charging")
+    start = find_battery_control(parse_ui_dump(dump("gte_stopped")), STRINGS, "start_charging")
+    assert phone.taps[0] == start.tap_point
+    assert len(phone.taps) == 2 and phone.screen == dump("gte_overview")
+
+
+@pytest.mark.asyncio
 async def test_active_screen_only_allows_stop():
     phone = Phone("gte_charging")
     channel = CompanionChannel(phone, VW, time_fn=time.monotonic)
