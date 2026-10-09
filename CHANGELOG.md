@@ -42,6 +42,20 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0-11] - 2026-10-09 — EU Data Act login works again
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.11.0** plus fork release **11**, on top of 4.11.0-10.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a regular release — select `v4.11.0-11`, download, and restart Home Assistant.
+
+### Fixed
+- **EU Data Act: login no longer fails with "email address or password incorrect".** The portal's CDN began refusing
+  the single browser identity the connector always sent (HTTP 406), and the login reported that as a wrong password.
+  Each session now uses one current browser identity from a broad pool, keeps it for the whole session, and switches
+  to another if the portal refuses it. (#45, upstream issue #1771)
+
 ## [4.11.0-10] - 2026-10-08 — Companion climate, settings and departure timers on VW app 4.6.4
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
