@@ -902,10 +902,11 @@ _VW = BrandPreset(
             name="departure_times",
             # The overview's Departure times tile. Each timer row shows its
             # time and a switch whose ``checked`` state is the timer's on/off;
-            # the switches are read, never tapped. ``read_departure_timers``
-            # does the reading, by layout rather than words. Each row then
-            # opens its timer page for the days and Repeat (4.6.4 ids), and
-            # BACK returns to the list without saving anything.
+            # this read never taps the switches (only the departure timer
+            # command does). ``read_departure_timers`` does the reading, by
+            # layout rather than words. Each row then opens its timer page for
+            # the days and Repeat (4.6.4 ids), and BACK returns to the list
+            # without saving anything.
             steps=(
                 ActionSelector(
                     action="open_departure_times",

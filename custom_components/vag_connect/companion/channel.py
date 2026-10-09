@@ -1382,6 +1382,10 @@ class CompanionChannel:
         page shows exactly what was asked; otherwise the page is cancelled and
         nothing is sent. Both are read back after sending. Assumes the car and
         Home Assistant share a time zone: the time is the car's local time.
+
+        The app's Save sends the timer switched on (4.6.4 ``saveSettings``), so
+        a page edit leaves it on; an edit with ``enabled=False`` would need a
+        second request straight after the first and is refused.
         """
         async with self._screen_lock:
             await self._set_departure_timer_serialized(slot, enabled, time, weekdays, repeat)
@@ -1401,6 +1405,11 @@ class CompanionChannel:
         edit = clock is not None or days is not None or repeat is not None
         if not edit and enabled is None:
             raise CompanionWriteBlocked("nothing to set on the departure timer")
+        if edit and enabled is False:
+            raise CompanionWriteBlocked(
+                "the app's Save switches the timer on; switch it off in a separate "
+                "command after the edit"
+            )
         spec, nodes = await self._command_gate(
             "edit_departure_timer" if edit else "toggle_departure_timer"
         )
@@ -1426,6 +1435,12 @@ class CompanionChannel:
                 raise CompanionWriteBlocked(
                     f"could not find departure timer {slot} on the Departure times screen"
                 )
+            # A row is found by position; an unread row would shift the rest.
+            if len(departure_rows(listing)) != 3:
+                raise CompanionWriteBlocked(
+                    "could not read all three timers on the Departure times screen; "
+                    "nothing was sent"
+                )
             if edit:
                 listing = await self._edit_timer(listing, slot, clock, days, repeat)
             if enabled is not None:
@@ -1449,6 +1464,11 @@ class CompanionChannel:
         page, nodes = await self._open_timer_page(listing, slot)
         if page is None:
             raise CompanionWriteBlocked(f"could not open departure timer {slot} in the app")
+        if page.time != departure_rows(listing)[slot - 1].time:
+            raise CompanionWriteBlocked(
+                f"the page that opened does not match departure timer {slot}'s row; "
+                "nothing was changed"
+            )
         want_clock = clock if clock is not None else (page.hour, page.minute)
         want_days = days if days is not None else page.weekdays
         want_repeat = page.repeat if repeat is None else repeat
@@ -1476,14 +1496,15 @@ class CompanionChannel:
             save = find_toolbar_text(nodes, self._toolbar_labels(TIMER_SAVE, "save"), page.top)
             if save is None or save.tap_point is None:
                 raise CompanionWriteBlocked("the app did not offer Save for the departure timer")
-        except CompanionWriteBlocked:
+        except (CompanionWriteBlocked, CompanionTransportError):
             await self._cancel_timer_page()
             raise
         # Save is the one tap that sends. Stamp first, so a transport that
         # fails after delivery still blocks an immediate repeat.
         self._last_write_at = self._now()
-        for part in ("time", "weekdays", "repeat"):
+        for part in ("time", "weekdays", "repeat", "enabled"):
             self._nav_cache.pop(f"departure_timer_{slot}_{part}", None)
+        self._nav_cache.pop("departure_timer_enabled_count", None)  # Save switches it on
         self._nav_only.add("departure_times")
         await self._t.tap(*save.tap_point)
         listing = await self._await_timer_saved(slot, want[0])
@@ -1582,18 +1603,26 @@ class CompanionChannel:
         raise CompanionWriteBlocked("the departure time wheels did not settle; nothing was saved")
 
     async def _cancel_timer_page(self) -> None:
-        """Undo unsaved changes with the page's own Cancel, best-effort."""
-        try:
-            nodes, _cleared = await self._dump_and_clear_overlays()
-            page = read_timer_page(nodes)
-            if page is None:
+        """Undo unsaved changes with the page's own Cancel, best-effort.
+
+        A dropped link gets one reconnect, so a transport error mid-edit
+        still leaves the page as it was saved. Cancel sends nothing.
+        """
+        for attempt in range(2):
+            try:
+                if attempt:
+                    await self._t.connect()
+                nodes, _cleared = await self._dump_and_clear_overlays()
+                page = read_timer_page(nodes)
+                if page is None:
+                    return
+                cancel = find_toolbar_text(nodes, self._toolbar_labels(TIMER_CANCEL, "cancel"), page.top)
+                if cancel is not None and cancel.tap_point is not None:
+                    await self._t.tap(*cancel.tap_point)
+                    await self._settle()
                 return
-            cancel = find_toolbar_text(nodes, self._toolbar_labels(TIMER_CANCEL, "cancel"), page.top)
-            if cancel is not None and cancel.tap_point is not None:
-                await self._t.tap(*cancel.tap_point)
-                await self._settle()
-        except CompanionTransportError:
-            pass
+            except CompanionTransportError:
+                continue
 
     async def _await_timer_saved(self, slot: int, time: str) -> list[UiNode]:
         """Wait for the app to send and return to the list; fail unless it does."""

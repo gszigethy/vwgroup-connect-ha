@@ -2556,6 +2556,9 @@
     "read_only_attestation_blocked": {
       "message": "VW bloque les commandes à distance pour SEAT/CUPRA derrière une vérification d'appareil Google (Play Integrity / App Check) que seule l'application officielle sur un vrai téléphone peut passer. Le verrouillage, la climatisation et la charge ne peuvent donc pas être envoyés d'ici. C'est un blocage permanent côté serveur de VW, pas un réglage désactivable. Les données du véhicule continuent d'être mises à jour via le portail EU Data Act."
     },
+    "departure_timer_enabled_required": {
+      "message": "Indique 'enabled' pour la minuterie de départ de ce véhicule : sa connexion en a besoin. Seul le canal companion (ADB) peut l'omettre."
+    },
     "export_file_not_allowed": {
       "message": "Home Assistant n'est pas autorisé à lire {path}. Placez le fichier d'export dans le dossier de configuration (ou un dossier listé sous allowlist_external_dirs) et indiquez à nouveau son chemin."
     },

@@ -104,6 +104,22 @@ go with the charge mode *Charge at preferred times*.
 | Timer on/off | `departure_timer_N_enabled` → Departure Timer N Enabled | Read from the switch's `checked` state (#15); unknown when not read (#10) |
 | Timer time | `departure_timer_N_time` | 24-hour `HH:MM` (#15) |
 | Enabled count | `departure_timer_enabled_count` | When all three rows are on screen (#15) |
+| Weekdays | `departure_timer_N_weekdays` | From the timer's page (`cta_monday` … `cta_sunday`), app 4.6.4 |
+| Repeat | `departure_timer_N_repeat` | From the timer's page (`cta_repeat`), app 4.6.4 |
+
+Writes (VW, app 4.6.4; the switch also on 4.3.2), all through
+`command_set_departure_timer`:
+
+- **Departure Timer N** switch: taps the row's switch, which the app sends at
+  once, and watches it for a flip back.
+- **Departure Timer N — Time** entity and the `set_departure_timer` service: set
+  the time, weekdays and Repeat on the timer's page one read-back tap at a
+  time, then Save (one request). The app's Save switches the timer on, so an
+  edit with `enabled: false` is refused; `enabled` may be left out. The
+  service refuses `charging`, `climatisation` and `target_soc_pct`, and maps
+  `one_off_day` (today to six days ahead) to a one-time timer on that weekday.
+- A write needs all three rows read, and the opened page's time must match its
+  row. Anything unexpected before Save cancels the page; nothing is sent.
 
 ## Driving data
 

@@ -2556,6 +2556,9 @@
     "read_only_attestation_blocked": {
       "message": "VW blokkeert opdrachten op afstand voor SEAT/CUPRA achter een Google-apparaatcontrole (Play Integrity / App Check) die alleen de officiële app op een echte telefoon kan doorstaan. Vergrendeling, klimaat en laden kunnen daarom niet vanaf hier worden verstuurd. Dit is een permanente blokkering aan de serverkant van VW, geen instelling die je kunt uitschakelen. Voertuiggegevens worden nog steeds bijgewerkt via het EU Data Act-portaal."
     },
+    "departure_timer_enabled_required": {
+      "message": "Geef 'enabled' op voor de vertrektimer van dit voertuig: de verbinding heeft het nodig. Alleen het companion-kanaal (ADB) kan het weglaten."
+    },
     "export_file_not_allowed": {
       "message": "Home Assistant mag {path} niet lezen. Zet het exportbestand in de configuratiemap (of in een map die onder allowlist_external_dirs staat) en geef het pad opnieuw op."
     },
