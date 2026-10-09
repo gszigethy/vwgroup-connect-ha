@@ -2058,7 +2058,7 @@
         "name": "Spørreintervall"
       },
       "app_sync_interval": {
-        "name": "Intervall for synkronisering av bil"
+        "name": "Intervall for synkronisering av bil (vekker bilen)"
       }
     },
     "button": {
@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "Appen synkroniserte ikke bilen. Hver synkronisering vekker bilen, så den avvises mens kommandoer er satt på pause eller for kort tid etter forrige kommando. Se sensoren Appens forespørselsstatus."
+    },
     "vehicle_not_found": {
       "message": "Kjøretøy med VIN {vin} ble ikke funnet. Sjekk at integrasjonen er startet."
     },

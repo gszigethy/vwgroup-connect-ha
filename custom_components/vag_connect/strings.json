@@ -2091,7 +2091,7 @@
         "name": "Poll interval"
       },
       "app_sync_interval": {
-        "name": "Vehicle sync interval"
+        "name": "Vehicle sync interval (wakes the car)"
       }
     },
     "button": {
@@ -2567,6 +2567,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "The app did not sync the car. Each sync wakes the car, so it is refused while commands are paused or too soon after the last command. Check the App request status sensor."
+    },
     "vehicle_not_found": {
       "message": "Vehicle with VIN {vin} not found. Check that the integration is started."
     },

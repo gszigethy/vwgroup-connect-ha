@@ -60,6 +60,8 @@ from .resources import (
     find_request_limit,
     find_settings_entry,
     find_tile_entry,
+    is_power_budget_alert,
+    power_budget_labels,
     read_battery_resources,
     read_climate_resources,
     read_departure_timers,
@@ -113,6 +115,11 @@ _RATE_LIMIT_BACKOFF_S = 12 * 3600  # 12 h after a rate-limit banner. Uses wall
                                    # clock so it can be PERSISTED across restarts
                                    # (ckomma #21: an account lockout must NOT be
                                    # cleared by a restart the way a TCP blip is)
+_LIMIT_PROBE_GAP_S = 4 * 3600      # a power-budget pause lets one sync probe
+                                   # through per 4 h: at most two in a 12 h
+                                   # pause, against one per sync interval before
+_SYNC_CONFIRM_DUMPS = 2            # plain dumps after an accepted-looking sync
+                                   # tap, for a limit alert that draws late
 _SETTLE_MAX_DUMPS = 2              # dumps spent waiting for a Compose screen to
                                    # stop changing after a tap: one to read it,
                                    # one to confirm it stopped moving (v4.4.0).
@@ -146,6 +153,9 @@ class CompanionWriteBlocked(RuntimeError):
 
 REQUESTS_AVAILABLE = "available"
 REQUESTS_RESTRICTED = "restricted"
+# What tripped a request-limit pause (see _limit_kind_on).
+LIMIT_POWER_BUDGET = "power_budget"
+LIMIT_BACKEND = "backend"
 
 
 class CompanionChannel:
@@ -183,6 +193,12 @@ class CompanionChannel:
         self._cooldown_until: float = 0.0
         self._consecutive_failures: int = 0  # drives the adaptive cooldown (#16)
         self._rate_limited_until: float = 0.0  # wall-clock; persisted (ckomma #21)
+        # Which alert tripped the pause: LIMIT_POWER_BUDGET only for the app's
+        # own power-budget alert, which sends nothing; None (a restored pause)
+        # or LIMIT_BACKEND never lets the sync probe through.
+        self._limit_kind: str | None = None
+        self._limit_seen_kind: str | None = None  # of the last limit on screen
+        self._limit_probe_at: float = 0.0  # wall clock of the trip or last probe
         self._source_data_age_s: float | None = None  # from the app's sync line
         # #968 — when the car last sent the app data, from the same line read
         # through the app's own translation tables. Newest estimate wins.
@@ -297,11 +313,18 @@ class CompanionChannel:
         """Re-apply a persisted rate-limit backoff at setup."""
         if until and until > self._wall():
             self._rate_limited_until = float(until)
+            self._limit_kind = None  # unknown: no sync probe until it runs out
 
     def _is_rate_limited(self) -> bool:
         return self._wall() < self._rate_limited_until
 
     def _trip_rate_limit(self) -> None:
+        kind, self._limit_seen_kind = self._limit_seen_kind or LIMIT_BACKEND, None
+        # A power-budget alert never softens a pause already running for
+        # another (or an unknown) reason.
+        if not self._is_rate_limited() or kind == LIMIT_BACKEND:
+            self._limit_kind = kind
+        self._limit_probe_at = self._wall()
         self._rate_limited_until = self._wall() + _RATE_LIMIT_BACKOFF_S
         _LOGGER.warning(
             "companion %s: a rate-limit / lockout banner is up; backing off for "
@@ -330,6 +353,7 @@ class CompanionChannel:
         self._cooldown_until = 0.0
         self._consecutive_failures = 0
         self._rate_limited_until = 0.0
+        self._limit_kind = None
         _LOGGER.debug("companion %s: backoff reset by request", self._preset.brand)
 
     # -- read -----------------------------------------------------------------
@@ -888,10 +912,41 @@ class CompanionChannel:
         return nodes, True
 
     def _limit_on_screen(self, nodes: list[UiNode]) -> bool:
-        """The app's request-limit alert or banner, in any installed language."""
-        return (
+        """The app's request-limit alert or banner, in any installed language.
+
+        Also notes which kind it is, for the ``_trip_rate_limit`` that follows.
+        """
+        found = (
             find_rate_limit_banner(nodes, self._preset) is not None
             or find_request_limit(nodes, self._app_strings)
+        )
+        if found:
+            self._limit_seen_kind = self._limit_kind_on(nodes)
+        return found
+
+    def _limit_kind_on(self, nodes: list[UiNode]) -> str:
+        """LIMIT_POWER_BUDGET only when the app's own power-budget alert is the
+        sole limit on screen; anything else is a backend limit."""
+        if not is_power_budget_alert(nodes, self._app_strings):
+            return LIMIT_BACKEND
+        own = power_budget_labels(self._app_strings)
+        others = [
+            n for n in nodes
+            if not any(t and t.strip().casefold() in own for t in (n.text, n.content_desc))
+        ]
+        if find_rate_limit_banner(others, self._preset) is not None:
+            return LIMIT_BACKEND
+        return LIMIT_POWER_BUDGET
+
+    def _may_probe_limit(self) -> bool:
+        """#968 — the sync may tap through a pause only when the app's own
+        power-budget alert tripped it (the app then answers without sending
+        anything), and at most once per ``_LIMIT_PROBE_GAP_S``. Never after a
+        backend limit (HTTP 429 / too many requests): there the tap is a
+        request and would extend the lockout."""
+        return (
+            self._limit_kind == LIMIT_POWER_BUDGET
+            and self._wall() - self._limit_probe_at >= _LIMIT_PROBE_GAP_S
         )
 
     async def _refresh_version_gate(self) -> None:
@@ -1679,10 +1734,11 @@ class CompanionChannel:
             return await self._sync_vehicle_serialized()
 
     async def _sync_vehicle_serialized(self) -> bool:
-        # #968 — the sync is also the probe that ends a request-limit pause:
+        # #968 — the sync is also the probe that ends a power-budget pause:
         # while the car's power budget is used up, the app checks its own
         # capability status (1010, PowerBudgetReached) and answers the tap
-        # with its alert without sending anything, so trying costs nothing.
+        # with its alert without sending anything. Only that kind, and at most
+        # once per _LIMIT_PROBE_GAP_S (see _may_probe_limit).
         spec, nodes = await self._command_gate("sync_vehicle", probe=True)
         nav = next((n for n in self._preset.nav_reads if n.name == spec.nav_read), None)
         if nav is None:
@@ -1721,10 +1777,23 @@ class CompanionChannel:
                 self._request_state = REQUESTS_RESTRICTED
                 raise CompanionWriteBlocked(_LIMIT_REASON)
             after = find_sync_button(nodes)
+            # Positive evidence only: the limit alert can draw after the settle
+            # dumps, so look a little longer (plain dumps, no taps) and count
+            # the sync as taken only if the button is still disabled then.
+            for _ in range(_SYNC_CONFIRM_DUMPS):
+                if after is None or after.enabled:
+                    break
+                nodes = parse_ui_dump(await self._t.dump_ui())
+                if self._limit_on_screen(nodes):
+                    self._trip_rate_limit()
+                    self._request_state = REQUESTS_RESTRICTED
+                    raise CompanionWriteBlocked(_LIMIT_REASON)
+                after = find_sync_button(nodes)
             if after is None or after.enabled:
                 raise CompanionWriteBlocked("the app did not start the vehicle sync")
             # Accepted: the car takes requests again, so the pause is over.
             self._rate_limited_until = 0.0
+            self._limit_kind = None
             self._request_state = REQUESTS_AVAILABLE
             return True
         except CompanionTransportError as err:
@@ -1781,14 +1850,18 @@ class CompanionChannel:
                 f"'{action}' is not mapped for app version {self._live_app_version}"
             )
         # v2.26.0 (ckomma #21) — if a rate-limit backoff is active, do not send.
-        # #968 — except the sync probe, which the app itself stops while the
-        # car's power budget is used up.
-        if self._is_rate_limited() and not probe:
-            raise CompanionWriteBlocked(
-                f"the {self._preset.brand} companion channel is backed off after "
-                "a rate-limit or lockout from the backend; commands are paused "
-                "until it clears (this is an account-side limit, not the phone)"
-            )
+        # #968 — except the sync probe through a power-budget pause, which the
+        # app itself stops while the budget is used up; one per window, counted
+        # here, before anything else can refuse it.
+        if self._is_rate_limited():
+            if probe and self._may_probe_limit():
+                self._limit_probe_at = self._wall()
+            else:
+                raise CompanionWriteBlocked(
+                    f"the {self._preset.brand} companion channel is backed off after "
+                    "a rate-limit or lockout from the backend; commands are paused "
+                    "until it clears (this is an account-side limit, not the phone)"
+                )
         # v2.26.0 (ckomma #21) — enforce a minimum gap between taps so a rapid
         # repeat (a stuck automation, a double press) can never drive the account
         # into a backend rate-limit or lockout.

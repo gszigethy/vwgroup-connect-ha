@@ -2058,7 +2058,7 @@
         "name": "Interval dotazování"
       },
       "app_sync_interval": {
-        "name": "Interval synchronizace vozidla"
+        "name": "Interval synchronizace vozidla (probouzí vozidlo)"
       }
     },
     "button": {
@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "Aplikace vozidlo nesynchronizovala. Každá synchronizace probouzí vozidlo, proto je odmítnuta, když jsou příkazy pozastaveny nebo příliš brzy po posledním příkazu. Zkontrolujte senzor Stav požadavků aplikace."
+    },
     "vehicle_not_found": {
       "message": "Vozidlo s VIN {vin} nebylo nalezeno."
     },

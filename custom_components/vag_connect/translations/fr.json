@@ -2058,7 +2058,7 @@
         "name": "Intervalle d'interrogation"
       },
       "app_sync_interval": {
-        "name": "Intervalle de synchronisation du véhicule"
+        "name": "Intervalle de synchronisation du véhicule (réveille le véhicule)"
       }
     },
     "button": {
@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "L'app n'a pas synchronisé le véhicule. Chaque synchronisation réveille le véhicule ; elle est donc refusée tant que les commandes sont en pause ou trop tôt après la dernière commande. Consultez le capteur État des requêtes de l'app."
+    },
     "vehicle_not_found": {
       "message": "Véhicule avec VIN {vin} introuvable."
     },

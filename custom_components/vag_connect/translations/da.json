@@ -2058,7 +2058,7 @@
         "name": "Pollingsinterval"
       },
       "app_sync_interval": {
-        "name": "Interval for synkronisering af bil"
+        "name": "Interval for synkronisering af bil (vækker bilen)"
       }
     },
     "button": {
@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "Appen synkroniserede ikke bilen. Hver synkronisering vækker bilen, så den afvises, mens kommandoer er sat på pause, eller for kort tid efter den sidste kommando. Se sensoren Appens anmodningsstatus."
+    },
     "vehicle_not_found": {
       "message": "Køretøj med VIN {vin} blev ikke fundet. Tjek, at integrationen er startet."
     },

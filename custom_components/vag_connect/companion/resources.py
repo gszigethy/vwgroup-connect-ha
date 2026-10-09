@@ -25,6 +25,18 @@ _LIMIT_KEYS = (
     "dialog_maxrequests_headline",
     "dialog_maxrequest_bff_error_headline",
 )
+# The power-budget alert is the app's own (CapabilityStatusAlertDelegate, car
+# capability status 1010): it is shown instead of sending the request. Its
+# English title reads the same as the backend's 4295 headline, so only its
+# footer tells the two apart. The backend dialogs' texts mean a request did go
+# out (4295 / TooManyRequests, and the HTTP 429 lockout).
+POWER_BUDGET_TITLE = "alert_daily_power_budget_title"
+POWER_BUDGET_FOOTER = "alert_daily_power_budget_footer"
+_BACKEND_LIMIT_TEXTS = (
+    "dialog_maxrequests_text",
+    "dialog_maxrequest_bff_error_headline",
+    "dialog_maxrequest_bff_error_text",
+)
 # The overview toolbar's "Synchronised %s ago" line and its parts (#968): the
 # frame, its "just now" and "too old" forms, and the duration plurals that fill
 # the %s. Plurals are stored per quantity as ``name#one`` / ``name#other`` ...
@@ -127,6 +139,7 @@ _TRIP_KEYS = (
 DEPARTURE_TILE = "acc_vehicle_tab_label_departure_times"
 _SINGLE_KEYS = frozenset({
     "acc_common_hint_details", "acc_vehicle_tab_label_settings", *_LIMIT_KEYS,
+    POWER_BUDGET_FOOTER, *_BACKEND_LIMIT_TEXTS,
     DEPARTURE_TILE, TIMER_SAVE, TIMER_CANCEL, *_TRIP_KEYS,
     SYNC_LAST_UPDATE, SYNC_JUST_NOW, SYNC_TOO_OLD, DATA_UNAVAILABLE, *_CLIMA_KEYS,
     *HEALTH_ROWS, HEALTH_NO_ISSUES, HEALTH_ISSUES, *SETTINGS_SWITCHES,
@@ -574,6 +587,32 @@ def find_request_limit(nodes: list[UiNode], resources: StringResources) -> bool:
     return bool(titles) and any(
         text.strip().casefold() in titles
         for node in nodes for text in (node.text, node.content_desc) if text
+    )
+
+
+def power_budget_labels(resources: StringResources) -> set[str]:
+    """The local power-budget alert's title and footer, minus any wording a
+    backend limit dialog shares (a shared wording proves nothing)."""
+    return _labels(resources, POWER_BUDGET_TITLE, POWER_BUDGET_FOOTER) - _labels(
+        resources, *_BACKEND_LIMIT_TEXTS
+    )
+
+
+def is_power_budget_alert(nodes: list[UiNode], resources: StringResources) -> bool:
+    """True only for the app's local power-budget alert: its title AND its
+    footer on screen, and no text of a backend limit dialog.
+
+    Anything else, including unreadable tables, counts as a backend limit.
+    """
+    shown = {
+        text.strip().casefold()
+        for node in nodes for text in (node.text, node.content_desc) if text
+    }
+    footer = _labels(resources, POWER_BUDGET_FOOTER) - _labels(resources, *_BACKEND_LIMIT_TEXTS)
+    return (
+        bool(shown & _labels(resources, POWER_BUDGET_TITLE))
+        and bool(shown & footer)
+        and not shown & _labels(resources, *_BACKEND_LIMIT_TEXTS)
     )
 
 

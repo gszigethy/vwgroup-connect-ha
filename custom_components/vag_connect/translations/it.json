@@ -2058,7 +2058,7 @@
         "name": "Intervallo di polling"
       },
       "app_sync_interval": {
-        "name": "Intervallo di sincronizzazione del veicolo"
+        "name": "Intervallo di sincronizzazione del veicolo (sveglia il veicolo)"
       }
     },
     "button": {
@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "L'app non ha sincronizzato il veicolo. Ogni sincronizzazione sveglia il veicolo, quindi viene rifiutata mentre i comandi sono in pausa o troppo presto dopo l'ultimo comando. Controlla il sensore Stato richieste dell'app."
+    },
     "vehicle_not_found": {
       "message": "Veicolo con VIN {vin} non trovato. Verifica che l'integrazione sia avviata."
     },

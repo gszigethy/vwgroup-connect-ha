@@ -2058,7 +2058,7 @@
         "name": "Abfrageintervall"
       },
       "app_sync_interval": {
-        "name": "Fahrzeug-Synchronisierungsintervall"
+        "name": "Fahrzeug-Synchronisierungsintervall (weckt das Fahrzeug)"
       }
     },
     "button": {
@@ -2567,6 +2567,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "Die App hat das Fahrzeug nicht synchronisiert. Jede Synchronisierung weckt das Fahrzeug, daher wird sie abgelehnt, solange Befehle pausiert sind oder der letzte Befehl zu kurz zurückliegt. Siehe den Sensor App-Anfragestatus."
+    },
     "vehicle_not_found": {
       "message": "Fahrzeug mit VIN {vin} nicht gefunden. Prüfe ob die Integration gestartet ist."
     },
