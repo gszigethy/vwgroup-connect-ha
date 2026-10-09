@@ -415,9 +415,17 @@ class CompanionChannel:
             nodes, closed = await self._close_dialogs(nodes)
             if not closed:
                 return None  # nothing readable, and not a failed poll
-            if self._preset.screen_anchor is not None and not has_anchor(nodes, self._preset):
-                await self._return_to_overview(2)
-                nodes, cleared = await self._dump_and_clear_overlays()
+        if cleared and nodes and self._preset.screen_anchor is not None and not has_anchor(
+            nodes, self._preset
+        ):
+            # A sub-screen (behind a closed alert, or left by a walk that was
+            # cut short): go home before reading, and never parse overview
+            # selectors off another page. An empty dump is no screen at all,
+            # and BACK there could leave the app.
+            await self._return_to_overview(3)
+            nodes, cleared = await self._dump_and_clear_overlays()
+            if cleared and not has_anchor(nodes, self._preset):
+                return {}
         if not cleared:
             # A nag/interstitial we could not dismiss is up; the screen behind it
             # is not the data screen. Return no fields rather than parsing the
@@ -818,6 +826,7 @@ class CompanionChannel:
         failure-soft throughout: a transport blip here must not turn a good
         read into an error.
         """
+        await self._reconnect_for_cleanup()
         for _ in range(max(0, presses)):
             try:
                 nodes, _cleared = await self._dump_and_clear_overlays()
@@ -840,6 +849,20 @@ class CompanionChannel:
                     await self._t.key_back()
             except CompanionTransportError:
                 return
+
+    async def _reconnect_for_cleanup(self) -> None:
+        """Reconnect once, so a dropped shell does not skip the cleanup.
+
+        The direct ADB transport closes the device on any shell error, and
+        every later call would fail as "not connected": a staged switch or a
+        moved slider would then stay on screen for the next command.
+        """
+        if self._t.connected:
+            return
+        try:
+            await self._t.connect()
+        except CompanionTransportError:
+            pass
 
     async def _dump_and_clear_overlays(
         self, known_xml: str | None = None
@@ -1353,6 +1376,7 @@ class CompanionChannel:
         ``climatisationSettingsLeading`` leaves Settings without Save.
         """
         if staged is not None and key in CLIMATE_TOGGLES:
+            await self._reconnect_for_cleanup()
             try:
                 nodes, _cleared = await self._dump_and_clear_overlays()
                 toggle = find_toggle(nodes, key)
@@ -1817,6 +1841,24 @@ class CompanionChannel:
             raise CompanionWriteBlocked(
                 "a nag screen is up and did not clear; not tapping blind"
             )
+        if self._preset.screen_anchor is not None and not has_anchor(nodes, self._preset):
+            # Every command starts from the overview. A walk cut short can
+            # leave a sub-screen with a change staged but not saved, which the
+            # next Save would send too; the app's own up/Cancel discards it.
+            # An empty dump is no screen to walk back from.
+            if not nodes:
+                raise CompanionWriteBlocked(
+                    "the app's screen could not be read; not tapping blind"
+                )
+            await self._return_to_overview(3)
+            try:
+                nodes, cleared = await self._dump_and_clear_overlays()
+            except CompanionTransportError as err:
+                raise CompanionWriteBlocked(str(err)) from err
+            if not cleared or not has_anchor(nodes, self._preset):
+                raise CompanionWriteBlocked(
+                    "the app did not return to its overview; not tapping blind"
+                )
         if self._limit_on_screen(nodes):
             self._trip_rate_limit()
             raise CompanionWriteBlocked(_LIMIT_REASON)

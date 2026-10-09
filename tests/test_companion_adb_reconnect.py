@@ -65,3 +65,18 @@ async def test_a_working_shell_is_untouched() -> None:
     assert await t.shell("echo") == "out"
     device.close.assert_not_called()
     assert t.connected is True
+
+
+@pytest.mark.asyncio
+async def test_the_timeout_reaches_adb_shells_own_timeout_parameters() -> None:
+    # adb-shell 0.4.4: shell(command, transport_timeout_s, read_timeout_s=10,
+    # timeout_s=None). A positional timeout set only the socket timeout and
+    # left the wait for a slow dump at the fixed 10 s.
+    device = MagicMock()
+    device.available = True
+    device.shell.return_value = "out"
+    t = _transport(device)
+    await t.shell("uiautomator dump", 15.0)
+    device.shell.assert_called_once_with(
+        "uiautomator dump", transport_timeout_s=15.0, read_timeout_s=15.0, timeout_s=20.0
+    )

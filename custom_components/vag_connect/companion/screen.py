@@ -59,6 +59,8 @@ class UiNode:
         if self.bounds is None:
             return None
         left, top, right, bottom = self.bounds
+        if right <= left or bottom <= top:
+            return None  # clipped off screen: [0,0][0,0] is not a target
         return ((left + right) // 2, (top + bottom) // 2)
 
 
@@ -401,7 +403,7 @@ def tap_point_for(node: UiNode, fraction: tuple[float, float] | None) -> tuple[i
     """
     if fraction is None:
         return node.tap_point
-    if node.bounds is None:
+    if node.tap_point is None:
         return None
     left, top, right, bottom = node.bounds
     frac_x, frac_y = fraction
