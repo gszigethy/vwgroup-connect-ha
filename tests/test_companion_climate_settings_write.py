@@ -301,6 +301,8 @@ async def test_toggle_is_switched_saved_and_read_back(key, flag, switch):
     assert phone.screen == "overview"
     assert channel._nav_cache[key] is True
     assert channel._last_write_at == 10_000.0
+    # The readback refresh re-reads the settings page only.
+    assert channel._nav_only == {"climate_settings"}
 
 
 @pytest.mark.asyncio

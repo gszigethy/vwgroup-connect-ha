@@ -125,3 +125,8 @@ class VagClimate(VagConnectEntity, ClimateEntity):
         await self.coordinator.async_set_climatisation_temperature(
             self._vin, temp
         )
+        # Companion: the store comes first, so a Start asked for alongside
+        # applies the new temperature.
+        hvac_mode = kwargs.get("hvac_mode")
+        if hvac_mode is not None and self.coordinator.is_companion():
+            await self.async_set_hvac_mode(HVACMode(hvac_mode))

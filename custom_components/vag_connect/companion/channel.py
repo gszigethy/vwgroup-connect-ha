@@ -1194,6 +1194,8 @@ class CompanionChannel:
             # fails after delivery still blocks an immediate repeat.
             self._last_write_at = self._now()
             self._nav_cache.pop(key, None)
+            # The readback refresh re-reads this page only, not every path.
+            self._nav_only.add(nav.name)
             await self._t.tap(*save.tap_point)
             staged = None
             after = await self._await_climate_settings_saved(nav, name)
