@@ -163,9 +163,9 @@
           "adb_port": "Yleensä 5555, kun ADB toimii Wi-Fin yli.",
           "vin": "Sovelluksessa näkyvän auton 17-merkkinen VIN.",
           "companion_use_addon": "Valitse tämä Android 11:tä tai uudempaa puhelinta varten, joka tarjoaa vain langattoman virheenkorjauksen. Syötä sitten yllä LISÄOSAN osoite puhelimen osoitteen sijaan.",
-          "companion_addon_token": "Tarvitaan vain, jos määritit api_token-arvon lisäosassa.",
+          "companion_addon_token": "Required for new add-on connections. Set the same api_token in the add-on. The bridge uses plain HTTP; use a trusted network.",
           "companion_use_relay": "Valitse tämä, jos puhelimessa on companion-agenttisovellus. Silloin puhelin soittaa Home Assistantille: ADB:tä, langatonta vianjäljitystä tai kiinteää IP-osoitetta ei tarvita — jätä osoitekenttä tyhjäksi.",
-          "companion_agent_token": "Agenttisovelluksen luoma satunnainen tunnus. Vähintään 32 merkkiä ja jokaiselle ajoneuvolle oma."
+          "companion_agent_token": "A random token is generated for you. Copy it into the agent app; use a different token for every vehicle. Custom tokens need at least 32 characters and 16 distinct characters, with no character making up more than half."
         }
       },
       "audi_mbb_fallback": {
@@ -204,10 +204,12 @@
       "companion_needs_addon": "Tämä näyttää Android 11 -puhelimelta tai uudemmalta, joka käyttää langatonta virheenkorjausta. Suora yhteys tästä ei toimi sen kanssa (se vaatii TLS:n ja parituksen). Asenna 'VW Group App ADB Bridge' -lisäosa (github.com/its-me-prash/vwgroup-app-adb-bridge) ja anna sen osoite tähän. Vanhemmat puhelimet (Android 10 tai vanhempi) yhdistyvät suoraan.",
       "companion_app_not_found": "Yhteys puhelimeen muodostettiin, mutta merkin sovellusta ei ole asennettu siihen.",
       "companion_unknown_brand": "Kyseiselle merkille ei ole vielä apupuhelimen esiasetusta.",
-      "companion_agent_token_too_short": "Agentin tunnus on liian lyhyt. Liitä agenttisovelluksen luoma satunnainen tunnus (vähintään 32 merkkiä).",
+      "companion_agent_token_too_short": "The agent token is too short. Use a random token with at least 32 characters, such as the generated token.",
       "companion_host_required": "Anna puhelimen IP-osoite — tai valitse agenttivaihtoehto, jos puhelin soittaa Home Assistantille.",
       "missing_captcha": "Kirjoita yllä olevassa kuvassa näkyvät merkit.",
-      "captcha_retry": "Ratkaise yllä näkyvä captcha jatkaaksesi."
+      "captcha_retry": "Ratkaise yllä näkyvä captcha jatkaaksesi.",
+      "companion_addon_token_required": "An add-on token is required for new connections. Set api_token in the ADB Bridge add-on and enter the same token here.",
+      "companion_agent_token_weak": "The agent token is too predictable. Use the generated random token or a random token with at least 32 characters and 16 distinct characters, with no character making up more than half."
     },
     "abort": {
       "already_configured": "Tämä tili on jo määritetty.",

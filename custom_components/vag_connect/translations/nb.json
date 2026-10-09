@@ -163,9 +163,9 @@
           "adb_port": "Vanligvis 5555 for ADB over Wi-Fi.",
           "vin": "Det 17 tegn lange VIN-nummeret til bilen som vises i appen.",
           "companion_use_addon": "Kryss av her for en telefon med Android 11 eller nyere, som bare tilbyr trådløs feilsøking. Skriv da inn TILLEGGETS adresse ovenfor i stedet for telefonens.",
-          "companion_addon_token": "Kun nødvendig hvis du har satt api_token i tillegget.",
+          "companion_addon_token": "Required for new add-on connections. Set the same api_token in the add-on. The bridge uses plain HTTP; use a trusted network.",
           "companion_use_relay": "Kryss av her hvis telefonen kjører companion-agent-appen. Telefonen ringer da Home Assistant, så verken ADB, trådløs feilsøking eller fast IP trengs — la adressefeltet stå tomt.",
-          "companion_agent_token": "Det tilfeldige tokenet agent-appen genererte. Minst 32 tegn, og et eget for hvert kjøretøy."
+          "companion_agent_token": "A random token is generated for you. Copy it into the agent app; use a different token for every vehicle. Custom tokens need at least 32 characters and 16 distinct characters, with no character making up more than half."
         }
       },
       "audi_mbb_fallback": {
@@ -204,10 +204,12 @@
       "companion_needs_addon": "Dette ser ut som en telefon med Android 11 eller nyere som bruker trådløs feilsøking, noe den direkte tilkoblingen her ikke kan bruke (den krever TLS + paring). Installer tillegget «VW Group App ADB Bridge» (github.com/its-me-prash/vwgroup-app-adb-bridge) og pek Companion mot det. Eldre telefoner (Android 10 eller eldre) kobles til direkte her.",
       "companion_app_not_found": "Koblet til telefonen, men merkeappen er ikke installert på den.",
       "companion_unknown_brand": "Dette merket har ennå ingen forhåndsinnstilling for ekstra telefon.",
-      "companion_agent_token_too_short": "Agent-tokenet er for kort. Lim inn det tilfeldige tokenet agent-appen genererte (minst 32 tegn).",
+      "companion_agent_token_too_short": "The agent token is too short. Use a random token with at least 32 characters, such as the generated token.",
       "companion_host_required": "Oppgi telefonens IP-adresse — eller kryss av for agent-alternativet hvis telefonen ringer Home Assistant.",
       "missing_captcha": "Skriv inn tegnene som vises i bildet over.",
-      "captcha_retry": "Løs captchaen som vises over for å fortsette."
+      "captcha_retry": "Løs captchaen som vises over for å fortsette.",
+      "companion_addon_token_required": "An add-on token is required for new connections. Set api_token in the ADB Bridge add-on and enter the same token here.",
+      "companion_agent_token_weak": "The agent token is too predictable. Use the generated random token or a random token with at least 32 characters and 16 distinct characters, with no character making up more than half."
     },
     "abort": {
       "already_configured": "Denne kontoen er allerede konfigurert.",

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 from typing import Any
 
 import voluptuous as vol
@@ -678,8 +679,8 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             addon_token = (user_input.get(CONF_COMPANION_ADDON_TOKEN) or "").strip()
             # v4.4.0 (#968) — relay mode. The phone's agent app calls Home
             # Assistant, so there is nothing here to dial and nothing to probe:
-            # the token IS the binding, and setup succeeds as soon as it is long
-            # enough. The entry then waits for the agent to check in.
+            # the token IS the binding, so new entries require a long, diverse
+            # token. The entry then waits for the agent to check in.
             use_relay = bool(user_input.get(CONF_COMPANION_USE_RELAY))
             agent_token = (user_input.get(CONF_COMPANION_AGENT_TOKEN) or "").strip()
             # The add-on serves its API on its own port, so a user who ticked
@@ -696,8 +697,19 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             if use_relay:
                 valid = len(agent_token) >= COMPANION_MIN_TOKEN_LEN
                 reason = "companion_agent_token_too_short"
+                if valid and (
+                    len(set(agent_token)) < 16
+                    or max(agent_token.count(char) for char in set(agent_token))
+                    > len(agent_token) // 2
+                ):
+                    valid, reason = False, "companion_agent_token_weak"
             elif not host:
                 valid, reason = False, "companion_host_required"
+            elif use_addon and not addon_token:
+                # The bridge permits tokenless access, but new setups must
+                # authenticate its phone-shell endpoint. Existing entries keep
+                # the transport's optional-token contract on reload.
+                valid, reason = False, "companion_addon_token_required"
             else:
                 valid, reason = await self._companion_probe(
                     brand, host, port, use_addon=use_addon, addon_token=addon_token
@@ -728,6 +740,12 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                     },
                 )
 
+        if not hasattr(self, "_companion_agent_token_default"):
+            self._companion_agent_token_default = secrets.token_urlsafe(32)
+        agent_token_default = (
+            user_input.get(CONF_COMPANION_AGENT_TOKEN, self._companion_agent_token_default)
+            if user_input is not None else self._companion_agent_token_default
+        )
         brands = {b: b.title() for b in PRESETS}
         schema = vol.Schema(
             {
@@ -749,10 +767,12 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                 # v4.4.0 (#968) — the third way to reach the phone, and the only
                 # one that needs nothing FROM Home Assistant's side of the
                 # network: an agent app on the phone long-polls HA. Tick this,
-                # paste the token the agent generated, and leave the host field
+                # copy the generated token into the agent, and leave the host field
                 # as anything (it is unused on this path).
                 vol.Optional(CONF_COMPANION_USE_RELAY, default=False): bool,
-                vol.Optional(CONF_COMPANION_AGENT_TOKEN, default=""): str,
+                vol.Optional(
+                    CONF_COMPANION_AGENT_TOKEN, default=agent_token_default,
+                ): str,
             }
         )
         return self.async_show_form(
