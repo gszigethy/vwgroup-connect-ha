@@ -3418,12 +3418,15 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 if not isinstance(cs, dict) or not cs:
                     continue  # valid set unknown for this VIN → prune nothing
                 valid = {f"connectivity_{token}" for token in cs}
-                prefix = f"{vin}_connectivity_"
+                from .const import vehicle_unique_id  # noqa: PLC0415
+
+                base = vehicle_unique_id(vin, "", companion=self.is_companion())
+                prefix = f"{base}connectivity_"
                 for entry in entries:
                     uid = entry.unique_id or ""
                     if not uid.startswith(prefix):
                         continue
-                    key = uid[len(vin) + 1:]  # "{vin}_" → "connectivity_{token}"
+                    key = uid[len(base):]  # "{vin}_" → "connectivity_{token}"
                     if key in valid:
                         continue
                     _LOGGER.info(
