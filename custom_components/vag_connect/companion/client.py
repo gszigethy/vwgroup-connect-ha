@@ -168,6 +168,7 @@ class CompanionClient:
         # Unknown keeps the entities hidden; a read overwrites them below.
         for key in _UNREAD_FLAGS:
             setattr(data, key, None)
+        data.companion_nav_read_at = getattr(self._channel, "nav_read_at", None) or {}
         data.source_channel = self._source_channel
         # #968 — what the vehicle sync flow last found, kept with every read.
         data.companion_request_state = getattr(self._channel, "request_state", None)

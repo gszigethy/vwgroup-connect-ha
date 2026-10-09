@@ -1815,6 +1815,8 @@ class VehicleData:
     # no sync line. Surfaced as a diagnostic so a stale car (working connector,
     # old backend data) is visible.
     companion_source_age_s: float | None = None
+    # Per-field app-screen read times (epoch seconds), including expired reads.
+    companion_nav_read_at: dict[str, float] = field(default_factory=dict)
     # #968 — companion (ADB) channel only, and separate from ``last_seen_at``,
     # which belongs to the cloud streams: when the car last sent the app data,
     # from the overview's "Synchronised … ago" (earliest time it can mean).

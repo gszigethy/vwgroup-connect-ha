@@ -39,6 +39,9 @@ CONF_COMPANION_RATE_LIMIT_UNTIL = "companion_rate_limit_until"
 # there (a forward tap, unlike a plain screen dump); only a user who has
 # confirmed the flow on their device should turn it on.
 CONF_COMPANION_READ_CHARGE_DETAIL = "companion_read_charge_detail"
+# Maximum age of a cached app-screen nav read; not the car's sync age.
+COMPANION_NAV_MAX_AGE_S = 24 * 60 * 60
+
 # v2.26.0 (#974) — opt-in: wake the phone display before a poll and put it back
 # to sleep afterwards, so a locked/asleep phone shows the app (not the keyguard)
 # without needing "Stay awake" on permanently. OFF by default.

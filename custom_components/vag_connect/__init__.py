@@ -28,7 +28,10 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 
-from .const import DOMAIN, CONF_BRAND, CONF_USERNAME, CONF_PASSWORD
+from .const import (
+    DOMAIN, CONF_BRAND, CONF_USERNAME, CONF_PASSWORD,
+    CONF_COMPANION_WAKE_SLEEP, CONF_COMPANION_CLOSE_APP,
+)
 from .coordinator import VagConnectCoordinator, entry_settings_fingerprint
 
 _LOGGER = logging.getLogger(__name__)
@@ -1114,14 +1117,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: VagConnectConfigEntry) 
 async def _async_update_listener(
     hass: HomeAssistant, entry: VagConnectConfigEntry
 ) -> None:
-    """Handle options changes — reload only when credentials change.
+    """Handle options changes — reload credentials and companion transport flags.
 
     scan_interval and spin are applied live without a full reload:
     - scan_interval: _poll_loop re-reads it on every iteration
     - spin: coordinator reads it directly from entry.data at command time
 
-    A full reload is only triggered when brand, username or password changes
-    (those require a new authenticated API client).
+    Brand/credentials need a new authenticated API client; companion wake/sleep
+    and close-app flags need a new transport.
     """
     coordinator: VagConnectCoordinator | None = getattr(entry, "runtime_data", None)
 
@@ -1148,6 +1151,8 @@ async def _async_update_listener(
 
     # Fields that require a full reload (new auth client needed)
     _RELOAD_KEYS = {CONF_BRAND, CONF_USERNAME, CONF_PASSWORD}
+    if coordinator and getattr(coordinator, "is_companion", lambda: False)():
+        _RELOAD_KEYS.update({CONF_COMPANION_WAKE_SLEEP, CONF_COMPANION_CLOSE_APP})
     options: dict = dict(entry.options) if entry.options else {}
 
     changed = {

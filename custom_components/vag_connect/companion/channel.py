@@ -28,6 +28,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
+from ..const import COMPANION_NAV_MAX_AGE_S
+
 from .presets import (
     ACTION_TO_COMMAND,
     CLIMATE_SETTING_ACTIONS,
@@ -204,6 +206,7 @@ class CompanionChannel:
         # values persist between reads so a walk that misses one does not make
         # the sensors flap.
         self._nav_cache: dict[str, object] = {}
+        self._nav_read_at: dict[str, float] = {}
         # Which nav read last supplied each cached key, so switching a read off
         # drops exactly its values.
         self._nav_cache_from: dict[str, str] = {}
@@ -280,6 +283,7 @@ class CompanionChannel:
             for key in [k for k, src in self._nav_cache_from.items() if src == opt_in]:
                 self._nav_cache.pop(key, None)
                 self._nav_cache_from.pop(key, None)
+                self._nav_read_at.pop(key, None)
         self._nav_opt_ins = frozenset(opt_ins)
         self._read_charge_detail = "charge_detail" in self._nav_opt_ins
 
@@ -438,7 +442,7 @@ class CompanionChannel:
         # on VW) are read by tapping a tile, reading, and coming BACK. Only tap
         # when it is opted in and the version gate holds; the app refresh
         # interval is the cadence, with no separate floor. When a walk misses a
-        # value the cache re-supplies it so the sensors don't flap.
+        # value the cache re-supplies it for up to 24 hours to limit flapping.
         # #1552 — run the scheduled refresh BEFORE re-applying the cache. Filling
         # from the cache first made _augment_via_nav see every target already
         # populated (its all()-guard) and skip the walk forever after the first
@@ -448,8 +452,20 @@ class CompanionChannel:
             if self.nav_reads_enabled:
                 await self._augment_via_nav(fields)
             for key, val in self._nav_cache.items():
-                fields.setdefault(key, val)
+                if fields.get(key) is not None:
+                    self._nav_cache[key] = fields[key]
+                    self._nav_read_at[key] = self._wall()
+                    continue
+                # A cached value with no stamp is aged from first sight, so an
+                # unstamped write path can never keep a value alive forever.
+                if self._wall() - self._nav_read_at.setdefault(key, self._wall()) < COMPANION_NAV_MAX_AGE_S:
+                    fields.setdefault(key, val)
         return fields
+
+    @property
+    def nav_read_at(self) -> dict[str, float]:
+        """Per-field screen read times, retained after expiry for availability."""
+        return dict(self._nav_read_at)
 
     @property
     def request_state(self) -> str | None:
@@ -595,6 +611,7 @@ class CompanionChannel:
             # setdefault); the overview reading is what goes stale.
             fields[key] = val
             self._nav_cache[key] = val
+            self._nav_read_at[key] = self._wall()
             self._nav_cache_from[key] = nav.opt_in
 
     async def _walk_to_detail(
@@ -1070,6 +1087,7 @@ class CompanionChannel:
             await self._t.tap(*save.tap_point)
             await self._await_charge_target_saved(target)
             self._nav_cache["target_soc"] = target
+            self._nav_read_at["target_soc"] = self._wall()
             return target
         except CompanionTransportError as err:
             raise CompanionWriteBlocked(str(err)) from err
@@ -1205,6 +1223,7 @@ class CompanionChannel:
                     f"not {'on' if enabled else 'off'}; check it in the app"
                 )
             self._nav_cache[key] = enabled
+            self._nav_read_at[key] = self._wall()
             self._nav_cache_from[key] = nav.opt_in
             return True
         except CompanionTransportError as err:
@@ -1501,6 +1520,7 @@ class CompanionChannel:
             )
         for key, val in {f"departure_timer_{slot}_time": want[0], **page_fields(page, slot)}.items():
             self._nav_cache[key] = val
+            self._nav_read_at[key] = self._wall()
             self._nav_cache_from[key] = "departure_times"
         if back is None:
             raise CompanionWriteBlocked("the app did not return to the Departure times list")
@@ -1665,6 +1685,7 @@ class CompanionChannel:
                 f"the app did not switch departure timer {slot}; check it in the app"
             )
         self._nav_cache[key] = enabled
+        self._nav_read_at[key] = self._wall()
         self._nav_cache_from[key] = "departure_times"
 
     async def sync_vehicle(self) -> bool:
