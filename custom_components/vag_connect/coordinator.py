@@ -9098,6 +9098,17 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             # not available on this vehicle"). A refusal we can explain in one
             # sentence should not look to the user like the integration crashed.
             if isinstance(err, VehicleCommandError):
+                # Companion: a refusal that carries its own translation (rule 9,
+                # an app build not verified for commands) keeps it.
+                cause = err.__cause__
+                key = getattr(cause, "translation_key", None)
+                if isinstance(key, str) and self.is_companion():
+                    raise ServiceValidationError(
+                        str(err),
+                        translation_domain=DOMAIN,
+                        translation_key=key,
+                        translation_placeholders=getattr(cause, "translation_placeholders", None),
+                    ) from err
                 raise ServiceValidationError(str(err)) from err
             if isinstance(err, HomeAssistantError) or not isinstance(err, APIError):
                 raise

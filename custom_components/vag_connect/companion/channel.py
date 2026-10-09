@@ -35,6 +35,7 @@ from .presets import (
     BrandPreset,
     NavReadSelector,
     app_version_covered,
+    app_version_listed,
 )
 from .screen import (
     UiNode,
@@ -144,6 +145,23 @@ class CompanionWriteBlocked(RuntimeError):
     """A write was refused by the quarantine, with a human-readable reason."""
 
 
+class CompanionAppVersionUnverified(CompanionWriteBlocked):
+    """Rule 9: a write on an app build that was not verified for writes.
+
+    Carries a translation key so the user sees the refusal in their language.
+    """
+
+    translation_key = "companion_app_version_unverified"
+
+    def __init__(self, version: str | None) -> None:
+        super().__init__(
+            f"commands are off on app version {version}: it has not been "
+            "verified for commands yet, and writes stay off until it is. "
+            "Reads still work."
+        )
+        self.translation_placeholders = {"version": str(version)}
+
+
 REQUESTS_AVAILABLE = "available"
 REQUESTS_RESTRICTED = "restricted"
 
@@ -221,14 +239,20 @@ class CompanionChannel:
         return self._preset
 
     @property
+    def live_app_version(self) -> str | None:
+        """The app version last read from the phone."""
+        return self._live_app_version
+
+    @property
     def writes_enabled(self) -> bool:
         """Whether writes are currently allowed, with all gates applied."""
         return (
             bool(self._version_ok)
             and self._preset.writable
+            and app_version_listed(self._live_app_version, self._preset.verified_app_version)
             and any(
                 a.app_versions is None
-                or app_version_covered(self._live_app_version, a.app_versions)
+                or app_version_listed(self._live_app_version, a.app_versions)
                 for a in self._preset.actions
             )
             and not self._is_rate_limited()
@@ -949,8 +973,9 @@ class CompanionChannel:
         if live_version not in want_set and live_version != self._newer_logged:
             self._newer_logged = live_version
             _LOGGER.info(
-                "companion %s: app %s is newer than the verified %s; taps rely "
-                "on finding each control on screen",
+                "companion %s: app %s is newer than the verified %s; nav reads "
+                "rely on finding each control on screen, commands stay off "
+                "until this version is verified",
                 self._preset.brand, live_version, "/".join(want_set),
             )
         return True
@@ -1406,7 +1431,7 @@ class CompanionChannel:
         )
         if edit and enabled is not None:
             toggle = next((a for a in self._preset.actions if a.action == "toggle_departure_timer"), None)
-            if toggle is None or (toggle.app_versions and not app_version_covered(
+            if toggle is None or (toggle.app_versions and not app_version_listed(
                 self._live_app_version, toggle.app_versions
             )):
                 raise CompanionWriteBlocked(
@@ -1771,10 +1796,13 @@ class CompanionChannel:
                 f"match the one this preset was verified against "
                 f"({_want_str}). Reads still work."
             )
+        # Rule 9: a newer build keeps reads, but writes need a listed build.
+        if not app_version_listed(self._live_app_version, self._preset.verified_app_version):
+            raise CompanionAppVersionUnverified(self._live_app_version)
         spec = next((a for a in self._preset.actions if a.action == action), None)
         if spec is None:
             raise CompanionWriteBlocked(f"no confirmed control for '{action}'")
-        if spec.app_versions and not app_version_covered(
+        if spec.app_versions and not app_version_listed(
             self._live_app_version, spec.app_versions
         ):
             raise CompanionWriteBlocked(

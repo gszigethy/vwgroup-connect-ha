@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_app_version_unverified": {
+      "message": "Kommandon är avstängda: appen på telefonen har version {version}, som ännu inte har verifierats för kommandon. Kommandon, sparningar och synkroniseringar förblir avstängda tills den här versionen har verifierats. Fordonsdata uppdateras fortfarande."
+    },
     "vehicle_not_found": {
       "message": "Fordon med VIN {vin} hittades inte."
     },
