@@ -2567,6 +2567,9 @@
     }
   },
   "exceptions": {
+    "companion_limit_language_unavailable": {
+      "message": "Schreibzugriffe und Synchronisierung sind deaktiviert: Die Übersetzungsressourcen der App sind nicht verfügbar und Englisch, Deutsch oder Spanisch können als aktuelle Oberflächensprache nicht bestätigt werden. Das Lesen wird fortgesetzt."
+    },
     "vehicle_not_found": {
       "message": "Fahrzeug mit VIN {vin} nicht gefunden. Prüfe ob die Integration gestartet ist."
     },

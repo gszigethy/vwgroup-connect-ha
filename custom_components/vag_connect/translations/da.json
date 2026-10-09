@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_limit_language_unavailable": {
+      "message": "Skrivning og synkronisering er deaktiveret: appens oversættelser er ikke tilgængelige, og det kan ikke bekræftes, at grænsefladen er på engelsk, tysk eller spansk. Aflæsning fortsætter."
+    },
     "vehicle_not_found": {
       "message": "Køretøj med VIN {vin} blev ikke fundet. Tjek, at integrationen er startet."
     },

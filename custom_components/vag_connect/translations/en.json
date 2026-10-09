@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_limit_language_unavailable": {
+      "message": "Writes and synchronisation are disabled: app translation resources are unavailable and the current UI language cannot be confirmed as English, German or Spanish. Reads continue."
+    },
     "vehicle_not_found": {
       "message": "Vehicle with VIN {vin} not found. Check that the integration is started."
     },

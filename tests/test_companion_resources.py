@@ -11,7 +11,7 @@ import pytest
 from hypothesis import given, strategies as st
 
 from custom_components.vag_connect.companion.resources import extract_app_strings
-from custom_components.vag_connect.companion.transport import NetworkAdbTransport
+from custom_components.vag_connect.companion.transport import CompanionTransportError, NetworkAdbTransport
 
 KEY = "acc_vehicle_tab_range_tile_value_petrol_level"
 
@@ -86,4 +86,28 @@ async def test_missing_decoder_commands_do_not_produce_labels():
             return "package:/data/app/app/base.apk" if cmd.startswith("pm path") else "unzip: not found"
 
     transport = Transport("unused", 5555, "unused")
-    assert await transport.battery_strings("com.volkswagen.weconnect") == {}
+    with pytest.raises(CompanionTransportError):
+        await transport.battery_strings("com.volkswagen.weconnect")
+
+
+@pytest.mark.asyncio
+async def test_decode_and_extract_run_on_worker_thread(monkeypatch):
+    import threading
+
+    from custom_components.vag_connect.companion import transport as module
+
+    main_thread = threading.get_ident()
+    decode = module._decode_app_strings
+    workers = []
+
+    def checked_decode(encoded):
+        workers.append(threading.get_ident())
+        return decode(encoded)
+
+    monkeypatch.setattr(module, '_decode_app_strings', checked_decode)
+    phone = NetworkAdbTransport('unused', 5555, 'unused')
+    phone._resource_paths = ('/data/app/test/base.apk',)
+    from unittest.mock import AsyncMock
+    phone.shell = AsyncMock(return_value=base64.b64encode(gzip.compress(table())).decode())
+    assert await phone.battery_strings('com.volkswagen.weconnect') == {KEY: {'Fuel level: %s per cent'}}
+    assert workers and workers[0] != main_thread

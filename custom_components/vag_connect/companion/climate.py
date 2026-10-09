@@ -286,6 +286,11 @@ class ClimateController:
             nodes, cleared = await self._ch._dump_and_clear_overlays()
             if not cleared:
                 raise self._blocked("a nag screen is up and did not clear; not tapping blind")
+            # A refusal here has tapped nothing, so the finally block must not
+            # navigate back (that would be an unneeded tap).
+            self._home = True
+            self._ch._require_limit_language(nodes)
+            self._home = False
             if not read_sheet(nodes).present:
                 tile = find_node_for(nodes, nav.path[0])
                 if tile is None or tile.tap_point is None:

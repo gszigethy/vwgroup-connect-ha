@@ -187,43 +187,44 @@ class NetworkAdbTransport:
                 return line.split("=", 1)[1].strip() or None
         return None
 
-    async def battery_strings(self, package: str) -> dict[str, set[str]]:
-        """Read installed VW translation tables, including language splits.
+    async def app_resource_paths(self, package: str) -> tuple[str, ...]:
+        """Cheap installed-split identity; no APK contents are transferred."""
+        import shlex  # noqa: PLC0415
 
-        Shared by direct ADB and the Bridge add-on's existing shell endpoint.
-        The relay has no arbitrary shell and overrides this optional method.
-        Nothing is installed or executed inside the manufacturer's app.
+        paths = await self.shell(f"pm path {shlex.quote(package)}")
+        self._resource_paths = tuple(sorted(
+            line.removeprefix("package:").strip()
+            for line in paths.splitlines() if line.startswith("package:/data/app/")
+        ))
+        return self._resource_paths
+
+    async def battery_strings(self, package: str) -> dict[str, set[str]]:
+        """Read the complete relevant translation table, or fail atomically.
+
+        Cache only the cheap path listing, not a partial extraction: losing a
+        language split must never replace a previously usable limit detector.
         """
-        import base64  # noqa: PLC0415
-        import gzip  # noqa: PLC0415
-        import io  # noqa: PLC0415
         import re  # noqa: PLC0415
         import shlex  # noqa: PLC0415
 
-        from .resources import extract_app_strings  # noqa: PLC0415
-
         out: dict[str, set[str]] = {}
-        paths = await self.shell(f"pm path {shlex.quote(package)}")
-        for line in paths.splitlines():
-            if not line.startswith("package:/data/app/"):
-                continue
-            path = line.removeprefix("package:").strip()
+        paths = getattr(self, "_resource_paths", None)
+        if paths is None:
+            paths = await self.app_resource_paths(package)
+        for path in paths:
             if not (path.endswith("/base.apk") or re.search(r"/split_config\.[a-z]{2,3}\.apk$", path)):
                 continue
             encoded = await self.shell(
                 f"unzip -p {shlex.quote(path)} resources.arsc | gzip | base64", 30.0
             )
             try:
-                compressed = base64.b64decode("".join(encoded.split()), validate=True)
-                with gzip.GzipFile(fileobj=io.BytesIO(compressed)) as table:
-                    data = table.read(16 * 1024 * 1024 + 1)
-                if len(data) > 16 * 1024 * 1024:
-                    continue
-                strings = await asyncio.to_thread(extract_app_strings, data)
-                for key, values in strings.items():
-                    out.setdefault(key, set()).update(values)
-            except (ValueError, OSError, EOFError):
-                continue
+                strings = await asyncio.to_thread(_decode_app_strings, encoded)
+            except (ValueError, OSError, EOFError) as err:
+                raise CompanionTransportError("app translation resources unavailable") from err
+            if not strings:
+                return {}
+            for key, values in strings.items():
+                out.setdefault(key, set()).update(values)
         return out
 
     async def tap(self, x: int, y: int, timeout_s: float = 10.0) -> None:
@@ -309,3 +310,19 @@ class NetworkAdbTransport:
             timeout_s,
         )
         await asyncio.sleep(0.6)
+
+
+def _decode_app_strings(encoded: str) -> dict[str, set[str]]:
+    """Decode, bounded-decompress and parse entirely on the worker thread."""
+    import base64  # noqa: PLC0415
+    import gzip  # noqa: PLC0415
+    import io  # noqa: PLC0415
+
+    from .resources import extract_app_strings  # noqa: PLC0415
+
+    compressed = base64.b64decode("".join(encoded.split()), validate=True)
+    with gzip.GzipFile(fileobj=io.BytesIO(compressed)) as table:
+        data = table.read(16 * 1024 * 1024 + 1)
+    if len(data) > 16 * 1024 * 1024:
+        raise ValueError("app translation resources too large")
+    return extract_app_strings(data)

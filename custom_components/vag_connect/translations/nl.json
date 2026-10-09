@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_limit_language_unavailable": {
+      "message": "Schrijven en synchronisatie zijn uitgeschakeld: de vertalingen van de app zijn niet beschikbaar en er kan niet worden bevestigd dat de huidige interfacetaal Engels, Duits of Spaans is. Het uitlezen gaat door."
+    },
     "vehicle_not_found": {
       "message": "Voertuig met VIN {vin} niet gevonden."
     },

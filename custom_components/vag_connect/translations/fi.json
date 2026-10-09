@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_limit_language_unavailable": {
+      "message": "Kirjoitus ja synkronointi on poistettu käytöstä: sovelluksen käännösresurssit eivät ole saatavilla eikä käyttöliittymän kieleksi voida vahvistaa englantia, saksaa tai espanjaa. Lukeminen jatkuu."
+    },
     "vehicle_not_found": {
       "message": "Ajoneuvoa, jonka VIN on {vin}, ei löytynyt. Tarkista, että integraatio on käynnistetty."
     },
