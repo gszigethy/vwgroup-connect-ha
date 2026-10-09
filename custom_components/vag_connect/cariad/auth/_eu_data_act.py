@@ -37,9 +37,11 @@ import logging
 import math
 import os
 import re
+import secrets
 import uuid
 import zipfile
 from collections.abc import Callable
+from datetime import date
 from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
@@ -142,10 +144,118 @@ _DOWNLOAD_PATH = (
     "/proxy_api/euda-apim/datadelivery/vehicles/{vin}/{identifier}/download"
 )
 
-_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
-)
+# The portal's CDN answers 406 to a User-Agent it has blocked. In Oct 2026 it
+# blocked the exact string this module hard-coded (macOS Chrome/148.0.0.0) —
+# the same version on Windows, and every other version, still got through — so
+# every install of the integration was locked out at once. No fixed UA any
+# more: each connector picks one UA from a broad pool of current browsers —
+# desktop and phone, Chromium, Firefox and Safari — and keeps it for its whole
+# session (cookie jar and UA stay consistent, like a real browser), and picks
+# another when the portal refuses it. A pool that wide can't be blocked by UA
+# without blocking the portal's real visitors too.
+# Versions follow the calendar, so the pool never goes stale: Chrome 138 and
+# Firefox 140 both shipped 2025-06-24 and a new major follows about every 4
+# weeks; Safari 26 shipped 2025-09-15 and a new major follows yearly.
+_CHROME_ANCHOR = (date(2025, 6, 24), 138)
+_FIREFOX_ANCHOR = (date(2025, 6, 24), 140)
+_SAFARI_ANCHOR = (date(2025, 9, 15), 26)
+# Holiday gaps put the real stable slightly behind the 4-week estimate; stay a
+# major behind it rather than claim a version that isn't out yet.
+_RAPID_RELEASE_LAG = 1
+_UA_MAJOR_SPREAD = 3  # the estimated stable major and the three before it
+_UA_PICK_ATTEMPTS = 3
+# Opera rebrands Chromium with its own major, a fixed distance behind Chrome's.
+_OPERA_BEHIND_CHROME = 15
+# Safari point releases in use alongside each major.
+_SAFARI_POINT_RELEASES = 4
+# Frozen platform tokens: Chrome's reduced UA reports these whatever the real
+# OS version is, and Safari 26 froze the iOS one the same way.
+_MAC = "Macintosh; Intel Mac OS X 10_15_7"
+_WINDOWS = "Windows NT 10.0; Win64; x64"
+_LINUX = "X11; Linux x86_64"
+_ANDROID = "Linux; Android 10; K"
+_IPHONE = "iPhone; CPU iPhone OS 18_6 like Mac OS X"
+_IPAD = "iPad; CPU OS 18_6 like Mac OS X"
+# Firefox on Android still reports the real Android version.
+_FIREFOX_ANDROID_VERSIONS = (14, 15, 16)
+
+
+def _rapid_release_major(anchor: tuple[date, int], today: date | None) -> int:
+    """Estimated current stable major of a 4-weekly browser for *today*."""
+    anchor_day, anchor_major = anchor
+    days = max(((today or date.today()) - anchor_day).days, 0)
+    return anchor_major + days // 28 - _RAPID_RELEASE_LAG
+
+
+def _current_chrome_major(today: date | None = None) -> int:
+    """Estimated current stable Chrome major for *today* (default: now)."""
+    return _rapid_release_major(_CHROME_ANCHOR, today)
+
+
+def _current_safari_major(today: date | None = None) -> int:
+    """Current Safari major for *today*: one per year since the anchor."""
+    anchor_day, anchor_major = _SAFARI_ANCHOR
+    days = max(((today or date.today()) - anchor_day).days, 0)
+    return anchor_major + days // 365
+
+
+def _user_agent_pool(today: date | None = None) -> tuple[str, ...]:
+    """Current desktop + phone browser UAs, several versions of each."""
+    chrome = _current_chrome_major(today)
+    firefox = _rapid_release_major(_FIREFOX_ANCHOR, today)
+    safari = _current_safari_major(today)
+    webkit = "AppleWebKit/537.36 (KHTML, like Gecko)"
+    apple = "AppleWebKit/605.1.15 (KHTML, like Gecko)"
+    pool: list[str] = []
+    for back in range(_UA_MAJOR_SPREAD + 1):
+        c, f = f"{chrome - back}.0.0.0", f"{firefox - back}.0"
+        opera = f"{chrome - back - _OPERA_BEHIND_CHROME}.0.0.0"
+        desktop = f"{webkit} Chrome/{c} Safari/537.36"
+        mobile = f"{webkit} Chrome/{c} Mobile Safari/537.36"
+        for platform in (_MAC, _WINDOWS, _LINUX):
+            pool += [
+                f"Mozilla/5.0 ({platform}) {desktop}",
+                f"Mozilla/5.0 ({platform}) {desktop} Edg/{c}",
+            ]
+        for platform in (_MAC, _WINDOWS):
+            pool.append(f"Mozilla/5.0 ({platform}) {desktop} OPR/{opera}")
+        pool += [
+            f"Mozilla/5.0 ({_ANDROID}) {mobile}",
+            f"Mozilla/5.0 ({_ANDROID}) {mobile} EdgA/{c}",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; "
+            f"rv:{f}) Gecko/20100101 Firefox/{f}",
+            f"Mozilla/5.0 ({_WINDOWS}; rv:{f}) Gecko/20100101 Firefox/{f}",
+            f"Mozilla/5.0 ({_LINUX}; rv:{f}) Gecko/20100101 Firefox/{f}",
+        ]
+        pool += [
+            f"Mozilla/5.0 (Android {a}; Mobile; rv:{f}) Gecko/{f} Firefox/{f}"
+            for a in _FIREFOX_ANDROID_VERSIONS
+        ]
+        for platform in (_IPHONE, _IPAD):
+            pool += [
+                f"Mozilla/5.0 ({platform}) {apple} CriOS/{c} Mobile/15E148 "
+                "Safari/604.1",
+                f"Mozilla/5.0 ({platform}) {apple} FxiOS/{f} Mobile/15E148 "
+                "Safari/605.1.15",
+            ]
+    for major in (safari, safari - 1):
+        for point in range(_SAFARI_POINT_RELEASES):
+            s = f"{major}.{point}"
+            pool.append(f"Mozilla/5.0 ({_MAC}) {apple} Version/{s} Safari/605.1.15")
+            pool += [
+                f"Mozilla/5.0 ({platform}) {apple} Version/{s} Mobile/15E148 "
+                "Safari/604.1"
+                for platform in (_IPHONE, _IPAD)
+            ]
+    return tuple(pool)
+
+
+def _pick_user_agent(exclude: tuple[str, ...] = ()) -> str:
+    """A random pool UA, avoiding *exclude* while the pool has others."""
+    pool = _user_agent_pool()
+    return secrets.choice([ua for ua in pool if ua not in exclude] or pool)
+
+
 _NO_CONTENT_SUFFIX = "_no_content_found.zip"
 
 # Junk sentinels the portal uses for state STRINGS (no active session / single-
@@ -5005,6 +5115,9 @@ class EUDataActConnector:
         access_token: str | None = None,
     ) -> None:
         self._session = session
+        # One browser UA for this connector's whole session, sent on every
+        # portal and IDP request; login() swaps it only if the portal refuses it.
+        self._user_agent = _pick_user_agent()
         cfg = _EUDA_BRANDS.get(brand.lower())
         if cfg is None:
             # Unknown brand → VW client with a brand-derived state suffix.
@@ -5258,7 +5371,7 @@ class EUDataActConnector:
         try:
             async with self._session.post(
                 accept_action, data=pairs,
-                headers={"User-Agent": _USER_AGENT, "Referer": consent_url},
+                headers={"User-Agent": self._user_agent, "Referer": consent_url},
                 allow_redirects=True, timeout=ClientTimeout(total=_TIMEOUT_S),
             ) as resp:
                 new_landing = str(resp.url)
@@ -5328,7 +5441,7 @@ class EUDataActConnector:
         try:
             async with self._session.post(
                 accept_action, data=pairs,
-                headers={"User-Agent": _USER_AGENT, "Referer": terms_url},
+                headers={"User-Agent": self._user_agent, "Referer": terms_url},
                 allow_redirects=True, timeout=ClientTimeout(total=_TIMEOUT_S),
             ) as resp:
                 new_landing = str(resp.url)
@@ -5378,23 +5491,36 @@ class EUDataActConnector:
         if self._bearer:
             self.logged_in = True
             return
-        headers = {"User-Agent": _USER_AGENT}
-
-        # 0. Prime portal session cookies (AEM load-balancer state).
-        try:
-            async with self._session.get(
-                f"{_PORTAL_BASE}/", headers=headers,
-                timeout=ClientTimeout(total=_TIMEOUT_S),
-            ):
-                pass
-        except Exception as exc:  # noqa: BLE001
-            # Class only, never str(exc) — an aiohttp error's message echoes the
-            # request URL. (Here it is the static portal base, but keep the sweep
-            # posture uniform so no future URL change re-opens a leak.)
+        # 0. Prime portal session cookies (AEM load-balancer state). The CDN
+        #    answers this GET with 406 when it has blocked our UA; pick another
+        #    and re-prime, so the login runs with a UA the portal accepts.
+        refused: list[str] = []
+        for _attempt in range(_UA_PICK_ATTEMPTS):
+            try:
+                async with self._session.get(
+                    f"{_PORTAL_BASE}/", headers={"User-Agent": self._user_agent},
+                    timeout=ClientTimeout(total=_TIMEOUT_S),
+                ) as resp:
+                    prime_status = resp.status
+            except Exception as exc:  # noqa: BLE001
+                # Class only, never str(exc) — an aiohttp error's message echoes
+                # the request URL. (Here it is the static portal base, but keep
+                # the sweep posture uniform so no future URL change re-opens a
+                # leak.)
+                _LOGGER.debug(
+                    "EU Data Act: priming GET failed (ignored): %s",
+                    type(exc).__name__,
+                )
+                break
+            if prime_status != 406:
+                break
+            refused.append(self._user_agent)
             _LOGGER.debug(
-                "EU Data Act: priming GET failed (ignored): %s",
-                type(exc).__name__,
+                "EU Data Act portal refused the session User-Agent (HTTP 406) — "
+                "picking another (%d refused so far)", len(refused),
             )
+            self._user_agent = _pick_user_agent(exclude=tuple(refused))
+        headers = {"User-Agent": self._user_agent}
 
         # 1. Start OIDC directly at the IDP (portal's own servlet 500s for
         #    non-browser clients). response_type=code; portal does the
@@ -5703,7 +5829,7 @@ class EUDataActConnector:
         # v2.13.0 — Bearer mode: attach the device-grant token. Covers every
         # JSON proxy_api call (vehicles list, metadata, datadelivery list,
         # relation) since they all funnel through here. No-op in cookie mode.
-        eff_headers = dict(headers or {})
+        eff_headers = {"User-Agent": self._user_agent, **(headers or {})}
         if self._bearer:
             eff_headers["Authorization"] = f"Bearer {self._bearer}"
         # v2.13.1 — the portal is flaky: transient 5xx come and go within
@@ -5817,7 +5943,9 @@ class EUDataActConnector:
         (v2.13.0) is merged in without clobbering the filename/type headers the
         download endpoint requires.
         """
-        dl_headers = {"filename": name, "type": request_type}
+        dl_headers = {
+            "User-Agent": self._user_agent, "filename": name, "type": request_type,
+        }
         if self._bearer:
             dl_headers["Authorization"] = f"Bearer {self._bearer}"
         try:
