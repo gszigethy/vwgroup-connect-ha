@@ -42,6 +42,8 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.12.0] - 2026-10-09 — The portal login works again / Die Portal-Anmeldung geht wieder
+
 ### Hinzugefügt / Added
 - **A car reading the EU Data Act portal gains one more diagnostic: when the instrument cluster
   last recorded a warning.** A Touareg reported the field, and every sample we have of it — four,
