@@ -425,9 +425,16 @@ class CompanionClient:
             raise VehicleCommandError(
                 "command_set_climate_temperature", "no target temperature given"
             )
-        # The sheet has no Save: Start applies the dial. So this only stores the
-        # temperature for the next Start; it never opens the app.
-        self.store_climate_target_temperature(float(temp_c))
+        # Held for the next Start either way. A running air conditioning also
+        # gets the dial moved now: the app sends that change to the car itself
+        # (one request). Off, or window heating alone, nothing is tapped.
+        target = self.store_climate_target_temperature(float(temp_c))
+
+        async def run() -> None:
+            if await self._climate.adjust(target):
+                self.climate_targets.app_dial_c = target
+
+        await self._climate_command("command_set_climate_temperature", run)
 
     async def command_start_charging(self, vin: str, *_a: Any, **_k: Any) -> None:
         await self._dispatch("command_start_charging")

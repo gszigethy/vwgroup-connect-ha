@@ -19,12 +19,13 @@ Home Assistant climate entities. It is a stand-alone change against upstream
 | Air conditioning using battery (setting) | `climate_without_external_power` → binary sensor | `ClimatisationWithoutExternalPowerEnabled`, where shown |
 | Start / Stop | `command_start_climate` / `command_stop_climate` | `cta_start` / `cta_stop` |
 | Window heating only | `command_start_window_heating` / `command_stop_window_heating` | Picker row 2, or Mk8 toggles, then `cta_start` |
-| Set target temperature | `command_set_climate_temperature` (held; Start applies it) | Before Start: all 0.5 steps tapped on the neighbouring dial label in one batch, then one readback |
+| Set target temperature | `command_set_climate_temperature` (held; Start applies it; while the air conditioning runs, the dial is moved at once) | Before Start, or on the running sheet: all 0.5 steps tapped on the neighbouring dial label in one batch, then one readback |
 
 A temperature change costs one car request of its own: the app sends the dial
 1 s after it stops moving (and when the sheet closes), whether or not Start is
-pressed. So the integration checks the mode, the Start button, the request limit,
-the app build and the dial's °C labels before the first dial tap, sends every
+pressed. So before the first dial tap the integration checks the request limit,
+the app build and the dial's °C labels, and, before a Start, also the mode and
+the Start button. It sends every
 step inside that 1 s, and reads the dial back once. The phone times the batch
 itself and stops after a tap that came more than 700 ms after the previous one,
 so a slow phone costs at most two requests (and no Start), never one per step. A wrong reading is reported

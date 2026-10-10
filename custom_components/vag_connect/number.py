@@ -395,11 +395,13 @@ class VagCompanionClimateTemperatureNumber(VagConnectNumber, RestoreNumber):
     """Companion: the temperature the next climate Start applies.
 
     The app's Air Conditioning sheet has no Save; Start applies the dial. So
-    this number is a value held in HA (restored across restarts): changing it
-    only stores it, and the climate Start sets the dial to it first. A read
-    that finds the dial changed in the app replaces it, so it follows the app;
-    a read of an unchanged dial leaves a value chosen in HA alone. Unavailable while the held mode is window heating only,
-    where the app disables the dial.
+    this number is a value held in HA (restored across restarts): with the
+    climate off, changing it only stores it, and the climate Start sets the
+    dial to it first. While the air conditioning runs, a change also moves the
+    app's dial at once (one car request). A read that finds the dial changed
+    in the app replaces it, so it follows the app; a read of an unchanged dial
+    leaves a value chosen in HA alone. Unavailable while the held mode is
+    window heating only, where the app disables the dial.
     """
 
     @property

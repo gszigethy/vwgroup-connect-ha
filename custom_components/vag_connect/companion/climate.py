@@ -260,7 +260,7 @@ class ClimateController:
         air conditioning mode; the app disables it for window heating alone),
         read back from the screen, and Start is pressed only when both match.
         ``temp_c`` None leaves the dial as it is. A running climate is left
-        alone: a changed setting applies at the next Start.
+        alone here; ``adjust`` moves its dial.
         """
         target = (
             snap_temperature(temp_c)
@@ -293,6 +293,24 @@ class ClimateController:
                 # dial, so the cached sheet value is updated here.
                 self._ch._nav_cache["target_temperature"] = target
             await self._await_outcome(expect_running=True)
+
+    async def adjust(self, temp_c: float) -> bool:
+        """Move the dial of a running air conditioning to ``temp_c``.
+
+        The app sends a dial change to the car by itself, so this costs one car
+        request and needs no Start. True when the dial now shows the target;
+        False when there was nothing to move: the climate is off, or runs as
+        window heating alone (the app disables the dial). The held value then
+        applies at the next Start.
+        """
+        target = snap_temperature(temp_c)
+        async with self._on_sheet() as nodes:
+            sheet = read_sheet(nodes)
+            if not sheet.running or not self._ac_running(nodes, sheet):
+                return False
+            nodes = await self._apply_dial(nodes, target, starting=False)
+            self._ch._nav_cache["target_temperature"] = target
+            return True
 
     async def stop(self, *, window_heating_only: bool = False) -> None:
         async with self._on_sheet() as nodes:
@@ -501,8 +519,13 @@ class ClimateController:
             raise self._blocked("the requested mode is not selected on the sheet")
         return picker
 
-    async def _apply_dial(self, nodes: list[UiNode], target: float) -> list[UiNode]:
+    async def _apply_dial(
+        self, nodes: list[UiNode], target: float, *, starting: bool = True,
+    ) -> list[UiNode]:
         """Set the dial to ``target`` with one batch of taps; return the readback.
+
+        ``starting`` False is a running air conditioning: there is no Start to
+        check or press, and the dial change itself is the request.
 
         The app sends every dial change to the car once the dial has rested
         for 1 s, and again when the sheet closes, so a change costs one car
@@ -526,7 +549,8 @@ class ClimateController:
             )
         if current == target:
             return nodes
-        self._dial_preflight(nodes)
+        self._dial_preflight(nodes, starting=starting)
+        no_start = "; Start was not pressed" if starting else ""
         steps = round(abs(target - current) / DIAL_STEP_C)
         if not 0 < steps <= _DIAL_MAX_STEPS:
             raise self._blocked(f"{steps} dial steps is outside the dial; not changing it")
@@ -557,7 +581,7 @@ class ClimateController:
         if made == 0:
             raise self._blocked(
                 "the phone gave no clock to time the dial taps, so none was "
-                "made; Start was not pressed"
+                f"made{no_start}"
             )
         if made is not None and made < steps:
             # The phone stopped the batch: a tap came more than 700 ms after
@@ -566,27 +590,31 @@ class ClimateController:
                 f"the phone was too slow between dial taps and stopped after "
                 f"{made} of {steps}; the dial shows "
                 f"{'an unreadable value' if landed is None else f'{landed:g} °C'}, "
-                f"not {target:g} °C, and Start was not pressed. At most two "
+                f"not {target:g} °C{no_start}. At most two "
                 "temperature changes reached the car; none was corrected"
             )
         if landed != target:
             raise self._blocked(
                 f"the temperature dial landed at "
                 f"{'an unreadable value' if landed is None else f'{landed:g} °C'}, "
-                f"not {target:g} °C; Start was not pressed. The app sends the dial "
+                f"not {target:g} °C{no_start}. The app sends the dial "
                 "to the car on its own, so this change reached the car once; it "
                 "was not corrected, as that would cost another request"
             )
         return nodes
 
-    def _dial_preflight(self, nodes: list[UiNode]) -> None:
+    def _dial_preflight(self, nodes: list[UiNode], *, starting: bool = True) -> None:
         """Refuse before the first dial tap unless Start will follow it.
 
         A dial change reaches the car whether or not Start is pressed, so
         every reason Start could be refused is checked first: the mode, the
         Start button and a request limit (the app build is pinned by ``_gate``).
+        A running air conditioning (``starting`` False) has no Start to check;
+        only the request limit applies.
         """
-        ch = self._ch
+        if not starting:
+            self._limit_preflight(nodes)
+            return
         sheet = read_sheet(nodes)
         if sheet.ac_toggle is not None or sheet.wh_toggle is not None:
             mode_ok = (
@@ -607,6 +635,10 @@ class ClimateController:
                 "the Start button is not available on the sheet; the temperature "
                 "was not changed"
             )
+        self._limit_preflight(nodes)
+
+    def _limit_preflight(self, nodes: list[UiNode]) -> None:
+        ch = self._ch
         if ch._is_rate_limited():
             raise self._blocked("the channel is backed off after a rate limit; commands are paused")
         if ch._limit_on_screen(nodes):
