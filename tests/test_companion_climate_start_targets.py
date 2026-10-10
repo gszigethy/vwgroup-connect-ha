@@ -4,8 +4,9 @@
 
 The 4.6.4 Air Conditioning sheet has no Save; Start applies the selected mode
 and the dial. So both are HA-held values: changing them only stores them (no
-phone or car traffic), they are restored across restarts, the poll never
-overwrites them, and the temperature is unavailable in window heating only.
+phone or car traffic), they are restored across restarts, a poll of an
+unchanged dial never overwrites them (a dial changed in the app does), and the
+temperature is unavailable in window heating only.
 """
 from __future__ import annotations
 
@@ -116,6 +117,7 @@ async def test_restore_after_a_restart():
     number.async_get_last_number_data = AsyncMock(
         return_value=SimpleNamespace(native_value=22.5)
     )
+    number.async_get_last_extra_data = AsyncMock(return_value=None)
     select.async_get_last_state = AsyncMock(
         return_value=SimpleNamespace(state="window_heating")
     )
@@ -222,6 +224,7 @@ async def test_restore_with_number_data_but_nothing_held_stores_nothing():
     number.async_get_last_number_data = AsyncMock(
         return_value=SimpleNamespace(native_value=None)
     )
+    number.async_get_last_extra_data = AsyncMock(return_value=None)
     number.async_get_last_state = AsyncMock(return_value=SimpleNamespace(state="22.0"))
     with patch.object(CoordinatorEntity, "async_added_to_hass", new=AsyncMock()):
         await number.async_added_to_hass()
@@ -293,3 +296,140 @@ async def test_set_temperature_with_an_unlisted_hvac_mode_sends_nothing(mode):
         data.pop("entity_id")
         await async_service_temperature_set(entity, SimpleNamespace(data=data))
         called.assert_awaited_once_with(VIN)
+
+
+# -- following the app's dial -------------------------------------------------
+
+
+def _read(client: CompanionClient, value: float) -> None:
+    client.climate_targets.note_app_dial(value)
+
+
+def test_a_dial_changed_in_the_app_replaces_the_held_value():
+    # Live: the app showed 20 while the number and the climate entity kept 22.
+    client = _client()
+    _read(client, 22.0)
+    client.store_climate_target_temperature(22.0)
+    coord = _coordinator(client, {"target_temperature": 20.0})
+    number = _number(coord)
+    _read(client, 20.0)  # the dial was turned in the app
+    assert client.climate_targets.temp_c == 20.0
+    assert number.native_value == 20.0
+    from custom_components.vag_connect.climate import VagClimate
+
+    coord.command_method_available = MagicMock(return_value=True)
+    assert VagClimate(coord, VIN).target_temperature == 20.0
+
+
+def test_an_unchanged_dial_keeps_the_value_chosen_in_ha():
+    client = _client()
+    _read(client, 20.0)
+    client.store_climate_target_temperature(23.0)
+    for _ in range(3):
+        _read(client, 20.0)  # the poll reads the dial HA has not moved
+    assert client.climate_targets.temp_c == 23.0
+    _read(client, 21.5)
+    assert client.climate_targets.temp_c == 21.5
+
+
+def test_nothing_held_stays_nothing_held():
+    # Start keeps leaving the dial alone; the number already shows the read.
+    client = _client()
+    _read(client, 20.0)
+    _read(client, 24.0)
+    assert client.climate_targets.temp_c is None
+
+
+def test_a_non_number_read_is_ignored():
+    client = _client()
+    _read(client, 20.0)
+    client.store_climate_target_temperature(23.0)
+    for junk in (None, "LO", True):
+        client.climate_targets.note_app_dial(junk)
+    assert client.climate_targets.app_dial_c == 20.0
+    _read(client, 20.0)
+    assert client.climate_targets.temp_c == 23.0
+
+
+def test_the_dial_is_saved_with_the_held_value():
+    client = _client()
+    _read(client, 20.0)
+    client.store_climate_target_temperature(23.0)
+    data = _number(_coordinator(client)).extra_restore_state_data
+    assert data.native_value == 23.0
+    assert data.as_dict()["app_dial_c"] == 20.0
+
+
+async def _restore(client, held, dial, *, with_extra=True):
+    number = _number(_coordinator(client))
+    number.async_get_last_number_data = AsyncMock(
+        return_value=SimpleNamespace(native_value=held)
+    )
+    extra = SimpleNamespace(as_dict=lambda: {"native_value": held, "app_dial_c": dial})
+    number.async_get_last_extra_data = AsyncMock(return_value=extra if with_extra else None)
+    with patch.object(CoordinatorEntity, "async_added_to_hass", new=AsyncMock()):
+        await number.async_added_to_hass()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("first_read", "held"), [(20.0, 23.0), (19.0, 19.0)])
+async def test_restore_then_read(first_read, held):
+    # Saved: 23 held against a dial at 20. Unchanged dial keeps 23; a dial
+    # moved while HA was down wins.
+    client = _client()
+    await _restore(client, 23.0, 20.0)
+    assert client.climate_targets.temp_c == 23.0
+    _read(client, first_read)
+    assert client.climate_targets.temp_c == held
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("first_read", "held"), [(20.0, 23.0), (19.0, None)])
+async def test_read_then_restore(first_read, held):
+    # The first read can land before the number is restored.
+    client = _client()
+    _read(client, first_read)
+    await _restore(client, 23.0, 20.0)
+    assert client.climate_targets.temp_c == held
+
+
+@pytest.mark.asyncio
+async def test_a_restore_without_the_dial_lets_the_first_read_win():
+    # Saved by a version that did not keep the dial: nothing to compare with.
+    client = _client()
+    await _restore(client, 22.0, None)
+    assert client.climate_targets.temp_c == 22.0
+    _read(client, 20.0)
+    assert client.climate_targets.temp_c == 20.0
+    _read(client, 20.0)
+    client.store_climate_target_temperature(23.0)
+    _read(client, 20.0)
+    assert client.climate_targets.temp_c == 23.0
+
+
+@pytest.mark.asyncio
+async def test_a_value_set_in_ha_before_the_first_read_is_kept():
+    client = _client()
+    await _restore(client, 22.0, None)
+    client.store_climate_target_temperature(24.0)  # chosen in HA after the restart
+    _read(client, 20.0)
+    assert client.climate_targets.temp_c == 24.0
+
+
+@pytest.mark.asyncio
+async def test_the_poll_feeds_the_dial_read_to_the_targets():
+    client = _client()
+    channel = MagicMock()
+    channel.read = AsyncMock(return_value={"target_temperature": 20.0})
+    channel.nav_read_at = {}
+    channel.request_state = None
+    channel.live_app_version = None
+    channel.source_data_age_s = None
+    client._channel = channel
+    client._source_channel = "adb"
+    client._last_data = None
+    client.climate_targets.app_dial_c = 22.0
+    client.store_climate_target_temperature(22.0)
+    data = await client.get_status(VIN)
+    assert data.target_temperature == 20.0
+    assert client.climate_targets.temp_c == 20.0

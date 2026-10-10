@@ -381,14 +381,24 @@ def _companion_climate_targets(
     return climate_targets_of(coordinator)
 
 
+_APP_DIAL_KEY = "app_dial_c"
+
+
+@dataclass
+class _HeldTemperatureData(NumberExtraStoredData):
+    """The held temperature plus the app dial it was held against."""
+
+    app_dial_c: float | None = None
+
+
 class VagCompanionClimateTemperatureNumber(VagConnectNumber, RestoreNumber):
     """Companion: the temperature the next climate Start applies.
 
     The app's Air Conditioning sheet has no Save; Start applies the dial. So
     this number is a value held in HA (restored across restarts): changing it
-    only stores it, and the climate Start sets the dial to it first. The poll
-    never writes it; what the app's dial shows stays on the read-only Target
-    Temperature sensor. Unavailable while the held mode is window heating only,
+    only stores it, and the climate Start sets the dial to it first. A read
+    that finds the dial changed in the app replaces it, so it follows the app;
+    a read of an unchanged dial leaves a value chosen in HA alone. Unavailable while the held mode is window heating only,
     where the app disables the dial.
     """
 
@@ -403,10 +413,14 @@ class VagCompanionClimateTemperatureNumber(VagConnectNumber, RestoreNumber):
         if targets is None or targets.temp_c is not None:
             return
         value: float | None = None
+        app_dial: float | None = None
         last = await self.async_get_last_number_data()
         if last is not None:
             # Only a held value is stored (see extra_restore_state_data).
             value = float(last.native_value) if last.native_value is not None else None
+            extra = await self.async_get_last_extra_data()
+            raw = extra.as_dict().get(_APP_DIAL_KEY) if extra is not None else None
+            app_dial = float(raw) if isinstance(raw, (int, float)) else None
         else:
             state = await self.async_get_last_state()
             try:
@@ -414,7 +428,9 @@ class VagCompanionClimateTemperatureNumber(VagConnectNumber, RestoreNumber):
             except (TypeError, ValueError):
                 value = None  # "unknown" / "unavailable"
         if value is not None:
-            self.coordinator._cariad_client.store_climate_target_temperature(value)
+            self.coordinator._cariad_client.restore_climate_target_temperature(
+                value, app_dial,
+            )
 
     @property
     def available(self) -> bool:
@@ -434,11 +450,17 @@ class VagCompanionClimateTemperatureNumber(VagConnectNumber, RestoreNumber):
     @property
     def extra_restore_state_data(self) -> NumberExtraStoredData:
         # Restore only a held value, never the dial reading shown in its place:
-        # a restored value would make the next Start move the dial.
+        # a restored value would make the next Start move the dial. The dial
+        # it was held against goes with it, so a dial moved in the app while
+        # HA was down still wins after the restart.
         data = super().extra_restore_state_data
         targets = _companion_climate_targets(self.coordinator)
-        data.native_value = targets.temp_c if targets is not None else None
-        return data
+        return _HeldTemperatureData(
+            data.native_max_value, data.native_min_value, data.native_step,
+            data.native_unit_of_measurement,
+            targets.temp_c if targets is not None else None,
+            targets.app_dial_c if targets is not None else None,
+        )
 
     async def async_set_native_value(self, value: float) -> None:
         # Stores only (the coordinator skips the command path for companion).
