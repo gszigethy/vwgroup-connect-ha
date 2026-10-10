@@ -52,6 +52,10 @@ class AgentRelayTransport(NetworkAdbTransport):
 
     # -- the shell is deliberately absent -------------------------------------
 
+    async def app_resource_paths(self, package: str) -> tuple[str, ...]:
+        """No APK access in the fixed-verb relay protocol."""
+        return ()
+
     async def battery_strings(self, package: str) -> dict[str, set[str]]:
         """The current phone agent cannot expose compiled app resources."""
         return {}

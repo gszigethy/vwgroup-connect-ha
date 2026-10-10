@@ -20,7 +20,7 @@ from custom_components.vag_connect.companion.resources import (
     find_battery_tile,
     read_battery_resources,
 )
-from custom_components.vag_connect.companion.screen import parse_ui_dump, read_fields, read_selectors
+from custom_components.vag_connect.companion.screen import find_node_for, parse_ui_dump, read_fields, read_selectors
 from custom_components.vag_connect.companion.transport import CompanionTransportError
 from custom_components.vag_connect.switch import VagChargingSwitch
 
@@ -181,6 +181,37 @@ async def test_start_walks_to_detail_and_returns_without_claiming_vehicle_succes
     with pytest.raises(CompanionWriteBlocked, match="between"):
         await channel.do_action("start_charging")
     assert len(phone.taps) == 3
+
+
+@pytest.mark.asyncio
+async def test_command_started_on_the_sheet_closes_it():
+    # Review B12: a command begun with the sheet open leaves it closed. Since
+    # every command starts from the overview (core C2), the gate closes the
+    # sheet first, the walk reopens it from the tile, and the command closes
+    # it again; the Start tap happens exactly once.
+    phone = Phone()
+    phone.screen = phone.detail
+    channel = CompanionChannel(phone, VW, time_fn=time.monotonic)
+    sheet = parse_ui_dump(phone.detail)
+    close = next(n for n in (find_node_for(sheet, s) for s in VW.up_controls) if n is not None)
+    start = find_battery_control(sheet, STRINGS, "start_charging")
+    assert close.tap_point != start.tap_point
+    overview = dump("gte_overview")
+
+    async def tap(x, y):
+        phone.taps.append((x, y))
+        if phone.screen == phone.detail:
+            if (x, y) == close.tap_point:  # only the sheet's own Close leaves it
+                phone.screen = overview
+        else:  # the range tile opens the sheet
+            phone.screen = phone.detail
+
+    phone.tap = tap
+    await channel.do_action("start_charging")
+    assert phone.taps[0] == close.tap_point
+    assert phone.taps[2:] == [start.tap_point, close.tap_point]
+    assert phone.taps.count(start.tap_point) == 1
+    assert phone.screen == overview
 
 
 @pytest.mark.asyncio

@@ -56,6 +56,12 @@ def climate_targets_of(coordinator: Any) -> ClimateTargets | None:
     return targets if isinstance(targets, ClimateTargets) else None
 
 
+# start_climate_control fields the Air Conditioning sheet has no control for.
+_RICH_CLIMATE_ONLY = (
+    "glass_heating", "seat_fl", "seat_fr", "seat_rl", "seat_rr",
+    "climatisation_at_unlock", "climatisation_mode",
+)
+
 # VehicleData flags that default to False; only the opt-in departure-times
 # read supplies them.
 _UNREAD_FLAGS = (
@@ -142,6 +148,12 @@ class CompanionClient:
         self._eu_portal = None
         self._tokens = None
 
+    async def set_transport_flags(self, *, wake_sleep: bool, close_app: bool) -> None:
+        """Apply the wake/sleep and close-app options live, between screen uses."""
+        async with self._channel._screen_lock:
+            self._channel._t._wake_sleep = bool(wake_sleep)
+            self._channel._t._close_app = bool(close_app)
+
     # -- token/portal no-ops the coordinator may call directly ----------------
 
     def set_persisted_tokens(self, _tokens: Any) -> None:
@@ -181,6 +193,7 @@ class CompanionClient:
         # Unknown keeps the entities hidden; a read overwrites them below.
         for key in _UNREAD_FLAGS:
             setattr(data, key, None)
+        data.companion_nav_read_at = getattr(self._channel, "nav_read_at", None) or {}
         data.source_channel = self._source_channel
         # #968 — what the vehicle sync flow last found, kept with every read.
         data.companion_request_state = getattr(self._channel, "request_state", None)
@@ -205,6 +218,7 @@ class CompanionClient:
         # A companion read is a two-way-capable source only when writes are on;
         # expose that so the entity layer can reflect it.
         data.companion_writes_enabled = self._channel.writes_enabled
+        data.companion_app_version = getattr(self._channel, "live_app_version", None)
         data.companion_source_age_s = self._channel.source_data_age_s
         self._last_data = data
         return data
@@ -311,10 +325,28 @@ class CompanionClient:
     async def command_start_climate(self, vin: str, *_a: Any, **_k: Any) -> None:
         await self._climate_command("command_start_climate", self._start_with_targets)
 
-    async def command_start_climate_control(self, vin: str, *_a: Any, **_k: Any) -> None:
-        # The rich payload (seats, zones) has no sheet control; start with the
-        # mode and temperature held in HA, like the plain start.
-        await self._climate_command("command_start_climate", self._start_with_targets)
+    async def command_start_climate_control(
+        self, vin: str, *_a: Any, temp_c: float | None = None, **kwargs: Any
+    ) -> None:
+        from ..cariad.exceptions import VehicleCommandError  # noqa: PLC0415
+
+        # The sheet has a mode, a dial and Start: the rest of the rich payload
+        # has no control there, so a call that sets any of it is refused.
+        unsupported = [key for key in _RICH_CLIMATE_ONLY if kwargs.get(key) is not None]
+        if unsupported:
+            raise VehicleCommandError(
+                "command_start_climate_control",
+                f"the companion (ADB) channel cannot set {', '.join(unsupported)}; "
+                "nothing was sent",
+            )
+
+        async def run() -> None:
+            # temp_c becomes the held temperature, which Start then applies.
+            if temp_c is not None:
+                self.store_climate_target_temperature(float(temp_c))
+            await self._start_with_targets()
+
+        await self._climate_command("command_start_climate", run)
 
     async def command_stop_climate(self, vin: str, *_a: Any, **_k: Any) -> None:
         await self._climate_command("command_stop_climate", self._climate.stop)
@@ -502,6 +534,16 @@ class CompanionClient:
     def restore_rate_limit(self, until: float) -> None:
         """Re-apply a persisted rate-limit backoff at setup."""
         self._channel.restore_rate_limit(until)
+
+    @property
+    def companion_last_write_at(self) -> float:
+        """Wall-clock time of the last command tap (0 = none). Persisted with
+        the backoff so the gap between commands survives a restart."""
+        return self._channel.last_write_at
+
+    def restore_last_write(self, at: float) -> None:
+        """Re-apply a persisted last command time at setup."""
+        self._channel.restore_last_write(at)
 
     def reset_cooldown(self) -> None:
         """Clear a stuck failure/rate-limit backoff (user-initiated retry)."""
