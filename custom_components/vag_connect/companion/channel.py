@@ -122,6 +122,7 @@ _SETTLE_MAX_DUMPS = 2              # dumps spent waiting for a Compose screen to
                                    # otherwise spend half a minute dumping.
 _SLIDER_TRIES = 3                  # charge-limit taps, each read back, before
                                    # giving up without saving
+_SLIDER_READS = 3                  # dumps per slider tap to see it redrawn
 _SAVE_POLLS = 15                   # dumps to wait for the app to confirm a save
 _SYNC_SCROLLS = 3                  # swipes down vehicle Settings to reach
                                    # "Synchronise now" (one is enough on 4.3.2)
@@ -979,6 +980,7 @@ class CompanionChannel:
         spec, nodes = await self._command_gate(action)
         walked = 0
         nav = next((n for n in self._preset.nav_reads if n.name == spec.nav_read), None)
+        on_detail = False
         try:
             if spec.nav_read:
                 if nav is None:
@@ -1025,7 +1027,10 @@ class CompanionChannel:
             raise CompanionWriteBlocked(str(err)) from err
         finally:
             if nav is not None:
-                await self._return_to_overview(min(walked, nav.back_presses))
+                # A command started on the sheet still closes it (review B12).
+                await self._return_to_overview(
+                    min(max(walked, int(on_detail)), nav.back_presses)
+                )
 
     async def set_charge_target(self, target: float) -> int:
         """Set the vehicle Settings charge limit; returns the value saved.
@@ -1044,6 +1049,10 @@ class CompanionChannel:
         nav = next((n for n in self._preset.nav_reads if n.name == spec.nav_read), None)
         if nav is None:
             raise CompanionWriteBlocked("the vehicle Settings path is not mapped")
+        # The saved value while a slider position may be pending; None once
+        # there is nothing to discard (not moved yet, or Save was pressed).
+        unsaved_from: int | None = None
+        leave = True
         try:
             row = find_charge_target_row(nodes)
             if row is None:
@@ -1058,31 +1067,73 @@ class CompanionChannel:
                 )
             if row.current == target:
                 return target  # nothing to change, nothing sent
+            unsaved_from = row.current
             await self._move_charge_slider(row, target)
-            # Save is the one tap that sends. Stamp first, so a transport that
-            # fails after delivery still blocks an immediate repeat.
+            # Save is the one tap that sends, so the dump right before it must
+            # show exactly the target (review B3). Stamp first, so a transport
+            # that fails after delivery still blocks an immediate repeat.
             nodes, _cleared = await self._dump_and_clear_overlays()
+            ready = find_charge_target_row(nodes)
+            if ready is None or ready.current != target:
+                shown = "no charge limit" if ready is None else f"{ready.current} %"
+                raise CompanionWriteBlocked(
+                    f"the app shows {shown} before Save, not {target} %; nothing was saved"
+                )
             save = find_save_button(nodes)
             if save is None or save.tap_point is None:
                 raise CompanionWriteBlocked("the app did not offer Save for the new limit")
+            unsaved_from = None
             self._last_write_at = self._now()
             self._nav_cache.pop("target_soc", None)
             await self._t.tap(*save.tap_point)
             await self._await_charge_target_saved(target)
             self._nav_cache["target_soc"] = target
             return target
-        except CompanionTransportError as err:
-            raise CompanionWriteBlocked(str(err)) from err
+        except (CompanionWriteBlocked, CompanionTransportError) as err:
+            if unsaved_from is not None and not await self._discard_charge_target(unsaved_from):
+                # Cancel did not take: another press of the same control
+                # proves nothing more, so tap nothing else.
+                leave = False
+                raise CompanionWriteBlocked(
+                    f"{err}; the app did not confirm discarding the change, check it in the app"
+                ) from err
+            if isinstance(err, CompanionTransportError):
+                raise CompanionWriteBlocked(str(err)) from err
+            raise
         finally:
             # The app's own toolbar button: Back after a save, and Cancel (which
             # discards the unsaved position) if anything stopped us before it.
-            await self._return_to_overview(2)
+            if leave:
+                await self._return_to_overview(2)
 
     async def _move_charge_slider(self, row: ChargeTargetRow, target: int) -> None:
-        """Tap the track until the row reads ``target``; a tap sends nothing."""
+        """Tap the track until the row reads ``target``; a tap sends nothing.
+
+        A dump can predate the tap's redraw (review B3), so a reading counts
+        only once it differs from the value before the tap, or two dumps in a
+        row agree. A tap that changed nothing is never corrected from.
+        """
         aim = target
         for _ in range(_SLIDER_TRIES):
+            before = row.current
             await self._t.tap(*row.tap_point(aim))
+            seen = await self._read_slider(before)
+            if seen is None or seen.current == before:
+                break
+            if seen.current == target:
+                return
+            # Correct by what the slider actually did; the steps are wide, so
+            # this only matters if the layout drifted.
+            aim = snap_target(aim + (target - seen.current))
+            row = seen
+        raise CompanionWriteBlocked(
+            f"the charge limit slider did not reach {target} %; nothing was saved"
+        )
+
+    async def _read_slider(self, before: int) -> ChargeTargetRow | None:
+        """The row once it is redrawn after a tap; None if that is not proven."""
+        previous: int | None = None
+        for _ in range(_SLIDER_READS):
             nodes, cleared = await self._dump_and_clear_overlays()
             seen = find_charge_target_row(nodes)
             if seen is None and not cleared:
@@ -1103,15 +1154,33 @@ class CompanionChannel:
                     raise CompanionWriteBlocked(
                         "the app showed a note over the charge limit that did not close"
                     )
-            if seen.current == target:
-                return
-            # Correct by what the slider actually did; the steps are wide, so
-            # this only matters if the layout drifted.
-            aim = snap_target(aim + (target - seen.current))
-            row = seen
-        raise CompanionWriteBlocked(
-            f"the charge limit slider did not reach {target} %; nothing was saved"
-        )
+            if seen.current != before or seen.current == previous:
+                return seen
+            previous = seen.current
+        return None
+
+    async def _discard_charge_target(self, saved: int) -> bool:
+        """Cancel a pending slider position with the app's own toolbar X.
+
+        True once the row shows ``saved`` again with no Save pending. Taps
+        only when Save is pending, and then only the cancel the walk back
+        would have pressed anyway.
+        """
+        try:
+            nodes, _cleared = await self._dump_and_clear_overlays()
+            if find_save_button(nodes) is not None:
+                cancel = next((
+                    node for node in (find_node_for(nodes, s) for s in self._preset.up_controls)
+                    if node is not None and node.tap_point is not None
+                ), None)
+                if cancel is None or cancel.tap_point is None:
+                    return False
+                await self._t.tap(*cancel.tap_point)
+                nodes = await self._await_screen(lambda n: find_save_button(n) is None)
+            row = find_charge_target_row(nodes)
+            return row is not None and row.current == saved and find_save_button(nodes) is None
+        except CompanionTransportError:
+            return False
 
     async def _await_charge_target_saved(self, target: int) -> None:
         """Wait for the app to finish sending; fail unless it confirms."""
