@@ -42,6 +42,29 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.12.0-4] - 2026-10-10 — Companion: detail screens read when they can have changed
+
+> Fork pre-release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.12.0** plus fork release **4**, on top of 4.12.0-3.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a pre-release. Turn on *Show beta versions* for this repository, select `v4.12.0-4`,
+> download, and restart Home Assistant.
+
+### Changed
+- **Companion: driving data, parking position and Vehicle Health are no longer read on every poll.** Their values change only when the car sends new data, so a poll that cannot have changed them keeps the last reading. (#80)
+  - Driving data and the parking position are read when a trip has ended (the overview's Driving data tile changed). They are also read when the car sent new data and the range dropped since the last read, which covers two identical trips.
+  - Vehicle Health (odometer, service, warnings) is read when the car sent new data. That counts once the *Synchronised … ago* time has moved and then stood still for 10 minutes, so a car still sending data on the move is read once it has parked.
+  - All three are also read on the first poll after a start, when their switch is turned on, every 12 hours, on **Refresh data** and after **Force vehicle refresh**. Driving data and the parking position are also read every 6 hours while the Driving data tile is not on the overview.
+  - The read switches work as before. Vehicle Settings (the charge limit) is still read on every poll.
+- **Companion: entity names no longer start with "ADB".** The tag now goes only into the entity ids of new companion entities (`sensor.tiguan_adb_battery_level`, named "Tiguan Battery Level"). Existing entity ids are unchanged. (#81)
+
+### Fixed
+- **Companion: Last vehicle sync no longer jumps back after a restart or reload.** The time only moved forward within a run; a restart started again from the coarse earliest time the app's rounded "… ago" allows. It now starts from the last known time. (#79)
+
+### Not yet confirmed on a live car (app 4.6.4)
+- That the car keeps sending data while driving, so the detail reads wait until it has parked.
+
 ## [4.12.0-3] - 2026-10-10 — Companion: the climate dial moves by drag
 
 > Fork pre-release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
