@@ -282,6 +282,7 @@ class ClimateController:
             raise self._blocked("the climate sheet path is not mapped")
         self._home = False
         walked = 0
+        trips = self._ch._limit_trips
         try:
             nodes, cleared = await self._ch._dump_and_clear_overlays()
             if not cleared:
@@ -302,6 +303,10 @@ class ClimateController:
             if not self._home:
                 # The picker adds a level; the app's own close control is used.
                 await self._ch._return_to_overview(max(walked, 1) + 1)
+        if self._ch._limit_trips != trips:
+            # The limit alert arrived late and the walk back closed it: the
+            # car refused the request after all.
+            raise self._blocked(_LIMIT_REASON)
 
     async def _screen(self, done: Callable[[list[UiNode]], bool]) -> list[UiNode]:
         """Dump until the screen a tap should produce is there (bounded)."""
@@ -590,7 +595,8 @@ class ClimateController:
         return self._blocked(f"the app did not show {instead_of}")
 
     def _mark_write(self) -> None:
-        self._ch._last_write_at = self._ch._now()
+        # Through the channel, so the wall-clock time is persisted too.
+        self._ch._stamp_write()
 
     @staticmethod
     def _blocked(reason: str) -> Exception:
