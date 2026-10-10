@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from custom_components.vag_connect.companion.channel import (
+    LIMIT_POWER_BUDGET,
     CompanionChannel,
     CompanionWriteBlocked,
 )
@@ -172,6 +173,10 @@ async def test_sync_probe_does_not_lift_a_pause_the_cleanup_confirms():
     phone = LateAlertSyncPhone(after_dumps=2)
     ch = CompanionChannel(phone, VW, time_fn=time.monotonic)
     ch.restore_rate_limit(time.time() + 3600)
+    # Only a power-budget pause lets the sync probe through, and only once its
+    # probe is due (a restored pause alone is never probed).
+    ch._limit_kind = LIMIT_POWER_BUDGET
+    ch._limit_probe_at = 0.0
     with pytest.raises(CompanionWriteBlocked, match="daily request budget"):
         await ch.sync_vehicle()
     assert ch._is_rate_limited() and ch.request_state == "restricted"

@@ -2058,7 +2058,7 @@
         "name": "Kyselyväli"
       },
       "app_sync_interval": {
-        "name": "Ajoneuvon synkronointiväli"
+        "name": "Ajoneuvon synkronointiväli (herättää auton)"
       }
     },
     "button": {
@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "Sovellus ei synkronoinut autoa. Jokainen synkronointi herättää auton, joten se hylätään, kun komennot ovat tauolla tai liian pian edellisen komennon jälkeen. Katso anturi Sovelluksen pyyntöjen tila."
+    },
     "companion_app_version_unverified": {
       "message": "Komennot ovat pois päältä: puhelimen sovellus on versio {version}, jota ei ole vielä varmennettu komennoille. Komennot, tallennukset ja synkronoinnit pysyvät pois päältä, kunnes tämä versio on varmennettu. Ajoneuvon tiedot päivittyvät edelleen."
     },

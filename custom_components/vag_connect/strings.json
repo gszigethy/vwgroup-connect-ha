@@ -2091,7 +2091,7 @@
         "name": "Poll interval"
       },
       "app_sync_interval": {
-        "name": "Vehicle sync interval"
+        "name": "Vehicle sync interval (wakes the car)"
       }
     },
     "button": {
@@ -2567,6 +2567,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "The app did not sync the car. Each sync wakes the car, so it is refused while commands are paused or too soon after the last command. Check the App request status sensor."
+    },
     "companion_app_version_unverified": {
       "message": "Commands are off: the app on the phone is version {version}, which has not been verified for commands yet. Commands, saves and syncs stay off until this version is verified. Vehicle data still updates."
     },

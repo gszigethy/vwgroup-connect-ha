@@ -2058,7 +2058,7 @@
         "name": "Interval dotazování"
       },
       "app_sync_interval": {
-        "name": "Interval synchronizace vozidla"
+        "name": "Interval synchronizace vozidla (probouzí vozidlo)"
       }
     },
     "button": {
@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "Aplikace vozidlo nesynchronizovala. Každá synchronizace probouzí vozidlo, proto je odmítnuta, když jsou příkazy pozastaveny nebo příliš brzy po posledním příkazu. Zkontrolujte senzor Stav požadavků aplikace."
+    },
     "companion_app_version_unverified": {
       "message": "Příkazy jsou vypnuté: aplikace v telefonu má verzi {version}, která zatím nebyla ověřena pro příkazy. Příkazy, ukládání a synchronizace zůstanou vypnuté, dokud nebude tato verze ověřena. Data vozidla se dál aktualizují."
     },

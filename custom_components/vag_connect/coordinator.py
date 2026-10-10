@@ -8292,7 +8292,9 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         to receive it. Wakes at least once a minute so a slider change applies
         without a reload. The first sync waits a full interval, so an HA
         restart never wakes the car on its own, and turning the slider from 0
-        back on starts a fresh interval.
+        back on starts a fresh interval. The interval counts from the last
+        sync attempt, the Force vehicle refresh button's included, so the two
+        never wake the car minutes apart.
 
         Every attempt is followed by a screen read, so the App request status
         sensor shows its outcome: after an accepted sync once the car has had
@@ -8300,18 +8302,21 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         """
         import time  # noqa: PLC0415
 
-        last = time.monotonic()
+        self._companion_last_sync_mono = time.monotonic()
         while self._started:
             interval = self.companion_app_sync_interval_s()
             if interval <= 0:
-                last = time.monotonic()
+                self._companion_last_sync_mono = time.monotonic()
                 await asyncio.sleep(60.0)
                 continue
-            remaining = interval - (time.monotonic() - last)
+            remaining = interval - (time.monotonic() - self._companion_last_sync_mono)
             if remaining > 0:
                 await asyncio.sleep(min(remaining, 60.0))
                 continue
-            last = time.monotonic()
+            # Stamp here too: a skipped attempt (Read-only Mode, no sync
+            # command) returns before the sync stamps the clock, and must
+            # still wait a full interval instead of spinning the event loop.
+            self._companion_last_sync_mono = time.monotonic()
             outcome = await self.async_companion_sync_vehicle()
             if outcome is None:
                 continue
@@ -8336,6 +8341,11 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         supports = getattr(client, "supports_command", None)
         if sync is None or not callable(supports) or not supports("command_sync_vehicle"):
             return None
+        import time  # noqa: PLC0415
+
+        # One clock for the loop and the button: every attempt, tapped or
+        # refused, restarts the sync interval.
+        self._companion_last_sync_mono = time.monotonic()
         try:
             started = await sync(getattr(client, "_vin", ""))
         except Exception as err:  # noqa: BLE001 - a background sync must not die
@@ -8372,7 +8382,8 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         await self.async_request_refresh()
         if outcome is False:
             raise HomeAssistantError(
-                "The app did not sync the car; see the App request status sensor"
+                translation_domain=DOMAIN,
+                translation_key="companion_sync_refused",
             )
 
     async def _companion_sync_readback(self) -> None:

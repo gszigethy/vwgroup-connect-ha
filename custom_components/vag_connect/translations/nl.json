@@ -2058,7 +2058,7 @@
         "name": "Pollinterval"
       },
       "app_sync_interval": {
-        "name": "Synchronisatie-interval voertuig"
+        "name": "Synchronisatie-interval voertuig (wekt het voertuig)"
       }
     },
     "button": {
@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "De app heeft het voertuig niet gesynchroniseerd. Elke synchronisatie wekt het voertuig, dus die wordt geweigerd zolang opdrachten gepauzeerd zijn of te kort na de vorige opdracht. Bekijk de sensor Status app-verzoeken."
+    },
     "companion_app_version_unverified": {
       "message": "Opdrachten staan uit: de app op de telefoon is versie {version}, die nog niet is geverifieerd voor opdrachten. Opdrachten, opslaan en synchroniseren blijven uit totdat deze versie is geverifieerd. Voertuiggegevens worden nog steeds bijgewerkt."
     },

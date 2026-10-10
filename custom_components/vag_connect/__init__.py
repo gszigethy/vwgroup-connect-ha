@@ -228,8 +228,35 @@ def _unregister_llm_api(hass: HomeAssistant) -> None:
         unregister()
 
 
+def _pin_companion_app_sync_off(hass: HomeAssistant, entry: VagConnectConfigEntry) -> None:
+    """#968 — the companion's "Synchronise now" wakes the car, so it is opt-in.
+
+    A companion entry with no stored sync interval (in data or options) gets an
+    explicit 0 (off), once: after that the key is there, and a value the user
+    set is never touched. Other channels have no such setting.
+    """
+    from .const import (  # noqa: PLC0415
+        COMPANION_APP_SYNC_OFF,
+        CONF_COMPANION_APP_SYNC_INTERVAL,
+        CONF_STRATEGY,
+        STRATEGY_COMPANION_ADB,
+    )
+
+    if entry.data.get(CONF_STRATEGY) != STRATEGY_COMPANION_ADB:
+        return
+    if CONF_COMPANION_APP_SYNC_INTERVAL in entry.data or CONF_COMPANION_APP_SYNC_INTERVAL in (
+        entry.options or {}
+    ):
+        return
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, CONF_COMPANION_APP_SYNC_INTERVAL: COMPANION_APP_SYNC_OFF},
+    )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: VagConnectConfigEntry) -> bool:
     """Set up a VW Group Connect config entry."""
+    # Before the update listener is attached, so this write never reloads.
+    _pin_companion_app_sync_off(hass, entry)
     coordinator = VagConnectCoordinator(hass, entry)
 
     try:

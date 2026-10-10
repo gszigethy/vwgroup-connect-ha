@@ -2058,7 +2058,7 @@
         "name": "Avläsningsintervall"
       },
       "app_sync_interval": {
-        "name": "Intervall för fordonssynkronisering"
+        "name": "Intervall för fordonssynkronisering (väcker bilen)"
       }
     },
     "button": {
@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "Appen synkroniserade inte bilen. Varje synkronisering väcker bilen, så den nekas medan kommandon är pausade eller för kort tid efter förra kommandot. Se sensorn Appens förfrågningsstatus."
+    },
     "companion_app_version_unverified": {
       "message": "Kommandon är avstängda: appen på telefonen har version {version}, som ännu inte har verifierats för kommandon. Kommandon, sparningar och synkroniseringar förblir avstängda tills den här versionen har verifierats. Fordonsdata uppdateras fortfarande."
     },

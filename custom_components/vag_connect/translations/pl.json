@@ -2058,7 +2058,7 @@
         "name": "Interwał odpytywania"
       },
       "app_sync_interval": {
-        "name": "Interwał synchronizacji pojazdu"
+        "name": "Interwał synchronizacji pojazdu (wybudza pojazd)"
       }
     },
     "button": {
@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "Aplikacja nie zsynchronizowała pojazdu. Każda synchronizacja wybudza pojazd, więc jest odrzucana, gdy polecenia są wstrzymane lub zbyt wcześnie po ostatnim poleceniu. Sprawdź czujnik Stan żądań aplikacji."
+    },
     "companion_app_version_unverified": {
       "message": "Polecenia są wyłączone: aplikacja na telefonie ma wersję {version}, która nie została jeszcze zweryfikowana dla poleceń. Polecenia, zapisywanie i synchronizacja pozostaną wyłączone, dopóki ta wersja nie zostanie zweryfikowana. Dane pojazdu są nadal aktualizowane."
     },

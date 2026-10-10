@@ -2058,7 +2058,7 @@
         "name": "Intervalo de sondeo"
       },
       "app_sync_interval": {
-        "name": "Intervalo de sincronización del vehículo"
+        "name": "Intervalo de sincronización del vehículo (despierta el vehículo)"
       }
     },
     "button": {
@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "La app no sincronizó el vehículo. Cada sincronización despierta el vehículo, por lo que se rechaza mientras los comandos están en pausa o demasiado pronto tras el último comando. Consulta el sensor Estado de solicitudes de la app."
+    },
     "companion_app_version_unverified": {
       "message": "Los comandos están desactivados: la aplicación del teléfono es la versión {version}, que aún no se ha verificado para comandos. Los comandos, guardados y sincronizaciones seguirán desactivados hasta que se verifique esta versión. Los datos del vehículo se siguen actualizando."
     },

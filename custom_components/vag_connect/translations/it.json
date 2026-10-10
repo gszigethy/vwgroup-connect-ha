@@ -2058,7 +2058,7 @@
         "name": "Intervallo di polling"
       },
       "app_sync_interval": {
-        "name": "Intervallo di sincronizzazione del veicolo"
+        "name": "Intervallo di sincronizzazione del veicolo (sveglia il veicolo)"
       }
     },
     "button": {
@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "L'app non ha sincronizzato il veicolo. Ogni sincronizzazione sveglia il veicolo, quindi viene rifiutata mentre i comandi sono in pausa o troppo presto dopo l'ultimo comando. Controlla il sensore Stato richieste dell'app."
+    },
     "companion_app_version_unverified": {
       "message": "I comandi sono disattivati: l'app sul telefono è la versione {version}, che non è ancora stata verificata per i comandi. Comandi, salvataggi e sincronizzazioni restano disattivati finché questa versione non viene verificata. I dati del veicolo continuano ad aggiornarsi."
     },

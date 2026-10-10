@@ -2058,7 +2058,7 @@
         "name": "Pollingsinterval"
       },
       "app_sync_interval": {
-        "name": "Interval for synkronisering af bil"
+        "name": "Interval for synkronisering af bil (vækker bilen)"
       }
     },
     "button": {
@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "Appen synkroniserede ikke bilen. Hver synkronisering vækker bilen, så den afvises, mens kommandoer er sat på pause, eller for kort tid efter den sidste kommando. Se sensoren Appens anmodningsstatus."
+    },
     "companion_app_version_unverified": {
       "message": "Kommandoer er slået fra: appen på telefonen er version {version}, som endnu ikke er verificeret til kommandoer. Kommandoer, gemning og synkronisering forbliver slået fra, indtil denne version er verificeret. Køretøjsdata opdateres stadig."
     },

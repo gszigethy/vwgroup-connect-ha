@@ -100,11 +100,15 @@ CONF_COMPANION_READ_DRIVING_DATA = "companion_read_driving_data"
 # app's vehicle Settings → "Synchronise now". Separate from CONF_SCAN_INTERVAL,
 # which only re-reads the app screen: a sync wakes the car, so it runs on its
 # own, slower clock. Minutes, on the settings device's slider; 0 turns it off.
-# The 180 min default matches the app's own automatic wake-up spacing (3 h).
+# Off by default and opt-in (each sync wakes the car and spends its request
+# budget); setup writes 0 into companion entries that have no value yet. The
+# 60 min floor caps an opted-in sync at 24 wakes a day (the old 5 min floor
+# allowed 288), while still allowing hourly data on top of the app's own
+# automatic wake-up every 3 h.
 CONF_COMPANION_APP_SYNC_INTERVAL     = "companion_app_sync_interval"
-DEFAULT_COMPANION_APP_SYNC_INTERVAL  = 180
 COMPANION_APP_SYNC_OFF               = 0
-MIN_COMPANION_APP_SYNC_INTERVAL      = 5
+DEFAULT_COMPANION_APP_SYNC_INTERVAL  = COMPANION_APP_SYNC_OFF
+MIN_COMPANION_APP_SYNC_INTERVAL      = 60
 MAX_COMPANION_APP_SYNC_INTERVAL      = 240
 COMPANION_APP_SYNC_STEP              = 5
 # v2.17.5 (#759) — optional per-VIN S-PIN overrides: {vin: spin}. When a
