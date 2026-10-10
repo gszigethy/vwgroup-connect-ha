@@ -27,7 +27,9 @@ def _sensor(companion: bool) -> VagConnectSensor:
     coord.data = {VIN: {}}
     sensor = VagConnectSensor(coord, VIN, SOC)
     key = f"component.vag_connect.entity.sensor.{SOC.translation_key}.name"
-    sensor.platform = SimpleNamespace(
+    # Home Assistant 2026.10 reads translations from platform_data, older
+    # releases from platform: give both the same fake.
+    sensor.platform = sensor.platform_data = SimpleNamespace(
         platform_name="vag_connect", domain="sensor",
         platform_translations={key: "Battery Level"},
         object_id_platform_translations={key: "Battery Level"},
