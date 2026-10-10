@@ -3103,6 +3103,11 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         only ever fill gaps."""
         from .const import CONF_WEBSITE_AUTHPROXY  # noqa: PLC0415
         data = self.entry.data
+        if self.is_companion():
+            # The companion reads the brand's app, not its cloud: name the
+            # transport (ADB / relay) the client reports, never the brand.
+            token = getattr(self._cariad_client, "_source_channel", None)
+            return token if isinstance(token, str) and token else "companion_adb"
         if data.get(CONF_WEBSITE_AUTHPROXY):
             return "website_authproxy"
         dag = data.get("dag_initial_tokens") or {}
