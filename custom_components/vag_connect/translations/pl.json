@@ -2534,6 +2534,9 @@
     }
   },
   "exceptions": {
+    "companion_limit_language_unavailable": {
+      "message": "Zapis i synchronizacja są wyłączone: zasoby tłumaczeń aplikacji są niedostępne i nie można potwierdzić, że bieżący język interfejsu to angielski, niemiecki lub hiszpański. Odczyt danych nadal działa."
+    },
     "companion_sync_refused": {
       "message": "Aplikacja nie zsynchronizowała pojazdu. Każda synchronizacja wybudza pojazd, więc jest odrzucana, gdy polecenia są wstrzymane lub zbyt wcześnie po ostatnim poleceniu. Sprawdź czujnik Stan żądań aplikacji."
     },

@@ -2569,6 +2569,9 @@
     }
   },
   "exceptions": {
+    "companion_limit_language_unavailable": {
+      "message": "Schreibzugriffe und Synchronisierung sind deaktiviert: Die Übersetzungsressourcen der App sind nicht verfügbar, und es lässt sich nicht bestätigen, dass die Benutzeroberfläche derzeit auf Englisch, Deutsch oder Spanisch eingestellt ist. Daten können weiterhin gelesen werden."
+    },
     "companion_sync_refused": {
       "message": "Die App hat das Fahrzeug nicht synchronisiert. Jede Synchronisierung weckt das Fahrzeug, daher wird sie abgelehnt, solange Befehle pausiert sind oder der letzte Befehl zu kurz zurückliegt. Siehe den Sensor App-Anfragestatus."
     },

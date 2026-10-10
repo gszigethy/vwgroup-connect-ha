@@ -2534,6 +2534,9 @@
     }
   },
   "exceptions": {
+    "companion_limit_language_unavailable": {
+      "message": "Writes and synchronisation are disabled: app translation resources are unavailable and the current UI language cannot be confirmed as English, German or Spanish. Reads continue."
+    },
     "companion_sync_refused": {
       "message": "The app did not sync the car. Each sync wakes the car, so it is refused while commands are paused or too soon after the last command. Check the App request status sensor."
     },

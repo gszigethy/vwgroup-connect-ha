@@ -2534,6 +2534,9 @@
     }
   },
   "exceptions": {
+    "companion_limit_language_unavailable": {
+      "message": "Zápis a synchronizace jsou zakázány: překladové prostředky aplikace nejsou k dispozici a nelze ověřit, zda je aktuální jazyk uživatelského rozhraní angličtina, němčina nebo španělština. Čtení dat nadále funguje."
+    },
     "companion_sync_refused": {
       "message": "Aplikace vozidlo nesynchronizovala. Každá synchronizace probouzí vozidlo, proto je odmítnuta, když jsou příkazy pozastaveny nebo příliš brzy po posledním příkazu. Zkontrolujte senzor Stav požadavků aplikace."
     },

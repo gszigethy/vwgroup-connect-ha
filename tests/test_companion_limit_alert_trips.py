@@ -40,7 +40,7 @@ def _d(body: str) -> str:
 
 
 OVERVIEW = _d(
-    '<node resource-id="rangeTile" content-desc="Battery range 300 km" text="" class="V" '
+    '<node resource-id="rangeTile" content-desc="Range overview. Battery range: 300 kilometres. Open details" text="" class="V" '
     'clickable="true" bounds="[0,100][500,300]" />'
 )
 SHEET = _d(

@@ -2534,6 +2534,9 @@
     }
   },
   "exceptions": {
+    "companion_limit_language_unavailable": {
+      "message": "L’écriture et la synchronisation sont désactivées : les ressources de traduction de l’application sont indisponibles et il est impossible de confirmer que la langue actuelle de l’interface est l’anglais, l’allemand ou l’espagnol. La lecture des données reste possible."
+    },
     "companion_sync_refused": {
       "message": "L'app n'a pas synchronisé le véhicule. Chaque synchronisation réveille le véhicule ; elle est donc refusée tant que les commandes sont en pause ou trop tôt après la dernière commande. Consultez le capteur État des requêtes de l'app."
     },

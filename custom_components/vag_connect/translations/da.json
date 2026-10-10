@@ -2534,6 +2534,9 @@
     }
   },
   "exceptions": {
+    "companion_limit_language_unavailable": {
+      "message": "Skrivning og synkronisering er deaktiveret: appens oversættelsesressourcer er ikke tilgængelige, og det kan ikke bekræftes, at brugergrænsefladens aktuelle sprog er engelsk, tysk eller spansk. Data kan stadig læses."
+    },
     "companion_sync_refused": {
       "message": "Appen synkroniserede ikke bilen. Hver synkronisering vækker bilen, så den afvises, mens kommandoer er sat på pause, eller for kort tid efter den sidste kommando. Se sensoren Appens anmodningsstatus."
     },

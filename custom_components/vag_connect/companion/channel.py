@@ -254,8 +254,12 @@ class CompanionChannel:
         self._nav_only: set[str] = set()
         self._screen_lock = asyncio.Lock()
         self._app_strings: dict[str, set[str]] = {}
-        self._strings_version: str | None = None
-        self._strings_at: float | None = None
+        # (app version, split list) the current table was successfully read for.
+        self._strings_ok_key: tuple[str | None, tuple[str, ...]] | None = None
+        self._strings_try_key: tuple[str | None, tuple[str, ...]] | None = None
+        self._strings_fails = 0
+        self._strings_retry_at = 0.0
+        self._strings_paths_now: tuple[str, ...] | None = None
 
     @property
     def preset(self) -> BrandPreset:
@@ -1084,23 +1088,99 @@ class CompanionChannel:
         version this preset was verified against.
 
         Called on every read and command, including before the first poll.
-        Resource labels refresh on a version change or once an hour so newly
-        installed language splits can be picked up without restarting HA.
+        Resource labels refresh only when the installed version or split list
+        changes. A failed extraction leaves the previous table intact.
         """
         self._live_app_version = await self._t.current_app_version(self._preset.package)
         self._version_ok = self._decide_version_ok(self._live_app_version)
         getter = getattr(self._t, "battery_strings", None)
-        if self._preset.brand == "volkswagen" and getter is not None and (
-            self._strings_at is None or self._strings_version != self._live_app_version
-            or self._now() - self._strings_at >= 3600
-        ):
-            self._strings_at = self._now()
-            self._strings_version = self._live_app_version
-            self._app_strings = {}
-            try:
-                self._app_strings = await getter(self._preset.package)
-            except CompanionTransportError:
-                _LOGGER.debug("companion: app translation resources unavailable")
+        if self._preset.brand != "volkswagen" or getter is None:
+            return
+        self._strings_paths_now = None  # unknown until the split list is read
+        try:
+            path_getter = getattr(self._t, "app_resource_paths", None)
+            paths = await path_getter(self._preset.package) if path_getter else ()
+            self._strings_paths_now = paths
+            key = (self._live_app_version, paths)
+            if self._strings_ok_key == key:
+                return
+            if key != self._strings_try_key:
+                self._strings_try_key, self._strings_fails = key, 0
+            elif self._now() < self._strings_retry_at:
+                return
+            strings = await getter(self._preset.package)
+            if strings:
+                self._app_strings = strings
+                self._strings_ok_key = key
+                self._strings_fails = 0
+            else:
+                self._strings_failed()
+        except CompanionTransportError:
+            _LOGGER.debug("companion: app translation resources unavailable")
+            self._strings_failed()
+            # Direct ADB drops its socket on shell errors. Reconnect once for
+            # the remaining screen read, without retrying the extraction.
+            if not self._t.connected:
+                await self._t.connect()
+
+    def _strings_failed(self) -> None:
+        """Back off a failed extraction: 15 min, then hourly, per (version, splits)."""
+        self._strings_fails += 1
+        self._strings_retry_at = self._now() + (900.0 if self._strings_fails == 1 else 3600.0)
+
+    def _strings_current(self) -> bool:
+        """True when the table was read for the installed version and splits.
+
+        A stale table (from before an update or a new language split) may still
+        serve reads, but must not vouch for limit detection on writes.
+        """
+        return bool(self._app_strings) and self._strings_ok_key == (
+            self._live_app_version, self._strings_paths_now
+        )
+
+    def _require_limit_language(self, nodes: list[UiNode]) -> None:
+        """Identify fallback coverage from known labels in the current dump.
+
+        No device locale query: Android's per-app language can differ from it,
+        and the relay has no locale verb. Unknown/ambiguous screens fail closed.
+        Navigation accessibility descriptions may stay English in foreign UIs,
+        so only visible app labels and known command labels are considered.
+        """
+        if self._strings_current():
+            return
+        labels = {
+            "charging", "air conditioning", "klimatisierung", "climatización",
+            "start charging", "stop charging",
+            "klimatisierung starten", "klimatisierung stoppen",
+        }
+        for node in nodes:
+            rid = node.resource_id.rsplit("/", 1)[-1]
+            if rid in {"title", "vwd_title", "cta_start", "cta_stop"}:
+                if node.text.strip().casefold() in labels:
+                    return
+            if node.clickable and node.content_desc.strip().casefold() in labels:
+                return
+            desc = node.content_desc.strip()
+            if node.clickable and desc in {
+                "Departure times. Open details", "Abfahrtszeiten. Details öffnen",
+            }:
+                return
+            # These localized range-tile descriptions already identify the
+            # overview in the fallback parser. Unlike "Laden" / "Carga", the
+            # complete labels are not shared with unsupported UI languages.
+            if (desc.startswith("Range overview.") and desc.endswith("Open details")) or (
+                desc.startswith("Übersicht Reichweite.") and desc.endswith("Details öffnen")
+            ):
+                return
+        from homeassistant.exceptions import HomeAssistantError  # noqa: PLC0415
+
+        raise HomeAssistantError(
+            "Writes and synchronisation are disabled: app translation resources "
+            "are unavailable and the current UI language cannot be confirmed as "
+            "English, German or Spanish. Reads continue.",
+            translation_domain="vag_connect",
+            translation_key="companion_limit_language_unavailable",
+        )
 
     def _decide_version_ok(self, live_version: str | None) -> bool:
         """True when this is a verified preset AND the live app version matches.
@@ -2184,6 +2264,7 @@ class CompanionChannel:
         if self._limit_on_screen(nodes):
             self._trip_rate_limit()
             raise CompanionWriteBlocked(_LIMIT_REASON)
+        self._require_limit_language(nodes)
         return spec, nodes
 
 

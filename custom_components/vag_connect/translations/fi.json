@@ -2534,6 +2534,9 @@
     }
   },
   "exceptions": {
+    "companion_limit_language_unavailable": {
+      "message": "Tietojen kirjoittaminen ja synkronointi on poistettu käytöstä: sovelluksen käännösresurssit eivät ole saatavilla, eikä voida vahvistaa, että käyttöliittymän nykyinen kieli on englanti, saksa tai espanja. Tietojen lukeminen toimii edelleen."
+    },
     "companion_sync_refused": {
       "message": "Sovellus ei synkronoinut autoa. Jokainen synkronointi herättää auton, joten se hylätään, kun komennot ovat tauolla tai liian pian edellisen komennon jälkeen. Katso anturi Sovelluksen pyyntöjen tila."
     },
