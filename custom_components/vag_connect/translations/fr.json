@@ -2573,6 +2573,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Un export ponctuel de l'historique est déjà en cours pour ce véhicule. Le portail ne traite qu'une seule demande de ce type à la fois : attendez donc que celle en cours se termine (ou expire) avant d'en demander une autre."
+    },
+    "hvac_mode_not_supported": {
+      "message": "Le mode CVC {hvac_mode} n'est pas pris en charge ; utilisez l'un de : {modes}. Rien n'a été envoyé."
     }
   },
   "selector": {

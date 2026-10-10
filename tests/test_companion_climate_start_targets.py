@@ -246,3 +246,50 @@ async def test_set_temperature_with_hvac_mode_stores_then_starts():
     assert seen == [22.5]  # stored first, so the Start applies it
     await entity.async_set_temperature(temperature=23.0)
     assert seen == [22.5]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["heat", "cool", "auto", "dry", "fan_only"])
+async def test_set_temperature_with_an_unlisted_hvac_mode_sends_nothing(mode):
+    # Through HA's own schema and service handler: "heat" passes HA's
+    # validation, and must not become a Stop (only "off" means Stop).
+    from homeassistant.components.climate import (
+        SET_TEMPERATURE_SCHEMA,
+        async_service_temperature_set,
+    )
+    from homeassistant.const import UnitOfTemperature
+    from homeassistant.exceptions import ServiceValidationError
+
+    from custom_components.vag_connect.climate import VagClimate
+
+    client = _client()
+    coord = _coordinator(client, {"climatisation_active": True})
+    coord.command_method_available = MagicMock(return_value=True)
+    coord.async_start_climatisation = AsyncMock()
+    coord.async_stop_climatisation = AsyncMock()
+    entity = VagClimate(coord, VIN)
+    entity.hass = MagicMock()
+    entity.hass.config.units.temperature_unit = UnitOfTemperature.CELSIUS
+    data = SET_TEMPERATURE_SCHEMA(
+        {"entity_id": "climate.car", "temperature": 22, "hvac_mode": mode}
+    )
+    data.pop("entity_id")
+    with pytest.raises(ServiceValidationError) as err:
+        await async_service_temperature_set(entity, SimpleNamespace(data=data))
+    assert err.value.translation_key == "hvac_mode_not_supported"
+    assert err.value.translation_placeholders["hvac_mode"] == mode
+    coord.async_start_climatisation.assert_not_called()
+    coord.async_stop_climatisation.assert_not_called()
+    assert client.climate_targets.temp_c is None  # nothing stored either
+    with pytest.raises(ServiceValidationError):
+        await entity.async_set_hvac_mode(mode)
+    coord.async_stop_climatisation.assert_not_called()
+    # The listed modes still work through the same handler.
+    for ok, called in (("heat_cool", coord.async_start_climatisation),
+                       ("off", coord.async_stop_climatisation)):
+        data = SET_TEMPERATURE_SCHEMA(
+            {"entity_id": "climate.car", "temperature": 22, "hvac_mode": ok}
+        )
+        data.pop("entity_id")
+        await async_service_temperature_set(entity, SimpleNamespace(data=data))
+        called.assert_awaited_once_with(VIN)

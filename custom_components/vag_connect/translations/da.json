@@ -2573,6 +2573,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Der er allerede en engangseksport af historikken i gang for denne bil. Portalen håndterer kun én sådan anmodning ad gangen, så vent, til den nuværende er færdig (eller får timeout), før du beder om en ny."
+    },
+    "hvac_mode_not_supported": {
+      "message": "HVAC-tilstanden {hvac_mode} understøttes ikke; brug en af: {modes}. Intet blev sendt."
     }
   },
   "selector": {
