@@ -403,7 +403,7 @@ def tap_point_for(node: UiNode, fraction: tuple[float, float] | None) -> tuple[i
     """
     if fraction is None:
         return node.tap_point
-    if node.tap_point is None:
+    if node.tap_point is None or node.bounds is None:
         return None
     left, top, right, bottom = node.bounds
     frac_x, frac_y = fraction
