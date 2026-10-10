@@ -55,6 +55,9 @@ SYNC_PLURALS = (
 # 4.3.2 APK builds them (ClimaViewModel, ClimaItemsMapper, ModeSelection).
 CLIMA_LOW = "clima_temperature_low"  # the dial's "LO" (15.5)
 CLIMA_HIGH = "clima_temperature_high"  # the dial's "HI" (30.0)
+# The "°" drawn after every other dial number. The app has no Fahrenheit key:
+# the dial is 15.5-30.0 °C only (GetAllTemperaturesUseCase, 4.6.4).
+CLIMA_DEGREE = "unit_degree_sign"
 CLIMA_ACTIVE = ("air_conditioning_screen_active", "common_activated")
 CLIMA_OFF = "vehiclescreen_airconditioning_deactivated"
 CLIMA_AUTOMATIC = "common_automatic_abbreviation"
@@ -73,7 +76,7 @@ CLIMA_ZONE_KEYS = {
     "vehiclesettingsscreen_airconditionedzones_options_rightrearseatzone": "climate_zone_rear_right",
 }
 _CLIMA_KEYS = (
-    CLIMA_LOW, CLIMA_HIGH, *CLIMA_ACTIVE, CLIMA_OFF, CLIMA_AUTOMATIC, CLIMA_MINUTES,
+    CLIMA_LOW, CLIMA_HIGH, CLIMA_DEGREE, *CLIMA_ACTIVE, CLIMA_OFF, CLIMA_AUTOMATIC, CLIMA_MINUTES,
     CLIMA_MODE_AC, CLIMA_MODE_WINDOW_HEATING, CLIMA_ZONES, CLIMA_ZONES_SEVERAL,
     *CLIMA_ZONE_KEYS,
 )

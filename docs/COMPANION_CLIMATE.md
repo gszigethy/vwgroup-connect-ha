@@ -19,7 +19,18 @@ Home Assistant climate entities. It is a stand-alone change against upstream
 | Air conditioning using battery (setting) | `climate_without_external_power` → binary sensor | `ClimatisationWithoutExternalPowerEnabled`, where shown |
 | Start / Stop | `command_start_climate` / `command_stop_climate` | `cta_start` / `cta_stop` |
 | Window heating only | `command_start_window_heating` / `command_stop_window_heating` | Picker row 2, or Mk8 toggles, then `cta_start` |
-| Set target temperature | `command_set_climate_temperature` | Tap the neighbouring dial label, one 0.5 step at a time |
+| Set target temperature | `command_set_climate_temperature` (held; Start applies it) | Before Start: all 0.5 steps tapped on the neighbouring dial label in one batch, then one readback |
+
+A temperature change costs one car request of its own: the app sends the dial
+1 s after it stops moving (and when the sheet closes), whether or not Start is
+pressed. So the integration checks the mode, the Start button, the request limit,
+the app build and the dial's °C labels before the first dial tap, sends every
+step inside that 1 s, and reads the dial back once. The phone times the batch
+itself and stops after a tap that came more than 700 ms after the previous one,
+so a slow phone costs at most two requests (and no Start), never one per step. A wrong reading is reported
+and Start is not pressed; it is never corrected, as that would be another
+request. The relay agent sends one request per tap, so over the relay only a
+0.5 °C change is made; a larger one is refused.
 
 The sheet is read when the **Read climate detail** switch is on. The Settings
 sheet is one tap deeper and has its own switch, **Read climate settings**. Both
