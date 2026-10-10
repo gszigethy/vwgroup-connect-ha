@@ -46,6 +46,20 @@ _TWINS: dict[tuple[str, str], tuple[str, bool]] = {
 }
 
 
+# Diagnostics of the cloud clients that a companion entry never fills: the
+# push event stream, the cloud API field observer and the cloud wake counter.
+_CLOUD_ONLY: frozenset[tuple[str, str]] = frozenset({
+    ("event", "push_event"),
+    ("sensor", "api_observer_findings"),
+    ("sensor", "wake_count_today"),
+})
+
+
+def is_cloud_only(coordinator: Any, platform: str, key: str) -> bool:
+    """True for a cloud-client diagnostic on a companion entry, which stays empty."""
+    return (platform, key) in _CLOUD_ONLY and bool(coordinator.is_companion())
+
+
 def has_control_twin(
     coordinator: Any, vin: str, vehicle: dict, platform: str, key: str,
 ) -> bool:
@@ -66,7 +80,7 @@ def has_control_twin(
 
 
 def remove_twin(hass: HomeAssistant, platform: str, vin: str, key: str) -> None:
-    """Drop the registry entry an earlier version created for a twin."""
+    """Drop the registry entry an earlier version created for this entity."""
     from homeassistant.helpers import entity_registry as er  # noqa: PLC0415
 
     from ..const import DOMAIN, vehicle_unique_id  # noqa: PLC0415
