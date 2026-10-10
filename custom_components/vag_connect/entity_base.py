@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -441,6 +442,10 @@ def register_dynamic_spawner(
     added: set[str] = set()
 
     def _spawn() -> None:
+        # The entry's listeners outlive its unload, so data pushed meanwhile
+        # must not add entities to the platform HA has just cleared.
+        if entry.state is ConfigEntryState.UNLOAD_IN_PROGRESS:
+            return
         new_entities: list[Any] = []
         for vin, vehicle in coordinator.vehicles.items():
             for ent in build_for_vin(vin, vehicle):
