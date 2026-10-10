@@ -115,7 +115,7 @@ class VagClimate(VagConnectEntity, ClimateEntity):
         t = self._vehicle.get("target_temperature")
         return float(t) if t is not None else DEFAULT_TEMP
 
-    def _check_hvac_mode(self, hvac_mode: object) -> HVACMode:
+    def _check_hvac_mode(self, hvac_mode: str) -> HVACMode:
         # Only the listed modes: anything else must never be read as Stop.
         if hvac_mode not in self.hvac_modes:
             raise ServiceValidationError(
@@ -138,7 +138,7 @@ class VagClimate(VagConnectEntity, ClimateEntity):
         hvac_mode = kwargs.get("hvac_mode") if self.coordinator.is_companion() else None
         if hvac_mode is not None:
             # Checked before anything is stored or sent.
-            hvac_mode = self._check_hvac_mode(hvac_mode)
+            hvac_mode = self._check_hvac_mode(str(hvac_mode))
         raw = kwargs.get("temperature", DEFAULT_TEMP)
         temp = float(raw) if isinstance(raw, (int, float)) else DEFAULT_TEMP
         await self.coordinator.async_set_climatisation_temperature(
