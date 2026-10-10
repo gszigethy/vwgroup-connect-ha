@@ -42,6 +42,19 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0-13] - 2026-10-10 — Companion setup no longer holds up Home Assistant's startup
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.11.0** plus fork release **13**, on top of 4.11.0-12.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a regular release. Select `v4.11.0-13`, download, and restart Home Assistant.
+
+### Fixed
+- **A companion entry no longer blocks Home Assistant's startup on its first app-screen read.** Setup connects to the phone and then finishes
+  at once, using the last known values. The first full read, including every enabled screen read, starts right after setup in the
+  background. "Synchronise now" still waits a full interval, so a restart never wakes the car. (#44)
+
 ## [4.11.0-12] - 2026-10-10 — Companion safety review: car request budget, battery and climate
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
