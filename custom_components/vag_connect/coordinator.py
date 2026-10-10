@@ -1957,47 +1957,17 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 _LOGGER.debug(
                     "Škoda official auto-enroll skipped (%s)", type(exc).__name__
                 )
-            # Fetch status for all vehicles
-            self._push_official_mode()  # #1286 — official_only routing before read
-            results = await asyncio.gather(
-                *[self._cariad_client.get_status(vin) for vin in vins],
-                return_exceptions=True,
-            )
-
-            # v2.18.0 (A1) — merge + enrich BEFORE taking the lock, then only
-            # assign while holding it.
-            #
-            # Two reasons. (1) This path never merged at all: the poll loop
-            # unions the armed supplementary channels onto the primary, this
-            # one stored the raw primary, so the first snapshot after every
-            # setup/restart was primary-only and supplementary fields stayed
-            # blank until the first poll tick. (2) ``_vehicles_lock`` is a
-            # threading.Lock, and awaiting while holding one parks the whole
-            # event loop for any other task that tries to acquire it — the
-            # merge does network I/O, so it must not run inside.
-            prepared: list[tuple[str, dict[str, Any] | None, bool, bool]] = []
-            for vin, result in zip(vins, results):
-                if isinstance(result, Exception):
-                    # class + plain status only — a raw aiohttp error's str()
-                    # carries the VIN-path URL; APIError is already redacted.
-                    _rstatus = getattr(result, "status", None)
-                    _LOGGER.warning(
-                        "Could not fetch status for %s: %s%s",
-                        mask_vin(vin), type(result).__name__,
-                        f" (HTTP {_rstatus})" if _rstatus else "",
-                    )
-                    prepared.append((vin, None, True, False))
-                    continue
-                if isinstance(result, VehicleData):
-                    merged = await self._merge_supplementary(vin, result)
-                    data = merged.to_dict()
-                    data["_client"] = self._cariad_client
-                    prepared.append((
-                        vin,
-                        await self._enrich(data),
-                        False,
-                        bool(getattr(merged, "no_data", False)),
-                    ))
+            # #968 companion startup — a companion read is a full app-screen walk
+            # (plus every enabled nav-read opt-in), so awaiting it here held
+            # config-entry setup, and HA startup, open for minutes. Setup only
+            # connects + enumerates; the restored snapshot (or a bare placeholder
+            # on a first-ever setup) stands until the poll loop's immediate first
+            # read in the background. Every other strategy still reads inline.
+            if self.is_companion():
+                self._seed_companion_placeholders(vins)
+                prepared: list[tuple[str, dict[str, Any] | None, bool, bool]] = []
+            else:
+                prepared = await self._setup_initial_reads(vins)
 
             # v2.24.1 (#702) — the poll loop has guarded this since v2.15.0a10
             # (line ~1994) and this path never did, which made the fix only half
@@ -2088,8 +2058,11 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                         type(exc).__name__,
                     )
                 # Start background polling — after the prefetches, as it was inline.
+                # #968 companion startup — a companion's first read was skipped
+                # in setup, so its first tick runs at once (others sleep first).
                 self.hass.async_create_background_task(
-                    self._poll_loop(), f"{DOMAIN}_poll"
+                    self._poll_loop(first_immediate=self.is_companion()),
+                    f"{DOMAIN}_poll",
                 )
                 # #968 — a companion entry also asks the car itself for fresh
                 # data, on its own clock (the poll above only re-reads the app).
@@ -4229,7 +4202,76 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 merged, mask_vin(vin),
             )
 
-    async def _poll_loop(self) -> None:
+    async def _setup_initial_reads(
+        self, vins: list[str]
+    ) -> list[tuple[str, dict[str, Any] | None, bool, bool]]:
+        """Fetch + merge + enrich the first status of every VIN during setup.
+
+        Returns ``(vin, data, failed, no_data)`` per VIN for the reconcile pass
+        in ``async_setup``. Not used for a companion entry (#968 companion
+        startup): its first read runs in the background poll loop instead.
+        """
+        self._push_official_mode()  # #1286 — official_only routing before read
+        results = await asyncio.gather(
+            *[self._cariad_client.get_status(vin) for vin in vins],
+            return_exceptions=True,
+        )
+
+        # v2.18.0 (A1) — merge + enrich BEFORE taking the lock, then only
+        # assign while holding it.
+        #
+        # Two reasons. (1) This path never merged at all: the poll loop
+        # unions the armed supplementary channels onto the primary, this
+        # one stored the raw primary, so the first snapshot after every
+        # setup/restart was primary-only and supplementary fields stayed
+        # blank until the first poll tick. (2) ``_vehicles_lock`` is a
+        # threading.Lock, and awaiting while holding one parks the whole
+        # event loop for any other task that tries to acquire it — the
+        # merge does network I/O, so it must not run inside.
+        prepared: list[tuple[str, dict[str, Any] | None, bool, bool]] = []
+        for vin, result in zip(vins, results):
+            if isinstance(result, Exception):
+                # class + plain status only — a raw aiohttp error's str()
+                # carries the VIN-path URL; APIError is already redacted.
+                _rstatus = getattr(result, "status", None)
+                _LOGGER.warning(
+                    "Could not fetch status for %s: %s%s",
+                    mask_vin(vin), type(result).__name__,
+                    f" (HTTP {_rstatus})" if _rstatus else "",
+                )
+                prepared.append((vin, None, True, False))
+                continue
+            if isinstance(result, VehicleData):
+                merged = await self._merge_supplementary(vin, result)
+                data = merged.to_dict()
+                data["_client"] = self._cariad_client
+                prepared.append((
+                    vin,
+                    await self._enrich(data),
+                    False,
+                    bool(getattr(merged, "no_data", False)),
+                ))
+        return prepared
+
+    def _seed_companion_placeholders(self, vins: list[str]) -> None:
+        """#968 companion startup — give every companion VIN a vehicle dict by
+        the time setup returns, without reading the phone.
+
+        A restored last-known-good snapshot is left untouched. On a first-ever
+        setup (no cache) a bare placeholder carrying only the VIN is seeded so
+        setup does not raise NotReady; data-gated entities simply spawn on the
+        first poll. ``vehicle_success`` is deliberately not set: nothing was read.
+        """
+        with self._vehicles_lock:
+            for vin in vins:
+                if not self.vehicles.get(vin):
+                    self.vehicles[vin] = {
+                        "vin": vin,
+                        "_client": self._cariad_client,
+                        "_poll_failed": False,
+                    }
+
+    async def _poll_loop(self, first_immediate: bool = False) -> None:
         """Background polling loop — runs independently of HA scheduler.
 
         Re-reads scan_interval from entry.options on every iteration so that
@@ -4240,6 +4282,9 @@ class VagConnectCoordinator(DataUpdateCoordinator):
 
         v2.8.0 — pre-flight `_maybe_run_stale_watchdog()` runs before
         each poll attempt. See that method's docstring.
+
+        #968 companion startup — ``first_immediate`` skips the sleep before the
+        first iteration only (companion entries, whose setup read is deferred).
         """
         self._bind_companion_poll_to_entry()
         while self._started:
@@ -4299,7 +4344,12 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                     "EU Data Act portal 5xx streak %d → backing off, next poll "
                     "in %.0fs", self._consecutive_portal_5xx, sleep_s,
                 )
-            await asyncio.sleep(sleep_s)
+            # #968 companion startup — setup skipped the inline read, so the
+            # first tick reads now instead of an interval after the restart.
+            if first_immediate:
+                first_immediate = False
+            else:
+                await asyncio.sleep(sleep_s)
             if not self._started:
                 break
             # v2.8.0 — pre-flight watchdog. If we are on the
