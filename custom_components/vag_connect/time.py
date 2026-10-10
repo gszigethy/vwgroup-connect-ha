@@ -118,6 +118,9 @@ class VagDepartureTimerTime(VagConnectEntity, TimeEntity):
         hhmm = value.strftime("%H:%M")
         # ``enabled=True`` so editing the time also flips the timer on
         # if it was off — matches user expectation when they set a time.
+        # On the companion (ADB) channel the time cannot be set with the
+        # switch left off: the app's Save sends the timer switched on, so this
+        # is the one request the app itself makes, with no second switch tap.
         await self.coordinator.async_set_departure_timer(
             self._vin,
             self._timer_id,

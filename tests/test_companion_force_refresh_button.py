@@ -70,7 +70,8 @@ class TestPress:
         coord = _coord()
         coord.async_companion_sync_vehicle = AsyncMock(return_value=True)
         tasks: list = []
-        coord.hass.async_create_background_task = lambda c, _n: tasks.append(c)
+        # entry-scoped, so HA cancels the read-back if the entry unloads first
+        coord.entry.async_create_background_task = lambda _h, c, _n: tasks.append(c)
         await coord.async_companion_force_refresh()
         coord.async_request_refresh.assert_not_awaited()
         assert len(tasks) == 1
@@ -91,8 +92,9 @@ class TestPress:
     async def test_refused_sync_reads_now_and_fails_the_press(self) -> None:
         coord = _coord()
         coord.async_companion_sync_vehicle = AsyncMock(return_value=False)
-        with pytest.raises(HomeAssistantError):
+        with pytest.raises(HomeAssistantError) as err:
             await coord.async_companion_force_refresh()
+        assert err.value.translation_key == "companion_sync_refused"
         coord.async_request_refresh.assert_awaited_once()
 
     @pytest.mark.asyncio

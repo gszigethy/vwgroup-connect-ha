@@ -22,12 +22,19 @@ from datetime import date
 from typing import Any, Awaitable, Callable
 
 from ..cariad.models import VehicleData
-from .channel import CompanionChannel, CompanionWriteBlocked
+from .channel import CompanionChannel, CompanionWriteBlocked, mark_unsettled
 from .climate import ClimateController, snap_temperature
 from .presets import ACTION_TO_COMMAND, PRESETS
 from .transport import NetworkAdbTransport
 
 _LOGGER = logging.getLogger(__name__)
+
+# How long an unload waits for a running screen walk before closing under it.
+# The same bound the coordinator gives a command waiting for the poll.
+_CLOSE_WAIT_S = 60.0
+# After an unload that could not confirm the phone finished its last command,
+# the next client on the same phone waits this long before its first walk.
+_SETTLE_S = 30.0
 
 
 @dataclass
@@ -48,6 +55,12 @@ def climate_targets_of(coordinator: Any) -> ClimateTargets | None:
     targets = getattr(getattr(coordinator, "_cariad_client", None), "climate_targets", None)
     return targets if isinstance(targets, ClimateTargets) else None
 
+
+# start_climate_control fields the Air Conditioning sheet has no control for.
+_RICH_CLIMATE_ONLY = (
+    "glass_heating", "seat_fl", "seat_fr", "seat_rl", "seat_rr",
+    "climatisation_at_unlock", "climatisation_mode",
+)
 
 # VehicleData flags that default to False; only the opt-in departure-times
 # read supplies them.
@@ -118,6 +131,12 @@ class CompanionClient:
             read_charge_detail=read_charge_detail,
             nav_opt_ins=nav_opt_ins,
         )
+        # Who else could be driving this phone: an unloaded client under the
+        # same VIN or the same ADB address (see ``close``).
+        self._phone_keys = (f"vin:{self._vin}",) + (
+            (f"adb:{host}:{port}",) if host and relay_broker is None else ()
+        )
+        self._channel._screen_lock.phone_keys = self._phone_keys
         # Last snapshot we actually read, so a throttled poll can return the
         # known values instead of a spurious no_data that the coordinator would
         # count as a failed poll (the channel reads far less often than the poll
@@ -128,6 +147,12 @@ class CompanionClient:
         self.on_tokens_changed: Callable[[Any], None] | None = None
         self._eu_portal = None
         self._tokens = None
+
+    async def set_transport_flags(self, *, wake_sleep: bool, close_app: bool) -> None:
+        """Apply the wake/sleep and close-app options live, between screen uses."""
+        async with self._channel._screen_lock:
+            self._channel._t._wake_sleep = bool(wake_sleep)
+            self._channel._t._close_app = bool(close_app)
 
     # -- token/portal no-ops the coordinator may call directly ----------------
 
@@ -168,6 +193,7 @@ class CompanionClient:
         # Unknown keeps the entities hidden; a read overwrites them below.
         for key in _UNREAD_FLAGS:
             setattr(data, key, None)
+        data.companion_nav_read_at = getattr(self._channel, "nav_read_at", None) or {}
         data.source_channel = self._source_channel
         # #968 — what the vehicle sync flow last found, kept with every read.
         data.companion_request_state = getattr(self._channel, "request_state", None)
@@ -192,6 +218,7 @@ class CompanionClient:
         # A companion read is a two-way-capable source only when writes are on;
         # expose that so the entity layer can reflect it.
         data.companion_writes_enabled = self._channel.writes_enabled
+        data.companion_app_version = getattr(self._channel, "live_app_version", None)
         data.companion_source_age_s = self._channel.source_data_age_s
         self._last_data = data
         return data
@@ -298,10 +325,28 @@ class CompanionClient:
     async def command_start_climate(self, vin: str, *_a: Any, **_k: Any) -> None:
         await self._climate_command("command_start_climate", self._start_with_targets)
 
-    async def command_start_climate_control(self, vin: str, *_a: Any, **_k: Any) -> None:
-        # The rich payload (seats, zones) has no sheet control; start with the
-        # mode and temperature held in HA, like the plain start.
-        await self._climate_command("command_start_climate", self._start_with_targets)
+    async def command_start_climate_control(
+        self, vin: str, *_a: Any, temp_c: float | None = None, **kwargs: Any
+    ) -> None:
+        from ..cariad.exceptions import VehicleCommandError  # noqa: PLC0415
+
+        # The sheet has a mode, a dial and Start: the rest of the rich payload
+        # has no control there, so a call that sets any of it is refused.
+        unsupported = [key for key in _RICH_CLIMATE_ONLY if kwargs.get(key) is not None]
+        if unsupported:
+            raise VehicleCommandError(
+                "command_start_climate_control",
+                f"the companion (ADB) channel cannot set {', '.join(unsupported)}; "
+                "nothing was sent",
+            )
+
+        async def run() -> None:
+            # temp_c becomes the held temperature, which Start then applies.
+            if temp_c is not None:
+                self.store_climate_target_temperature(float(temp_c))
+            await self._start_with_targets()
+
+        await self._climate_command("command_start_climate", run)
 
     async def command_stop_climate(self, vin: str, *_a: Any, **_k: Any) -> None:
         await self._climate_command("command_stop_climate", self._climate.stop)
@@ -490,12 +535,66 @@ class CompanionClient:
         """Re-apply a persisted rate-limit backoff at setup."""
         self._channel.restore_rate_limit(until)
 
+    @property
+    def companion_last_write_at(self) -> float:
+        """Wall-clock time of the last command tap (0 = none). Persisted with
+        the backoff so the gap between commands survives a restart."""
+        return self._channel.last_write_at
+
+    def restore_last_write(self, at: float) -> None:
+        """Re-apply a persisted last command time at setup."""
+        self._channel.restore_last_write(at)
+
     def reset_cooldown(self) -> None:
         """Clear a stuck failure/rate-limit backoff (user-initiated retry)."""
         self._channel.reset_cooldown()
 
     async def close(self) -> None:
-        await self._transport.close()
+        """Entry unload/reload: let a running walk finish, then close for good.
+
+        A read or command that holds the screen lock gets up to
+        ``_CLOSE_WAIT_S`` to finish, its cleanup included, so the reloaded
+        entry's first read never interleaves with it. Anything queued behind it
+        is refused (see ``_ScreenLock``), and the transport never reconnects.
+
+        When the phone cannot be confirmed idle (the wait ran out, the close was
+        cancelled, or a command sent did not answer), the next client on this
+        phone waits ``_SETTLE_S`` before its first walk, which starts from a
+        fresh dump.
+        """
+        lock = getattr(self._channel, "_screen_lock", None)
+        held = False
+        settled = False
+        try:
+            if isinstance(lock, asyncio.Lock):
+                take = getattr(lock, "acquire_to_close", lock.acquire)
+                try:
+                    async with asyncio.timeout(_CLOSE_WAIT_S):
+                        await take()
+                    held = True
+                except TimeoutError:
+                    _LOGGER.warning(
+                        "companion: a screen walk was still running %.0fs into "
+                        "the unload; closing the connection under it",
+                        _CLOSE_WAIT_S,
+                    )
+            else:
+                held = True
+        finally:
+            # Also on cancellation: the transport must still shut down.
+            try:
+                shutdown = getattr(self._transport, "shutdown", None)
+                if callable(shutdown):
+                    answered = await shutdown()
+                else:
+                    await self._transport.close()
+                    answered = True
+                settled = held and answered is not False
+            finally:
+                if held and isinstance(lock, asyncio.Lock):
+                    lock.release()
+                if not settled:
+                    mark_unsettled(getattr(self, "_phone_keys", ()), _SETTLE_S)
 
 
 def _one_off_weekday(raw: str, today: "date | None" = None) -> str | None:

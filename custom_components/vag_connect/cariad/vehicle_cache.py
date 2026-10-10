@@ -584,4 +584,15 @@ def reconcile(
             "held over from a finished run while climatisation reads off; zeroed (#1231)"
         )
         merged["climate_remaining_time_min"] = 0
+    # Companion nav-read times travel with the values they date: a value carried
+    # forward from the snapshot (e.g. restored after a restart) keeps its recorded
+    # read time, so it still ages out. Fresh stamps always win, and a stamp is
+    # never kept for a value this poll supplied itself.
+    prev_stamps = previous.get("companion_nav_read_at") or {}
+    if prev_stamps:
+        stamps = dict(merged.get("companion_nav_read_at") or {})
+        for key, at in prev_stamps.items():
+            if key not in stamps and fresh.get(key) is None and merged.get(key) is not None:
+                stamps[key] = at
+        merged["companion_nav_read_at"] = stamps
     return merged, notes

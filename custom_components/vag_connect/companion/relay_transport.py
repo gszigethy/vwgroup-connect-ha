@@ -39,6 +39,7 @@ class AgentRelayTransport(NetworkAdbTransport):
 
     async def connect(self, timeout_s: float = 10.0) -> None:
         """"Connected" means an agent is calling in, so wait for its poll."""
+        self._refuse_if_shut_down()
         await self._broker.wait_online(timeout_s)
         self._device = True
 
@@ -50,6 +51,10 @@ class AgentRelayTransport(NetworkAdbTransport):
         return self._device is not None and self._broker.online
 
     # -- the shell is deliberately absent -------------------------------------
+
+    async def app_resource_paths(self, package: str) -> tuple[str, ...]:
+        """No APK access in the fixed-verb relay protocol."""
+        return ()
 
     async def battery_strings(self, package: str) -> dict[str, set[str]]:
         """The current phone agent cannot expose compiled app resources."""

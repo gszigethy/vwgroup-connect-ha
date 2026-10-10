@@ -471,9 +471,79 @@ async def test_window_heating_stop_refuses_to_end_running_air_conditioning():
 async def test_off_grid_confirmation_is_never_accepted():
     phone = FakePhone(layout="pick", off_grid=True)
     _ch, ctrl = _controller(phone)
-    with pytest.raises(CompanionWriteBlocked, match="Activate air conditioning using battery"):
+    with pytest.raises(CompanionWriteBlocked, match="unrecognised screen instead of a confirmation"):
         await ctrl.start()
     assert "activate" not in phone.taps
+
+
+class _NoticePhone(FakePhone):
+    """The tile opens something else: a notification over a screen with a place."""
+
+    def _on_tile(self, _):
+        self.screen = "notice"
+
+    def _render_notice(self) -> str:
+        return (
+            _node(text="Somewhere: 23°C", bounds="[464,896][617,941]")
+            + _node(text="Anna: see you at Somewhere Street 5", bounds="[53,100][1027,200]")
+        )
+
+
+@pytest.mark.asyncio
+async def test_errors_never_carry_the_screen_text():
+    # Maintainer rule 5: places and notification text stay out of errors.
+    for phone in (_NoticePhone(layout="pick"), FakePhone(layout="pick", off_grid=True)):
+        _ch, ctrl = _controller(phone)
+        with pytest.raises(CompanionWriteBlocked) as err:
+            await ctrl.start()
+        text = str(err.value)
+        assert "Somewhere" not in text and "Anna" not in text and "battery?" not in text
+        assert "unrecognised screen" in text
+
+
+@pytest.mark.asyncio
+async def test_the_readback_walks_only_the_climate_sheet():
+    phone = FakePhone(layout="pick")
+    channel, ctrl = _controller(phone)
+    await ctrl.start()
+    assert channel._nav_only == {"climate_detail"}
+
+
+class _FrenchPhone(FakePhone):
+    """No translation tables, and a mode title in a language the fallback lacks."""
+
+    def _render_sheet(self) -> str:
+        return super()._render_sheet().replace(
+            'text="Window heating"', 'text="Chauffage des vitres"'
+        ).replace('text="Air Conditioning"', 'text="Climatisation"')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["wh", "ac"])
+async def test_an_unrecognised_mode_title_refuses_an_ac_start(mode):
+    # The title may be window heating alone: Start would start the wrong thing.
+    phone = _FrenchPhone(layout="pick", mode=mode)
+    _ch, ctrl = _controller(phone)
+    with pytest.raises(CompanionWriteBlocked, match="mode is not one this integration recognises"):
+        await ctrl.start()
+    assert "start" not in phone.taps and "pick" not in phone.taps
+    assert phone.running is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("running", "wh_only", "match"), [
+    ("wh", False, "window heating is already running"),
+    ("ac", True, "air conditioning is already running"),
+])
+async def test_start_while_the_other_function_runs_says_so_and_sends_nothing(
+    running, wh_only, match,
+):
+    phone = FakePhone(layout="pick", running=running, mode=running)
+    _ch, ctrl = _controller(phone)
+    with pytest.raises(CompanionWriteBlocked, match=match):
+        await ctrl.start(window_heating_only=wh_only)
+    assert not any(t in phone.taps for t in ("start", "stop", "pick"))
+    assert phone.running == running
 
 
 @pytest.mark.asyncio
@@ -620,7 +690,7 @@ async def test_a_mode_that_changes_under_the_dial_aborts_before_start():
         phone.mode = "wh"
 
     ctrl = ClimateController(channel, sleep=mode_flips)
-    with pytest.raises(CompanionWriteBlocked, match="not air conditioning.*Start was not pressed"):
+    with pytest.raises(CompanionWriteBlocked, match="other than air conditioning.*Start was not pressed"):
         await ctrl.start(temp_c=22.5)
     assert "start" not in phone.taps and phone.running is None
 
@@ -912,8 +982,10 @@ async def test_client_dispatches_each_climate_command_to_the_sheet():
     await client.command_stop_window_heating("VIN")
     await client.command_set_climate_temperature("VIN", temp_c=21.4)
     held = {"window_heating_only": False, "temp_c": None}
+    # The rich start's temp_c becomes the held temperature.
+    rich = {"window_heating_only": False, "temp_c": 21.0}
     assert ctrl.calls == [
-        ("start", held), ("start", held), ("stop", {}),
+        ("start", held), ("start", rich), ("stop", {}),
         ("start", {"window_heating_only": True}), ("stop", {"window_heating_only": True}),
     ]
     # Setting the temperature only stores it (snapped to the dial's grid).
@@ -926,6 +998,20 @@ async def test_client_dispatches_each_climate_command_to_the_sheet():
     await client.command_start_window_heating("VIN")
     assert ctrl.calls[-1] == ("start", {"window_heating_only": True})
     assert client.climate_targets.window_heating_only is False
+
+
+@pytest.mark.asyncio
+async def test_rich_start_refuses_what_the_sheet_cannot_set():
+    from custom_components.vag_connect.cariad.exceptions import VehicleCommandError
+
+    ctrl = _RecordingController()
+    client = _client_with(ctrl)
+    await client.command_start_climate_control("VIN", temp_c=24, ppe_mode=True)
+    assert ctrl.calls == [("start", {"window_heating_only": False, "temp_c": 24.0})]
+    for field in ("seat_fl", "glass_heating", "climatisation_at_unlock", "climatisation_mode"):
+        with pytest.raises(VehicleCommandError, match=field):
+            await client.command_start_climate_control("VIN", temp_c=20, **{field: True})
+    assert len(ctrl.calls) == 1 and client.climate_targets.temp_c == 24.0
 
 
 @pytest.mark.asyncio

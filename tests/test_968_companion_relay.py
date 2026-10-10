@@ -87,6 +87,23 @@ class TestRendezvous:
             await task
 
     @pytest.mark.asyncio
+    async def test_agent_free_text_never_reaches_the_error(self) -> None:
+        # The agent is a separate app: screen text it might put in an error
+        # (a place, a notification) must not reach HA's log or toast.
+        broker = _broker()
+        task = asyncio.create_task(broker.command("dump_ui", {}))
+        await asyncio.sleep(0)
+        command = await broker.handle_poll({})
+        assert command is not None
+        await broker.handle_poll({"result": {
+            "id": command["id"], "ok": False,
+            "error": "Somewhere: 22°C — New message from Anna " + "x" * 300,
+        }})
+        with pytest.raises(CompanionTransportError) as err:
+            await task
+        assert str(err.value) == "the companion agent reported a failure"
+
+    @pytest.mark.asyncio
     async def test_no_agent_times_out_instead_of_hanging(self) -> None:
         broker = _broker()
         with pytest.raises(CompanionTransportError, match="did not answer"):

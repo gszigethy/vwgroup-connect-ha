@@ -3,7 +3,7 @@
 """2026-10-07 — two VW app 4.6.4 pop-ups the companion clears on its own.
 
 - The Google Maps consent on the Map tab (it blocks the parking read): agreed
-  by tapping its "Agree" button, since BACK only leaves the map.
+  only during the opted-in parking walk. Other callers BACK out and stop.
 - The rating prompt (thumbs down / thumbs up, no close button): closed with
   BACK, so the app is never rated.
 """
@@ -13,7 +13,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from custom_components.vag_connect.companion.channel import CompanionChannel
+from custom_components.vag_connect.companion.channel import (
+    CompanionChannel,
+    CompanionWriteBlocked,
+)
 from custom_components.vag_connect.companion.presets import PRESETS
 from custom_components.vag_connect.companion.screen import find_overlay, parse_ui_dump
 
@@ -68,20 +71,77 @@ def test_both_pop_ups_are_recognised() -> None:
 
 
 @pytest.mark.asyncio
-async def test_the_maps_consent_is_agreed_not_backed_out_of() -> None:
+@pytest.mark.parametrize("parking_on", [False, True])
+async def test_read_never_agrees_to_consent_outside_parking_walk(parking_on) -> None:
     ch, t = _channel(CONSENT, OVERVIEW)
-    nodes, cleared = await ch._dump_and_clear_overlays()
-    assert cleared is True
-    t.tap.assert_awaited_once_with(540, 1896)  # centre of "Agree"
-    t.key_back.assert_not_awaited()
-    assert any("Climate control" in n.content_desc for n in nodes)
+    ch.set_nav_opt_in("parking_position", parking_on)
+    ch._refresh_version_gate = AsyncMock()
+    t.foreground_app = AsyncMock()
+    t.sleep_if_enabled = AsyncMock()
+    t.force_stop_if_enabled = AsyncMock()
+    assert await ch.read() == {}
+    t.tap.assert_not_awaited()
+    t.key_back.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_without_its_button_the_consent_falls_back_to_back() -> None:
+async def test_command_backs_out_of_consent_and_refuses_with_parking_on() -> None:
+    ch, t = _channel(CONSENT, OVERVIEW)
+    ch.set_nav_opt_in("parking_position", True)
+    ch._version_ok = True
+    ch._live_app_version = "4.6.4"
+    ch._refresh_version_gate = AsyncMock()
+    t.foreground_app = AsyncMock()
+    with pytest.raises(CompanionWriteBlocked, match="not tapping blind"):
+        await ch.do_action("start_charging")
+    t.tap.assert_not_awaited()
+    t.key_back.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_parking_walk_with_opt_in_agrees_then_reads_coordinates() -> None:
+    ch, t = _channel(OVERVIEW)
+    ch.set_nav_opt_in("parking_position", True)
+    nav = next(n for n in PRESETS["volkswagen"].nav_reads if n.name == "parking_position")
+    start = _dump(_node(
+        desc="Map Tab", rid="com.volkswagen.weconnect:id/cat_nav_map_tab_navigation",
+        bounds="[0,0][100,100]", clickable=True,
+    ))
+    find = _dump(_node(desc="Find vehicle", bounds="[0,100][100,200]", clickable=True))
+    marker = _dump(_node(desc="Google Map", bounds="[0,200][100,400]", clickable=True))
+    share = _dump(_node(text="Share", bounds="[0,400][100,500]", clickable=True))
+    link = _dump(_node(text="https://www.google.com/maps?q=48.2,16.3"))
+    t.dump_ui.side_effect = [start, find]
+    ch._settle = AsyncMock(side_effect=[CONSENT, marker, share, link])
+    ch._return_to_overview = AsyncMock()
+    fields = {}
+    await ch._read_nav_group([nav], fields)
+    assert fields == {"latitude": 48.2, "longitude": 16.3}
+    assert [c.args for c in t.tap.await_args_list] == [
+        (50, 50), (540, 1896), (50, 150), (50, 286), (50, 450),
+    ]
+    t.key_back.assert_not_awaited()
+    ch._return_to_overview.assert_awaited_once_with(4)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("walk,parking_on", [(None, True), ("parking_position", False),
+                                              ("climate_detail", True)])
+async def test_consent_requires_both_parking_walk_and_opt_in(walk, parking_on) -> None:
+    ch, t = _channel(CONSENT, OVERVIEW)
+    ch.set_nav_opt_in("parking_position", parking_on)
+    _nodes, cleared = await ch._dump_and_clear_overlays(agree_opt_in=walk)
+    assert cleared is False
+    t.tap.assert_not_awaited()
+    t.key_back.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_without_its_button_parking_consent_backs_out_and_stops() -> None:
     ch, t = _channel(CONSENT_NO_BUTTON, OVERVIEW)
-    _nodes, cleared = await ch._dump_and_clear_overlays()
-    assert cleared is True
+    ch.set_nav_opt_in("parking_position", True)
+    _nodes, cleared = await ch._dump_and_clear_overlays(agree_opt_in="parking_position")
+    assert cleared is False
     t.key_back.assert_awaited_once()
     t.tap.assert_not_awaited()
 
