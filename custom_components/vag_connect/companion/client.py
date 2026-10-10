@@ -22,12 +22,19 @@ from datetime import date
 from typing import Any, Awaitable, Callable
 
 from ..cariad.models import VehicleData
-from .channel import CompanionChannel, CompanionWriteBlocked
+from .channel import CompanionChannel, CompanionWriteBlocked, mark_unsettled
 from .climate import ClimateController, snap_temperature
 from .presets import ACTION_TO_COMMAND, PRESETS
 from .transport import NetworkAdbTransport
 
 _LOGGER = logging.getLogger(__name__)
+
+# How long an unload waits for a running screen walk before closing under it.
+# The same bound the coordinator gives a command waiting for the poll.
+_CLOSE_WAIT_S = 60.0
+# After an unload that could not confirm the phone finished its last command,
+# the next client on the same phone waits this long before its first walk.
+_SETTLE_S = 30.0
 
 
 @dataclass
@@ -124,6 +131,12 @@ class CompanionClient:
             read_charge_detail=read_charge_detail,
             nav_opt_ins=nav_opt_ins,
         )
+        # Who else could be driving this phone: an unloaded client under the
+        # same VIN or the same ADB address (see ``close``).
+        self._phone_keys = (f"vin:{self._vin}",) + (
+            (f"adb:{host}:{port}",) if host and relay_broker is None else ()
+        )
+        self._channel._screen_lock.phone_keys = self._phone_keys
         # Last snapshot we actually read, so a throttled poll can return the
         # known values instead of a spurious no_data that the coordinator would
         # count as a failed poll (the channel reads far less often than the poll
@@ -537,7 +550,51 @@ class CompanionClient:
         self._channel.reset_cooldown()
 
     async def close(self) -> None:
-        await self._transport.close()
+        """Entry unload/reload: let a running walk finish, then close for good.
+
+        A read or command that holds the screen lock gets up to
+        ``_CLOSE_WAIT_S`` to finish, its cleanup included, so the reloaded
+        entry's first read never interleaves with it. Anything queued behind it
+        is refused (see ``_ScreenLock``), and the transport never reconnects.
+
+        When the phone cannot be confirmed idle (the wait ran out, the close was
+        cancelled, or a command sent did not answer), the next client on this
+        phone waits ``_SETTLE_S`` before its first walk, which starts from a
+        fresh dump.
+        """
+        lock = getattr(self._channel, "_screen_lock", None)
+        held = False
+        settled = False
+        try:
+            if isinstance(lock, asyncio.Lock):
+                take = getattr(lock, "acquire_to_close", lock.acquire)
+                try:
+                    async with asyncio.timeout(_CLOSE_WAIT_S):
+                        await take()
+                    held = True
+                except TimeoutError:
+                    _LOGGER.warning(
+                        "companion: a screen walk was still running %.0fs into "
+                        "the unload; closing the connection under it",
+                        _CLOSE_WAIT_S,
+                    )
+            else:
+                held = True
+        finally:
+            # Also on cancellation: the transport must still shut down.
+            try:
+                shutdown = getattr(self._transport, "shutdown", None)
+                if callable(shutdown):
+                    answered = await shutdown()
+                else:
+                    await self._transport.close()
+                    answered = True
+                settled = held and answered is not False
+            finally:
+                if held and isinstance(lock, asyncio.Lock):
+                    lock.release()
+                if not settled:
+                    mark_unsettled(getattr(self, "_phone_keys", ()), _SETTLE_S)
 
 
 def _one_off_weekday(raw: str, today: "date | None" = None) -> str | None:

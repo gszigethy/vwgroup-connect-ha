@@ -26,7 +26,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Callable
+from typing import Callable, Literal
 
 from ..const import COMPANION_NAV_MAX_AGE_S
 
@@ -181,6 +181,68 @@ LIMIT_POWER_BUDGET = "power_budget"
 LIMIT_BACKEND = "backend"
 
 
+# Phones an unloaded client may have left mid-command, by phone key: the
+# monotonic time until which the next client waits before its first walk.
+_UNSETTLED: dict[str, float] = {}
+
+
+def mark_unsettled(keys: "tuple[str, ...]", settle_s: float) -> None:
+    """An unload could not confirm the phone finished its last command."""
+    until = time.monotonic() + settle_s
+    for key in keys:
+        _UNSETTLED[key] = max(_UNSETTLED.get(key, 0.0), until)
+
+
+class _ScreenLock(asyncio.Lock):
+    """The channel's screen lock, which turns new walks away once closing.
+
+    On entry unload the client takes the lock with ``acquire_to_close``: the
+    walk holding it finishes, cleanup included, and every read or command that
+    queued behind it is refused when its turn comes instead of driving the
+    phone under the reloaded entry's new client.
+
+    The other way round, a new client's walk first waits out any settle period
+    an unload left on the same phone (``mark_unsettled``), so a command the old
+    connection could not confirm is done before this one dumps and taps.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.closing = False
+        self.phone_keys: tuple[str, ...] = ()
+
+    async def acquire(self) -> Literal[True]:
+        await super().acquire()
+        try:
+            if self.closing:
+                raise CompanionTransportError(
+                    "the companion connection was closed when the entry unloaded"
+                )
+            await self._settle()
+        except BaseException:
+            self.release()
+            raise
+        return True
+
+    async def _settle(self) -> None:
+        until = max((_UNSETTLED.get(k, 0.0) for k in self.phone_keys), default=0.0)
+        wait = until - time.monotonic()
+        if wait > 0:
+            _LOGGER.info(
+                "companion: the previous connection may still be finishing a "
+                "command; waiting %.0fs before the first walk", wait,
+            )
+            await asyncio.sleep(wait)
+        now = time.monotonic()
+        for key in self.phone_keys:
+            if _UNSETTLED.get(key, now + 1) <= now:
+                del _UNSETTLED[key]
+
+    async def acquire_to_close(self) -> None:
+        self.closing = True
+        await super().acquire()
+
+
 class CompanionChannel:
     """One brand's read/write flow over one phone."""
 
@@ -255,7 +317,7 @@ class CompanionChannel:
         # the readback poll that follows it; every other poll walks all of the
         # opted-in paths.
         self._nav_only: set[str] = set()
-        self._screen_lock = asyncio.Lock()
+        self._screen_lock = _ScreenLock()
         self._app_strings: dict[str, set[str]] = {}
         # (app version, split list) the current table was successfully read for.
         self._strings_ok_key: tuple[str | None, tuple[str, ...]] | None = None

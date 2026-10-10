@@ -40,6 +40,11 @@ class NetworkAdbTransport:
     worker thread via ``asyncio.to_thread`` so nothing blocks the event loop.
     """
 
+    # Set by ``shutdown`` (entry unload/reload): this transport never connects
+    # again, so nothing left over on the old client can drive the phone while
+    # the reloaded entry's new client does.
+    _shut_down = False
+
     def __init__(
         self, host: str, port: int, adbkey_path: str, *, wake_sleep: bool = False,
         close_app: bool = False,
@@ -62,6 +67,7 @@ class NetworkAdbTransport:
 
     async def connect(self, timeout_s: float = 10.0) -> None:
         """Open (or reopen) the ADB connection, loading/creating the RSA key."""
+        self._refuse_if_shut_down()
         await asyncio.to_thread(self._connect_blocking, timeout_s)
 
     def _connect_blocking(self, timeout_s: float) -> None:
@@ -107,6 +113,23 @@ class NetworkAdbTransport:
             except Exception:  # noqa: BLE001
                 pass
             self._device = None
+
+    async def shutdown(self) -> bool:
+        """Close for good, on entry unload/reload: ``connect`` refuses after this.
+
+        ``close`` alone is also the reconnect-on-next-read path after a shell
+        error, so it must not be final. Returns whether every command sent got
+        its answer (here: always, as nothing is tracked in flight).
+        """
+        self._shut_down = True
+        await self.close()
+        return True
+
+    def _refuse_if_shut_down(self) -> None:
+        if self._shut_down:
+            raise CompanionTransportError(
+                "the companion connection was closed when the entry unloaded"
+            )
 
     @property
     def connected(self) -> bool:

@@ -2094,7 +2094,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 # #968 — a companion entry also asks the car itself for fresh
                 # data, on its own clock (the poll above only re-reads the app).
                 if self.is_companion():
-                    self.hass.async_create_background_task(
+                    self._companion_background_task(
                         self._companion_app_sync_loop(), f"{DOMAIN}_app_sync"
                     )
 
@@ -4241,6 +4241,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         v2.8.0 — pre-flight `_maybe_run_stale_watchdog()` runs before
         each poll attempt. See that method's docstring.
         """
+        self._bind_companion_poll_to_entry()
         while self._started:
             # Re-read interval every iteration — picks up Options-Flow changes live
             interval_s = max(
@@ -8397,7 +8398,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
 
         outcome = await self.async_companion_sync_vehicle()
         if outcome:
-            self.hass.async_create_background_task(
+            self._companion_background_task(
                 self._companion_sync_readback(), f"{DOMAIN}_app_sync_readback"
             )
             return
@@ -8413,6 +8414,31 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         await asyncio.sleep(_APP_SYNC_READBACK_S)
         if self._started:
             await self.async_request_refresh()
+
+    def _companion_background_task(self, coro: Any, name: str) -> None:
+        """Start a companion background task tied to this config entry, so HA
+        cancels it on unload instead of leaving it to tap the phone under the
+        reloaded entry."""
+        self.entry.async_create_background_task(self.hass, coro, name)
+
+    def _bind_companion_poll_to_entry(self) -> None:
+        """Have HA cancel this companion entry's poll loop on unload.
+
+        The loop is started from the hass-scoped setup finish, so it is tied to
+        the entry from inside: the running task cancels with the entry's other
+        background tasks. Other strategies keep their loop as it was.
+        """
+        if not self.is_companion():
+            return
+        task = asyncio.current_task()
+        on_unload = getattr(self.entry, "async_on_unload", None)
+        if task is None or not callable(on_unload):
+            return
+
+        def _cancel() -> None:
+            task.cancel()
+
+        on_unload(_cancel)
 
     async def async_reset_companion_cooldown(self) -> None:
         """v2.26.0 (ckomma #22) — user-initiated clear of a stuck companion

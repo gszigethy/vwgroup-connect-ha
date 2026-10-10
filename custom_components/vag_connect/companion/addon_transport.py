@@ -29,6 +29,9 @@ from .transport import CompanionTransportError, NetworkAdbTransport
 _LOGGER = logging.getLogger(__name__)
 
 _DEFAULT_PORT = 8129
+# How long an unload waits for /shell requests already sent to answer: the
+# longest one is a 30 s resource read plus the 5 s HTTP margin.
+_INFLIGHT_WAIT_S = 40.0
 
 
 # What the add-on's adb error says, as a fixed description. Its own text can
@@ -75,6 +78,8 @@ class AddOnAdbTransport(NetworkAdbTransport):
         self._token = token or ""
         self._session = session
         self._serial: str | None = None
+        # The /shell requests in flight, so ``shutdown`` can wait for them.
+        self._inflight: set[asyncio.Future[str]] = set()
 
     # -- helpers --------------------------------------------------------------
 
@@ -105,6 +110,7 @@ class AddOnAdbTransport(NetworkAdbTransport):
         """
         from aiohttp import ClientError, ClientTimeout  # noqa: PLC0415
 
+        self._refuse_if_shut_down()
         session = await self._get_session()
         try:
             async with session.get(  # type: ignore[attr-defined]
@@ -153,6 +159,25 @@ class AddOnAdbTransport(NetworkAdbTransport):
             self._session = None
             self._owns_session = False
 
+    async def shutdown(self) -> bool:
+        """Close for good, once the /shell requests already sent have answered.
+
+        A command the add-on accepted cannot be called back, so it is waited
+        for rather than abandoned (bounded by the requests' own HTTP timeouts),
+        and no further command is sent meanwhile. Returns False when one did
+        not answer: the add-on may still be running it.
+        """
+        self._shut_down = True
+        pending = list(self._inflight)
+        answered = True
+        if pending:
+            done, still = await asyncio.wait(pending, timeout=_INFLIGHT_WAIT_S)
+            answered = not still and all(
+                not f.cancelled() and f.exception() is None for f in done
+            )
+        await super().shutdown()
+        return answered
+
     @property
     def connected(self) -> bool:
         return self._device is not None
@@ -167,9 +192,15 @@ class AddOnAdbTransport(NetworkAdbTransport):
         commands we run (``grep`` with no match, ``rm -f`` on a missing file)
         exit non-zero as a normal outcome, and the callers judge the output.
         """
-        if self._device is None:
+        if self._device is None or self._shut_down:
             raise CompanionTransportError("not connected")
+        req = asyncio.ensure_future(self._post_shell(cmd, timeout_s))
+        self._inflight.add(req)
+        req.add_done_callback(self._inflight.discard)
+        return await req
 
+    async def _post_shell(self, cmd: str, timeout_s: float) -> str:
+        """One POST /shell; see ``shell``."""
         from aiohttp import ClientError, ClientTimeout  # noqa: PLC0415
 
         session = await self._get_session()
