@@ -7836,7 +7836,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         self,
         vin: str,
         timer_id: int,
-        enabled: bool,
+        enabled: bool | None,
         departure_time: str | None,
         recurring_on: list[str] | None = None,
         charging: bool | None = None,
@@ -7857,7 +7857,10 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         / ``one_off_day``. Only the CARIAD (vw.de/BFF) client sends them, and
         only for opted-in test-cohort entries (the BFF write field names are
         inferred from the read DTO); the other brand clients accept and ignore
-        them so the cross-brand signature stays uniform.
+        them so the cross-brand signature stays uniform. The companion (ADB)
+        client refuses the charging, climatisation and target SoC fields and
+        honours ``one_off_day``. ``enabled`` is None only on the companion,
+        to leave the switch alone.
         """
         await self._cariad_cmd(
             vin,

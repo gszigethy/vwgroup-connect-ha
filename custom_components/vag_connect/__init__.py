@@ -621,12 +621,24 @@ def _register_services(hass: HomeAssistant) -> None:
         # the brand client; ignored by clients that don't support
         # weekly preheat (e.g. Porsche).
         # v4.7.11 (departure-timer-rich-setter) — forward the optional rich
-        # fields (charging / climatisation / target SoC / one-off day). Only the
-        # CARIAD client, and only for test-cohort entries, actually sends them.
-        await _coord_writeable(call.data["vin"]).async_set_departure_timer(
+        # fields (charging / climatisation / target SoC / one-off day). The
+        # CARIAD client sends them only for test-cohort entries; the companion
+        # (ADB) client refuses the first three and honours ``one_off_day``.
+        coord = _coord_writeable(call.data["vin"])
+        # ``enabled`` may be left out on the companion (ADB) channel, to edit
+        # only the time or days; the cloud clients still need it.
+        if "enabled" not in call.data and not coord.is_companion():
+            raise ServiceValidationError(
+                "Set 'enabled' for this vehicle's departure timer: its "
+                "connection needs it. Only the companion (ADB) channel can "
+                "leave it out.",
+                translation_domain=DOMAIN,
+                translation_key="departure_timer_enabled_required",
+            )
+        await coord.async_set_departure_timer(
             call.data["vin"],
             int(call.data["timer_id"]),
-            bool(call.data["enabled"]),
+            call.data["enabled"] if "enabled" in call.data else None,
             call.data.get("departure_time"),
             call.data.get("recurring_on"),
             charging=call.data.get("charging"),
@@ -884,7 +896,7 @@ def _register_services(hass: HomeAssistant) -> None:
             vol.Schema({
                 vol.Required("vin"):            cv.string,
                 vol.Required("timer_id"):       vol.All(vol.Coerce(int), vol.In([1, 2, 3])),
-                vol.Required("enabled"):        cv.boolean,
+                vol.Optional("enabled"):        cv.boolean,
                 vol.Optional("departure_time"): cv.string,
                 # v2.0.0 (Big-Bang) — weekly preheat schedule. Each
                 # element must be one of the ISO weekday names
@@ -894,8 +906,9 @@ def _register_services(hass: HomeAssistant) -> None:
                     cv.ensure_list, [cv.string]
                 ),
                 # v4.7.11 (departure-timer-rich-setter, myskoda #631/#640) —
-                # optional rich fields; only the CARIAD test-cohort path sends
-                # them, the other brands ignore them (uniform interface).
+                # optional rich fields; the CARIAD test-cohort path sends them,
+                # the companion (ADB) refuses charging/climatisation/target SoC
+                # and honours one_off_day, the other brands ignore them.
                 vol.Optional("charging"):       cv.boolean,
                 vol.Optional("climatisation"):  cv.boolean,
                 vol.Optional("target_soc_pct"): vol.All(

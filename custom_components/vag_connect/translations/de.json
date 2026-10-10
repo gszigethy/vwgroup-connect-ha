@@ -2597,6 +2597,9 @@
     "read_only_attestation_blocked": {
       "message": "VW sperrt Fernbefehle für SEAT/CUPRA hinter einer Google-Geräteprüfung (Play Integrity / App Check), die nur die offizielle App auf einem echten Smartphone besteht. Verriegeln, Klima und Laden lassen sich daher von hier nicht senden. Das ist eine dauerhafte serverseitige Sperre von VW, keine umschaltbare Einstellung. Fahrzeugdaten werden weiterhin über das EU-Data-Act-Portal aktualisiert."
     },
+    "departure_timer_enabled_required": {
+      "message": "Setze 'enabled' für den Abfahrtstimer dieses Fahrzeugs: seine Verbindung braucht es. Nur der Companion-Kanal (ADB) kann es weglassen."
+    },
     "export_file_not_allowed": {
       "message": "Home Assistant darf {path} nicht lesen. Lege die Export-Datei in den Konfig-Ordner (oder einen unter allowlist_external_dirs erlaubten Ordner) und gib den Pfad erneut an."
     },

@@ -2562,6 +2562,9 @@
     "read_only_attestation_blocked": {
       "message": "VW blokerer fjernkommandoer til SEAT/CUPRA bag en Google-enhedskontrol (Play Integrity / App Check), som kun den officielle app på en rigtig telefon kan bestå. Lås, klima og opladning kan derfor ikke sendes herfra. Det er en permanent serverside-blokering fra VW, ikke en indstilling, du kan slå fra. Køretøjsdata opdateres stadig via EU Data Act-portalen."
     },
+    "departure_timer_enabled_required": {
+      "message": "Angiv 'enabled' for dette køretøjs afgangstimer: dets forbindelse kræver det. Kun companion-kanalen (ADB) kan udelade det."
+    },
     "export_file_not_allowed": {
       "message": "Home Assistant har ikke lov til at læse {path}. Læg eksportfilen i config-mappen (eller en mappe, der står under allowlist_external_dirs), og angiv stien igen."
     },

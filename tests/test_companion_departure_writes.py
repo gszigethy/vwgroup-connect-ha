@@ -30,6 +30,7 @@ from custom_components.vag_connect.companion.departure import (
 from custom_components.vag_connect.companion.presets import ACTION_TO_COMMAND, PRESETS
 from custom_components.vag_connect.companion.resources import read_departure_timers
 from custom_components.vag_connect.companion.screen import parse_ui_dump
+from custom_components.vag_connect.companion.transport import CompanionTransportError
 
 FIXTURES = Path(__file__).parent / "fixtures" / "companion_departure"
 VW = PRESETS["volkswagen"]
@@ -426,6 +427,7 @@ async def test_moving_a_one_time_timer_to_another_day():
     # Picking a second day turns Repeat back on in the app; it is turned
     # off again once the old day is gone.
     phone = DeparturePhone()
+    phone.saved[2] = Timer(18, 0, {"sat"}, False)  # told apart from timer 2 by its time
     await channel_for(phone).set_departure_timer(2, weekdays=["sun"], repeat=False, time="09:15")
     assert phone.saved[1].key() == (9, 15, frozenset({"sun"}), False)
     assert kinds(phone)[:5] == ["tile", "open2", "sun", "sat", "repeat"]
@@ -443,7 +445,7 @@ async def test_unchanged_page_sends_nothing():
 @pytest.mark.asyncio
 async def test_time_and_switch_in_one_command():
     phone = DeparturePhone()
-    phone.saved[1].enabled = False
+    phone.saved[2] = Timer(18, 0, {"sat"}, False)  # told apart from timer 2 by its time
     await channel_for(phone).set_departure_timer(3, time="06:00", enabled=True)
     assert phone.saved[2].hour == 6 and phone.saved[2].enabled is True
 
@@ -567,3 +569,232 @@ def test_fixtures_are_credited():
     sources = {s["fixture"] for s in json.loads((FIXTURES / "sources.json").read_text(encoding="utf-8"))}
     for name in ("list_464", "slot1_464", "slot2_464", "list_onetime_464", "slot_onetime_464"):
         assert name + ".xml" in sources
+
+
+# -- write safety: identity, one send, discard on errors ------------------------
+
+
+class UnreadableRowPhone(DeparturePhone):
+    """Timer 2's clock is unreadable, so a positional row 2 would be timer 3."""
+
+    def render(self) -> str:
+        xml = super().render()
+        return _set(xml, _ROWS[1][0], "text", "--:--") if self.where == "list" else xml
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kwargs", [{"enabled": True}, {"time": "08:00"}, {"weekdays": ["sun"]}])
+async def test_write_is_refused_unless_all_three_rows_read(kwargs):
+    phone = UnreadableRowPhone()
+    channel = channel_for(phone)
+    with pytest.raises(CompanionWriteBlocked, match="all three"):
+        await channel.set_departure_timer(2, **kwargs)
+    assert phone.taps == ["tile"] and channel._last_write_at is None
+    assert phone.where == "overview"
+
+
+class WrongPagePhone(DeparturePhone):
+    """The row opens a page that is not that row's timer."""
+
+    async def tap(self, x, y):
+        await super().tap(x, y)
+        if self.where == "page" and self.taps[-1].startswith("open"):
+            self.edit = Timer(9, 0, {"sun"}, True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kwargs", [{"time": "08:00"}, {"weekdays": ["mon"]}, {"repeat": True}])
+async def test_page_that_is_not_the_rows_timer_is_not_edited(kwargs):
+    phone = WrongPagePhone()
+    channel = channel_for(phone)
+    with pytest.raises(CompanionWriteBlocked, match="does not match"):
+        await channel.set_departure_timer(1, **kwargs)
+    assert kinds(phone) == ["tile", "open1"] and channel._last_write_at is None
+    assert phone.saved[0].key() == DeparturePhone().saved[0].key()
+    assert phone.where == "overview"
+
+
+@pytest.mark.asyncio
+async def test_time_on_an_off_timer_is_one_send():
+    # The app's Save sends the timer switched on (4.6.4 saveSettings), so the
+    # time entity's enabled=True costs no second request.
+    phone = DeparturePhone()
+    phone.saved[2] = Timer(18, 0, {"sat"}, False)  # told apart from timer 2 by its time
+    client = _client(phone)
+    client._channel._nav_cache = {"departure_timer_2_enabled": False, "departure_timer_enabled_count": 0}
+    await client.command_set_departure_timer("VIN", timer_id=2, enabled=True, departure_time="06:00")
+    assert kinds(phone) == ["tile", "open2", "save", "open2"]
+    assert phone.saved[1].hour == 6 and phone.saved[1].enabled is True
+    assert "departure_timer_2_enabled" not in client._channel._nav_cache
+    assert "departure_timer_enabled_count" not in client._channel._nav_cache
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kwargs", [{"time": "08:00"}, {"weekdays": ["mon"]}, {"repeat": False}])
+async def test_edit_with_switch_off_is_refused_before_any_tap(kwargs):
+    # Save switches the timer on; switching it off again would be a second
+    # request straight after the first.
+    phone = DeparturePhone()
+    with pytest.raises(CompanionWriteBlocked, match="switches the timer on"):
+        await channel_for(phone).set_departure_timer(1, enabled=False, **kwargs)
+    assert phone.taps == []
+
+
+class DroppingPhone(DeparturePhone):
+    """The ADB link drops on the third wheel tap and stays down until reconnected."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.down = False
+        self.connects = 0
+        self.wheel_taps = 0
+
+    @property
+    def connected(self):
+        return not self.down
+
+    async def connect(self):
+        self.connects += 1
+        self.down = False
+
+    async def dump_ui(self):
+        if self.down:
+            raise CompanionTransportError("link dropped")
+        return await super().dump_ui()
+
+    async def tap(self, x, y):
+        if self.down:
+            raise CompanionTransportError("link dropped")
+        if self.where == "page" and self.edit is not None:
+            node = self._hit(x, y)
+            if node is not None and node.clazz.endswith("Button") and not node.resource_id \
+                    and node.text not in ("Save", "Cancel"):
+                self.wheel_taps += 1
+                if self.wheel_taps == 3:
+                    self.down = True
+                    raise CompanionTransportError("link dropped")
+        await super().tap(x, y)
+
+    async def key_back(self):
+        if self.down:
+            raise CompanionTransportError("link dropped")
+        await super().key_back()
+
+
+@pytest.mark.asyncio
+async def test_transport_error_mid_edit_reconnects_once_and_cancels():
+    phone = DroppingPhone()
+    channel = channel_for(phone)
+    with pytest.raises(CompanionWriteBlocked, match="link dropped"):
+        await channel.set_departure_timer(1, time="08:00")
+    assert phone.connects == 1
+    assert "cancel" in phone.taps and "save" not in phone.taps
+    assert phone.saved[0].key() == DeparturePhone().saved[0].key()
+    assert channel._last_write_at is None
+
+
+# -- the service: enabled is optional on the companion ----------------------------
+
+
+def _service_hass(companion: bool):
+    import threading
+    from unittest.mock import AsyncMock, MagicMock
+
+    from custom_components.vag_connect import _register_services
+    from custom_components.vag_connect.const import CONF_STRATEGY, STRATEGY_COMPANION_ADB
+    from custom_components.vag_connect.coordinator import VagConnectCoordinator
+
+    coord = VagConnectCoordinator.__new__(VagConnectCoordinator)
+    coord.hass = MagicMock()
+    coord.entry = MagicMock()
+    coord.entry.data = {"brand": "volkswagen"}
+    if companion:
+        coord.entry.data[CONF_STRATEGY] = STRATEGY_COMPANION_ADB
+    coord.entry.options = {}
+    coord._vehicles_lock = threading.Lock()
+    coord._cariad_client = MagicMock()
+    coord._cariad_client.command_set_departure_timer = AsyncMock()
+    coord._started = True
+    coord._was_available = True
+    coord.vehicles = {"VIN": {}}
+    coord.async_request_refresh = AsyncMock()
+    entry = MagicMock()
+    entry.runtime_data = coord
+    hass = MagicMock()
+    hass.config_entries.async_entries = MagicMock(return_value=[entry])
+    hass.services.has_service = MagicMock(return_value=False)
+    registered: dict = {}
+
+    def _register(domain, name, handler, schema=None, supports_response=None):
+        registered[name] = (handler, schema)
+
+    hass.services.async_register = MagicMock(side_effect=_register)
+    _register_services(hass)
+    return coord, registered["set_departure_timer"]
+
+
+@pytest.mark.asyncio
+async def test_service_without_enabled_on_the_companion_sends_no_switch():
+    from unittest.mock import MagicMock
+
+    coord, (handler, schema) = _service_hass(companion=True)
+    call = MagicMock()
+    call.data = schema({"vin": "VIN", "timer_id": 1, "recurring_on": ["MONDAY"]})
+    await handler(call)
+    kwargs = coord._cariad_client.command_set_departure_timer.await_args.kwargs
+    assert kwargs["enabled"] is None and kwargs["recurring_on"] == ["MONDAY"]
+    # Backward compatible: enabled is still accepted.
+    assert schema({"vin": "V", "timer_id": 2, "enabled": False})["enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_service_without_enabled_still_required_on_other_channels():
+    from unittest.mock import MagicMock
+
+    from homeassistant.exceptions import ServiceValidationError
+
+    coord, (handler, schema) = _service_hass(companion=False)
+    call = MagicMock()
+    call.data = schema({"vin": "VIN", "timer_id": 1, "departure_time": "07:30"})
+    with pytest.raises(ServiceValidationError):
+        await handler(call)
+    coord._cariad_client.command_set_departure_timer.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_days_only_edit_on_the_channel_taps_no_switch():
+    phone = DeparturePhone()
+    await _client(phone).command_set_departure_timer("VIN", timer_id=1, recurring_on=["MONDAY"])
+    assert not any(t.startswith("switch") for t in phone.taps)
+    assert phone.saved[0].days == {"mon"}
+
+
+class SwappedPagePhone(DeparturePhone):
+    """Timer 2's row opens timer 3's page; both show 00:00 on the list."""
+
+    async def tap(self, x, y):
+        await super().tap(x, y)
+        if self.where == "page" and self.taps[-1] == "open2":
+            self.slot, self.edit = 2, self.saved[2].copy()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("slot", [2, 3])
+@pytest.mark.parametrize("kwargs", [{"time": "08:00"}, {"weekdays": ["sun"]}, {"repeat": True}])
+async def test_timers_with_the_same_time_are_not_edited(slot, kwargs):
+    # The page shows no timer number, and its time alone cannot tell timer 2
+    # from timer 3, so nothing is opened, let alone saved.
+    phone = SwappedPagePhone()
+    channel = channel_for(phone)
+    with pytest.raises(CompanionWriteBlocked, match="same time"):
+        await channel.set_departure_timer(slot, **kwargs)
+    assert phone.taps == ["tile"] and channel._last_write_at is None
+    assert [t.key() for t in phone.saved] == [t.key() for t in DeparturePhone().saved]
+    assert phone.where == "overview"
+
+
+@pytest.mark.asyncio
+async def test_the_switch_alone_still_works_on_timers_with_the_same_time():
+    phone = SwappedPagePhone()
+    await channel_for(phone).set_departure_timer(3, enabled=True)
+    assert phone.taps == ["tile", "switch3"] and phone.saved[2].enabled is True
