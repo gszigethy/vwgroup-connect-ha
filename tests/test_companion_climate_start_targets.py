@@ -295,7 +295,10 @@ async def test_set_temperature_with_an_unlisted_hvac_mode_sends_nothing(mode):
     with pytest.raises(ServiceValidationError):
         await entity.async_set_hvac_mode(mode)
     coord.async_stop_climatisation.assert_not_called()
-    # The listed modes still work through the same handler.
+    coord._cariad_cmd.assert_not_called()
+    # The listed modes still work through the same handler. The climate runs,
+    # so the temperature also goes out as a command.
+    coord._cariad_cmd = AsyncMock()
     for ok, called in (("heat_cool", coord.async_start_climatisation),
                        ("off", coord.async_stop_climatisation)):
         data = SET_TEMPERATURE_SCHEMA(

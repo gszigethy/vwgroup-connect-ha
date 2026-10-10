@@ -7840,13 +7840,16 @@ class VagConnectCoordinator(DataUpdateCoordinator):
 
     async def async_set_climatisation_temperature(self, vin: str, temp_c: float) -> None:
         # Companion (ADB): the app's sheet has no Save, Start applies the dial.
-        # The temperature is only stored for the next Start, so it skips the
-        # command lock and the post-command refresh (a refresh reads the phone).
+        # With the climate off the temperature is only stored for the next
+        # Start, so it skips the command lock and the post-command refresh (a
+        # refresh reads the phone). While it runs, the dial is moved now: a
+        # command like any other, which costs one car request.
         store = getattr(self._cariad_client, "store_climate_target_temperature", None)
         if self.is_companion() and callable(store):
             store(temp_c)
             self.async_update_listeners()
-            return
+            if not (self.data or {}).get(vin, {}).get("climatisation_active"):
+                return
         await self._cariad_cmd(vin, "command_set_climate_temperature", temp_c=temp_c)
 
     async def async_update_charging_settings(
