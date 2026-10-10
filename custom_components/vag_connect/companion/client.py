@@ -490,6 +490,16 @@ class CompanionClient:
         """Re-apply a persisted rate-limit backoff at setup."""
         self._channel.restore_rate_limit(until)
 
+    @property
+    def companion_last_write_at(self) -> float:
+        """Wall-clock time of the last command tap (0 = none). Persisted with
+        the backoff so the gap between commands survives a restart."""
+        return self._channel.last_write_at
+
+    def restore_last_write(self, at: float) -> None:
+        """Re-apply a persisted last command time at setup."""
+        self._channel.restore_last_write(at)
+
     def reset_cooldown(self) -> None:
         """Clear a stuck failure/rate-limit backoff (user-initiated retry)."""
         self._channel.reset_cooldown()

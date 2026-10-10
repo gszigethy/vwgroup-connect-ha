@@ -44,6 +44,8 @@ DEFAULT_ADB_PORT              = 5555
 # in-memory backoff clearing on restart is fine for a TCP blip, dangerous for a
 # real lockout). Written by the coordinator after a poll; restored at setup.
 CONF_COMPANION_RATE_LIMIT_UNTIL = "companion_rate_limit_until"
+# Wall-clock time of the last companion command tap, for the gap between them.
+CONF_COMPANION_LAST_WRITE_AT = "companion_last_write_at"
 # v2.26.0 (C9) — opt-in: also read the charge-target/power/time that live behind
 # the charge-detail screen. OFF by default because it TAPS the app to navigate
 # there (a forward tap, unlike a plain screen dump); only a user who has

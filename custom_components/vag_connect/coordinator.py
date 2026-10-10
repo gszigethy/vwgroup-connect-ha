@@ -1482,10 +1482,18 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             # v2.26.0 (ckomma #21) — re-apply a rate-limit backoff persisted
             # before a restart, so an account lockout is not cleared just by
             # restarting HA.
-            from .const import CONF_COMPANION_RATE_LIMIT_UNTIL  # noqa: PLC0415
+            from .const import (  # noqa: PLC0415
+                CONF_COMPANION_LAST_WRITE_AT,
+                CONF_COMPANION_RATE_LIMIT_UNTIL,
+            )
             _rl = self.entry.data.get(CONF_COMPANION_RATE_LIMIT_UNTIL)
             if _rl and hasattr(self._cariad_client, "restore_rate_limit"):
                 self._cariad_client.restore_rate_limit(float(_rl))
+            # Likewise the last command time, so a restart cannot shorten the
+            # minimum gap between commands.
+            _lw = self.entry.data.get(CONF_COMPANION_LAST_WRITE_AT)
+            if _lw and hasattr(self._cariad_client, "restore_last_write"):
+                self._cariad_client.restore_last_write(float(_lw))
         else:
             session = async_get_clientsession(self.hass)
             self._cariad_client = CariadClientFactory.create(
@@ -8183,9 +8191,11 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         """v2.26.0 (ckomma #21) — persist the companion (ADB) rate-limit backoff.
 
         So an account lockout survives an HA restart. No-op unless this is a
-        companion entry and the value actually changed (avoids churn).
+        companion entry and the value actually changed (avoids churn). The last
+        command time goes with it, so a restart keeps the gap between commands.
         """
         from .const import (  # noqa: PLC0415
+            CONF_COMPANION_LAST_WRITE_AT,
             CONF_COMPANION_RATE_LIMIT_UNTIL,
             CONF_STRATEGY,
             STRATEGY_COMPANION_ADB,
@@ -8196,13 +8206,19 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         client = getattr(self, "_cariad_client", None)
         until = float(getattr(client, "companion_rate_limited_until", 0.0) or 0.0)
         current = float(self.entry.data.get(CONF_COMPANION_RATE_LIMIT_UNTIL) or 0.0)
-        if until == current:
+        data = {**self.entry.data, CONF_COMPANION_RATE_LIMIT_UNTIL: until}
+        last = getattr(client, "companion_last_write_at", 0.0)
+        last = float(last) if isinstance(last, (int, float)) else 0.0
+        # 0 means no command this run: keep what an earlier run stored.
+        written = last and last != float(
+            self.entry.data.get(CONF_COMPANION_LAST_WRITE_AT) or 0.0
+        )
+        if written:
+            data[CONF_COMPANION_LAST_WRITE_AT] = last
+        if until == current and not written:
             return
         try:
-            _self_update_entry(
-                self,
-                data={**self.entry.data, CONF_COMPANION_RATE_LIMIT_UNTIL: until},
-            )
+            _self_update_entry(self, data=data)
         except Exception:  # noqa: BLE001
             pass
 
@@ -8981,6 +8997,10 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             await self._dispatch_cmd_locked(vin, method, **kwargs)
         finally:
             lock.release()
+            # A companion command can trip the request-limit pause and stamps
+            # the command gap; persist both now, not on the next poll, so a
+            # restart in between keeps them. No-op for other channels.
+            self._persist_companion_rate_limit()
         # b7 — refresh AFTER the command completes, OUTSIDE the lock and the
         # command's own error scope. A refresh/portal error must never be recorded as
         # a command failure (P2-twin) nor surfaced as a failed button press, and the
