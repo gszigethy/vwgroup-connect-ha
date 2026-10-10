@@ -512,6 +512,11 @@ RECOMMENDED_SCAN_INTERVAL: dict[str, int] = {
 }
 
 
+# Prefix of every companion entity name, so "Tiguan ADB Battery Level" can't be
+# mistaken for the cloud entry's "Tiguan Battery Level" of the same car.
+COMPANION_NAME_TAG = "ADB"
+
+
 def vehicle_unique_id(vin: str, key: str, *, companion: bool = False) -> str:
     """Unique id of a per-vehicle entity; companion entries get their own namespace."""
     if companion:
