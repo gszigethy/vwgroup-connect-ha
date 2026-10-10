@@ -1996,7 +1996,7 @@
         "name": "Lås upp laddkontakten automatiskt"
       },
       "climate_at_unlock_switch": {
-        "name": "Extra luftkonditionering vid upplåsning"
+        "name": "Klimat vid upplåsning"
       },
       "window_heating_auto_switch": {
         "name": "Automatisk rutvärme"

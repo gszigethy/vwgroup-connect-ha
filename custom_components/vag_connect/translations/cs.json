@@ -1996,7 +1996,7 @@
         "name": "Automatické odemknutí nabíjecí zástrčky"
       },
       "climate_at_unlock_switch": {
-        "name": "Přídavná klimatizace při odemknutí"
+        "name": "Klimatizace při odemknutí"
       },
       "window_heating_auto_switch": {
         "name": "Automatické vyhřívání oken"

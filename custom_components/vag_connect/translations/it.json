@@ -1996,7 +1996,7 @@
         "name": "Sblocco automatico della presa di ricarica"
       },
       "climate_at_unlock_switch": {
-        "name": "Climatizzazione ausiliaria allo sblocco"
+        "name": "Clima allo sblocco"
       },
       "window_heating_auto_switch": {
         "name": "Riscaldamento automatico dei vetri"

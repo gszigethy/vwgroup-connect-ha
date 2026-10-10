@@ -1996,7 +1996,7 @@
         "name": "Ladestecker automatisch entriegeln"
       },
       "climate_at_unlock_switch": {
-        "name": "Zusatzklimatisierung beim Entriegeln"
+        "name": "Klima beim Entsperren"
       },
       "window_heating_auto_switch": {
         "name": "Automatische Scheibenheizung"

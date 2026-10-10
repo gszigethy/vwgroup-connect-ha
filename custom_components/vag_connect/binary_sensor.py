@@ -1057,6 +1057,7 @@ async def async_setup_entry(
     # Only None is treated as "no data" — False is a real "off" reading. The
     # per-id spawner re-spawns the sensor when its value first appears.
     from .const import CONF_HIDE_EMPTY_ENTITIES  # noqa: PLC0415
+    from .companion.entity_twins import has_control_twin, remove_twin  # noqa: PLC0415
     hide_empty = bool(entry.options.get(
         CONF_HIDE_EMPTY_ENTITIES,
         entry.data.get(CONF_HIDE_EMPTY_ENTITIES, True),
@@ -1081,6 +1082,9 @@ async def async_setup_entry(
         # 1) Description-driven binary sensors
         for desc in BINARY_DESCRIPTIONS:
             if desc.condition == "electric" and not has_battery:
+                continue
+            if has_control_twin(coordinator, vin, vehicle, "binary_sensor", desc.key):
+                remove_twin(hass, "binary_sensor", vin, desc.key)
                 continue
             # v4.0.0 grounding wave — soft capability gate (opt-in via
             # desc.capability; hidden only on an explicitly-absent cap).

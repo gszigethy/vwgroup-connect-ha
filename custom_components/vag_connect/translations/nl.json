@@ -1996,7 +1996,7 @@
         "name": "Laadstekker automatisch ontgrendelen"
       },
       "climate_at_unlock_switch": {
-        "name": "Extra airconditioning bij ontgrendelen"
+        "name": "Klimaat bij ontgrendelen"
       },
       "window_heating_auto_switch": {
         "name": "Automatische ruitverwarming"

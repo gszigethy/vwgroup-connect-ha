@@ -11,7 +11,7 @@ charging_rate_kmh uses SensorDeviceClass.SPEED so HA auto-converts km/h ↔ mph
 based on the user's unit system preference.
 """
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -4772,6 +4772,10 @@ class VagCompanionChargeModeSensor(VagConnectEntity, SensorEntity):
 # this MODULE-level constant (an entity attr is a no-op).
 PARALLEL_UPDATES = 0
 
+# Companion: sensors reading the app's value of a setting HA holds for the next
+# climate Start (the desired temperature number, the start mode select).
+_COMPANION_READ_OF_HELD = frozenset({"target_temperature", "climate_start_mode"})
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -4800,6 +4804,7 @@ async def async_setup_entry(
     # (any Volkswagen companion entry); App request status goes with the sync
     # slider (the preset maps "Synchronise now", outside Read-only Mode).
     from .companion.app_sync import preset_can_sync  # noqa: PLC0415
+    from .companion.entity_twins import has_control_twin, remove_twin  # noqa: PLC0415
     reads_sync_line = coordinator.is_companion() and brand == "volkswagen"
     syncs_vehicle = (
         coordinator.is_companion()
@@ -4817,6 +4822,13 @@ async def async_setup_entry(
                 continue
             if desc.condition == "combustion" and not has_combustion:
                 continue
+            if has_control_twin(coordinator, vin, vehicle, "sensor", desc.key):
+                remove_twin(hass, "sensor", vin, desc.key)
+                continue
+            if coordinator.is_companion() and desc.key in _COMPANION_READ_OF_HELD:
+                # What the app shows next to the value HA holds for the next
+                # Start (the number / select): a diagnostic, not a second control.
+                desc = replace(desc, entity_category=EntityCategory.DIAGNOSTIC)
             # v4.0.0 grounding wave — soft capability gate. Only descriptions
             # that opt in via ``desc.capability`` are affected; a sensor is
             # hidden ONLY when the capabilities document is loaded and the cap

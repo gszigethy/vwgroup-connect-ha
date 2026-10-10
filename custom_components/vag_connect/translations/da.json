@@ -1996,7 +1996,7 @@
         "name": "Lås ladestikket op automatisk"
       },
       "climate_at_unlock_switch": {
-        "name": "Ekstra klimaanlæg ved oplåsning"
+        "name": "Klima ved oplåsning"
       },
       "window_heating_auto_switch": {
         "name": "Automatisk rudevarme"
