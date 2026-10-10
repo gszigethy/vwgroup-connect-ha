@@ -232,6 +232,21 @@ class NetworkAdbTransport:
         # for the UI to go idle before it reads the tree.
         await asyncio.sleep(0.25)
 
+    # Shell transports (direct ADB, the Bridge add-on) can send taps back to
+    # back; the relay agent has no shell and taps one command at a time.
+    can_tap_burst = True
+
+    async def tap_burst(self, x: int, y: int, count: int) -> None:
+        """Tap one point ``count`` times in ONE shell call, with no dump between.
+
+        Each ``input tap`` starts its own process (a few hundred ms), so the
+        taps land well inside an app's 1 s debounce. An ``echo`` after each
+        keeps output flowing, so a long burst never reads as a silent socket.
+        """
+        tap = f"input tap {int(x)} {int(y)}; echo"
+        await self.shell("; ".join([tap] * int(count)), 10.0 + count)
+        await asyncio.sleep(0.25)
+
     # v2.26.0 — reliability primitives adapted from the prior-art ADB projects.
 
     async def wake(self, timeout_s: float = 10.0) -> None:

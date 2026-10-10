@@ -98,6 +98,15 @@ class AgentRelayTransport(NetworkAdbTransport):
             return None
         return str(got) if got else None
 
+    # One relay round trip per tap: taps cannot be sent back to back.
+    can_tap_burst = False
+
+    async def tap_burst(self, x: int, y: int, count: int) -> None:
+        raise CompanionTransportError(
+            "the companion agent sends one tap per request; it cannot send "
+            "taps back to back"
+        )
+
     async def tap(self, x: int, y: int, timeout_s: float = 10.0) -> None:
         await self._broker.command(
             "tap", {"x": int(x), "y": int(y)}, timeout_s=timeout_s

@@ -16,8 +16,10 @@ What the app does, from the installed 4.3.2 APK and the #968 captures:
 * The temperature dial is a pager of 15.5 (LO) … 30.0 (HI) °C in 0.5 steps;
   the app has no Fahrenheit dial (ClimaSettingsMapper sends "celsius").
   Tapping a neighbouring number scrolls one step; the app sends the new target
-  to the car 1 s after the dial stops (debounced), idle or running. In the
-  window-heating mode the dial is drawn but disabled.
+  to the car 1 s after the dial stops (debounced), idle or running, and on
+  close. So a temperature change costs one car request of its own: the taps
+  go out in one batch inside the debounce, and the dial is read back once.
+  In the window-heating mode the dial is drawn but disabled.
 * Labels are matched against the installed app's own translations
   (``resources.py``); the German/English patterns are only the fallback when
   the tables cannot be read.
@@ -44,6 +46,7 @@ from .resources import (
     StringResources,
     climate_function_state,
     climate_mode_is_window_heating,
+    CLIMA_DEGREE,
     dial_labels,
 )
 from .screen import UiNode, _rid_matches, find_node_for, find_rate_limit_banner, has_anchor
@@ -60,6 +63,8 @@ CLIMATE_APP_VERSIONS: tuple[str, ...] = ("4.6.4", "4.3.2")
 DIAL_MIN_C = 15.5  # rendered "LO"
 DIAL_MAX_C = 30.0  # rendered "HI"
 DIAL_STEP_C = 0.5
+# LO to HI: the most steps one change can take.
+_DIAL_MAX_STEPS = round((DIAL_MAX_C - DIAL_MIN_C) / DIAL_STEP_C)
 _DIAL_NUMBER_RE = re.compile(r"-?\d{1,3}(?:[.,]\d)?")
 # The app debounces dial changes by 1000 ms before it sends them.
 _DIAL_FLUSH_S = 1.2
@@ -183,6 +188,38 @@ def read_dial(
     lower = labels[i - 1] if i > 0 else None
     higher = labels[i + 1] if i + 1 < len(labels) else None
     return dial_value(centre.text, resources), lower, higher
+
+
+def dial_is_celsius(nodes: list[UiNode], resources: StringResources | None = None) -> bool:
+    """True when every label on the dial is one the app's °C dial draws.
+
+    That is a number on the 15.5-30.0 grid, the LO/HI labels
+    (``clima_temperature_low`` / ``_high``) or the degree sign
+    (``unit_degree_sign``). The app has no Fahrenheit key, so anything else
+    means a dial this integration does not know, and it is never walked.
+    """
+    dial = _find(nodes, "clima_compose_view")
+    if dial is None or dial.bounds is None:
+        return False
+    degree = {
+        label.strip().casefold()
+        for label in (resources or {}).get(CLIMA_DEGREE, ()) if label.strip()
+    } | {"°"}
+    values = 0
+    for node in nodes:
+        text = node.text.strip() if node.text else ""
+        if not text or not _inside(node, dial.bounds):
+            continue
+        if text.casefold() in degree:
+            continue
+        value = dial_value(text, resources)
+        if (
+            value is None or not DIAL_MIN_C <= value <= DIAL_MAX_C
+            or value / DIAL_STEP_C != round(value / DIAL_STEP_C)
+        ):
+            return False
+        values += 1
+    return values > 0
 
 
 def snap_temperature(temp_c: float) -> float:
@@ -427,54 +464,104 @@ class ClimateController:
         return picker
 
     async def _apply_dial(self, nodes: list[UiNode], target: float) -> list[UiNode]:
-        """Step the dial to ``target`` one neighbour at a time; return the last dump.
+        """Set the dial to ``target`` with one batch of taps; return the readback.
 
-        Every step is read back before the next. After a change the sheet stays
-        open past the app's 1 s debounce and the screen is dumped once more, so
-        the caller checks what the app settled on, not what the taps implied.
+        The app sends every dial change to the car once the dial has rested
+        for 1 s, and again when the sheet closes, so a change costs one car
+        request even if Start is never pressed. Everything that could stop
+        Start is therefore checked before the first tap, all the steps are
+        tapped back to back inside that 1 s, and the dial is read back once,
+        past the debounce. A wrong reading is reported, never corrected: a
+        correction would be another request, and Start would send a wrong value.
         """
         strings = self._strings
         current, lower, higher = read_dial(nodes, strings)
         if current is None:
             raise self._blocked("could not read the temperature dial")
-        if not DIAL_MIN_C <= current <= DIAL_MAX_C:
-            # Not the °C dial this walk is mapped for (a Fahrenheit build,
-            # a changed layout): refuse before the first tap.
+        if not dial_is_celsius(nodes, strings):
+            # Maintainer rule 3: no dial walk without a known unit.
             raise self._blocked(
-                f"the dial shows {current:g}, outside the {DIAL_MIN_C:g}-"
-                f"{DIAL_MAX_C:g} °C range this integration knows; not changing it"
+                f"the temperature dial shows labels outside the {DIAL_MIN_C:g}-"
+                f"{DIAL_MAX_C:g} °C dial this integration knows; not changing it"
             )
         if current == target:
             return nodes
-        self._mark_write()
-        for _ in range(int((DIAL_MAX_C - DIAL_MIN_C) / DIAL_STEP_C) + 1):
-            neighbour = higher if target > current else lower
-            if neighbour is None or neighbour.tap_point is None:
-                raise self._blocked("the next temperature step is not on the dial")
-            await self._ch._t.tap(*neighbour.tap_point)
-            before = current
-            nodes = await self._screen(
-                lambda n: read_dial(n, strings)[0] not in (None, before)
+        self._dial_preflight(nodes)
+        steps = round(abs(target - current) / DIAL_STEP_C)
+        if not 0 < steps <= _DIAL_MAX_STEPS:
+            raise self._blocked(f"{steps} dial steps is outside the dial; not changing it")
+        neighbour = higher if target > current else lower
+        if neighbour is None or neighbour.tap_point is None:
+            raise self._blocked("the next temperature step is not on the dial")
+        t = self._ch._t
+        if steps > 1 and not getattr(t, "can_tap_burst", False):
+            # One request per tap would reach the car: refuse instead.
+            raise self._blocked(
+                "this connection sends one tap per request, so a dial change of "
+                f"more than {DIAL_STEP_C:g} °C would reach the car as several "
+                "requests; not changing it"
             )
-            moved, lower, higher = read_dial(nodes, strings)
-            if moved is None or moved == current:
-                raise self._blocked("the temperature dial did not move")
-            if abs(target - moved) >= abs(target - current):
-                # One step the wrong way is the most a misread dial costs.
-                raise self._blocked(
-                    f"the dial moved from {current:g} to {moved:g} °C, away from "
-                    f"{target:g} °C; stopped"
-                )
-            current = moved
-            if current == target:
-                break
-        if current != target:
-            raise self._blocked(f"the dial stopped at {current:g} °C, not {target:g} °C")
-        # Keep the sheet open past the app's 1 s debounce, then dump once more:
-        # the check before Start reads what the app settled on.
+        self._mark_write()
+        if steps == 1:
+            await t.tap(*neighbour.tap_point)
+        else:
+            await t.tap_burst(*neighbour.tap_point, steps)
+        # Keep the sheet open past the app's 1 s debounce, then read it once.
         await self._sleep(_DIAL_FLUSH_S)
         nodes, _cleared = await self._ch._dump_and_clear_overlays()
+        if self._ch._limit_on_screen(nodes):
+            self._ch._trip_rate_limit()
+            raise self._blocked(_LIMIT_REASON)
+        landed = read_dial(nodes, strings)[0]
+        if landed != target:
+            raise self._blocked(
+                f"the temperature dial landed at "
+                f"{'an unreadable value' if landed is None else f'{landed:g} °C'}, "
+                f"not {target:g} °C; Start was not pressed. The app sends the dial "
+                "to the car on its own, so this change reached the car once; it "
+                "was not corrected, as that would cost another request"
+            )
         return nodes
+
+    def _dial_preflight(self, nodes: list[UiNode]) -> None:
+        """Refuse before the first dial tap unless Start will follow it.
+
+        A dial change reaches the car whether or not Start is pressed, so
+        every reason Start could be refused is checked first: the mode, the
+        Start button, a request limit, and the app build the dial is mapped on.
+        """
+        ch = self._ch
+        sheet = read_sheet(nodes)
+        if sheet.ac_toggle is not None or sheet.wh_toggle is not None:
+            mode_ok = (
+                sheet.ac_toggle is not None and sheet.ac_toggle.checked
+                and not (sheet.wh_toggle is not None and sheet.wh_toggle.checked)
+            )
+        elif sheet.pick is not None and sheet.pick.enabled and sheet.pick.clickable:
+            mode_ok = climate_mode_is_window_heating(sheet.pick_title, self._strings) is False
+        else:
+            mode_ok = True  # no selectable mode: Start is air conditioning
+        if not mode_ok:
+            raise self._blocked(
+                "the sheet's mode is not recognised as air conditioning; the "
+                "temperature was not changed and Start was not pressed"
+            )
+        if sheet.start is None or not sheet.start.enabled or sheet.start.tap_point is None:
+            raise self._blocked(
+                "the Start button is not available on the sheet; the temperature "
+                "was not changed"
+            )
+        if ch._is_rate_limited():
+            raise self._blocked("the channel is backed off after a rate limit; commands are paused")
+        if ch._limit_on_screen(nodes):
+            ch._trip_rate_limit()
+            raise self._blocked(_LIMIT_REASON)
+        if not ch._version_ok or ch._live_app_version not in CLIMATE_APP_VERSIONS:
+            raise self._blocked(
+                f"the temperature dial is mapped for app {'/'.join(CLIMATE_APP_VERSIONS)} "
+                f"only; the phone has {ch._live_app_version or 'an unknown version'}. "
+                "The temperature was not changed"
+            )
 
     def _check_ready(
         self,

@@ -589,6 +589,15 @@ class CompanionChannel:
             "climate_detail", "climate_settings",
         ):
             values.update(read_climate_resources(detail, self._app_strings))
+        if self._preset.brand == "volkswagen" and nav.name == "climate_detail":
+            # The dial's ends read LO / HI (15.5 / 30.0), not the number beside
+            # them; a dial that is not the app's °C dial gives no target.
+            from .climate import dial_is_celsius, read_dial  # noqa: PLC0415
+
+            values.pop("target_temperature", None)
+            target = read_dial(detail, self._app_strings)[0]
+            if target is not None and dial_is_celsius(detail, self._app_strings):
+                values["target_temperature"] = target
         for key, val in values.items():
             # #1552 — a fresh detail-screen value wins over a stale
             # overview value for the same key (direct assign, not
