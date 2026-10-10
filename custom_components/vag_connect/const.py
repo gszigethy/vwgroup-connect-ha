@@ -25,6 +25,16 @@ CONF_CAPTCHA_CODE             = "captcha_code"
 # the phone's app shows. EXPERIMENTAL, opt-in from the hub menu.
 CONF_STRATEGY                 = "strategy"
 STRATEGY_COMPANION_ADB        = "companion_adb"
+# A companion entry often sits next to a cloud or EU Data Act entry for the
+# same car. Its vehicle entities carry this infix in their unique id
+# ("{vin}_companion_{key}") so the two entries never claim the same id; with a
+# bare "{vin}_{key}" the entry set up second lost every shared entity (battery
+# level, ranges, doors locked, currently charging, …) to HA's duplicate check.
+COMPANION_UNIQUE_ID_INFIX     = "companion"
+# Set in a companion entry's data once its registered ids were moved to that
+# namespace. A flag, not a prefix test: some legacy keys already start with
+# "companion_" (e.g. "{vin}_companion_reset_button").
+CONF_COMPANION_UID_NAMESPACE  = "companion_uid_namespace"
 CONF_ADB_HOST                 = "adb_host"
 CONF_ADB_PORT                 = "adb_port"
 CONF_VIN                      = "vin"
@@ -491,6 +501,19 @@ RECOMMENDED_SCAN_INTERVAL: dict[str, int] = {
     # catches the post-drive snapshot.
     "audi_acpp": 60,
 }
+
+
+def vehicle_unique_id(vin: str, key: str, *, companion: bool = False) -> str:
+    """Unique id of a per-vehicle entity; companion entries get their own namespace."""
+    if companion:
+        return f"{vin}_{COMPANION_UNIQUE_ID_INFIX}_{key}"
+    return f"{vin}_{key}"
+
+
+def is_companion_entry_data(data: object) -> bool:
+    """True if a config entry's ``data`` mapping describes a companion (ADB) entry."""
+    get = getattr(data, "get", None)
+    return bool(callable(get) and get(CONF_STRATEGY) == STRATEGY_COMPANION_ADB)
 
 
 def recommended_scan_interval(brand: str | None) -> int:
