@@ -185,7 +185,10 @@ async def test_start_walks_to_detail_and_returns_without_claiming_vehicle_succes
 
 @pytest.mark.asyncio
 async def test_command_started_on_the_sheet_closes_it():
-    # Review B12: with no forward walk the sheet was left open.
+    # Review B12: a command begun with the sheet open leaves it closed. Since
+    # every command starts from the overview (core C2), the gate closes the
+    # sheet first, the walk reopens it from the tile, and the command closes
+    # it again; the Start tap happens exactly once.
     phone = Phone()
     phone.screen = phone.detail
     channel = CompanionChannel(phone, VW, time_fn=time.monotonic)
@@ -193,16 +196,22 @@ async def test_command_started_on_the_sheet_closes_it():
     close = next(n for n in (find_node_for(sheet, s) for s in VW.up_controls) if n is not None)
     start = find_battery_control(sheet, STRINGS, "start_charging")
     assert close.tap_point != start.tap_point
+    overview = dump("gte_overview")
 
     async def tap(x, y):
         phone.taps.append((x, y))
-        if (x, y) == close.tap_point:  # only the sheet's own Close leaves it
-            phone.screen = dump("gte_overview")
+        if phone.screen == phone.detail:
+            if (x, y) == close.tap_point:  # only the sheet's own Close leaves it
+                phone.screen = overview
+        else:  # the range tile opens the sheet
+            phone.screen = phone.detail
 
     phone.tap = tap
     await channel.do_action("start_charging")
-    assert phone.taps == [start.tap_point, close.tap_point]
-    assert phone.screen == dump("gte_overview")
+    assert phone.taps[0] == close.tap_point
+    assert phone.taps[2:] == [start.tap_point, close.tap_point]
+    assert phone.taps.count(start.tap_point) == 1
+    assert phone.screen == overview
 
 
 @pytest.mark.asyncio
