@@ -2611,6 +2611,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Für dieses Fahrzeug läuft bereits ein einmaliger Verlaufsexport. Das Portal bearbeitet immer nur eine solche Anfrage gleichzeitig – warte deshalb, bis die aktuelle abgeschlossen ist (oder das Zeitlimit abläuft), bevor du eine neue anforderst."
+    },
+    "hvac_mode_not_supported": {
+      "message": "Der HVAC-Modus {hvac_mode} wird nicht unterstützt; verwende einen von: {modes}. Es wurde nichts gesendet."
     }
   },
   "triggers": {

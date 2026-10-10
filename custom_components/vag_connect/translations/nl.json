@@ -2576,6 +2576,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Er loopt al een eenmalige export van de geschiedenis voor deze auto. Het portaal verwerkt maar één zo'n verzoek tegelijk, dus wacht tot het huidige klaar is (of een time-out krijgt) voordat je een nieuwe aanvraagt."
+    },
+    "hvac_mode_not_supported": {
+      "message": "De HVAC-modus {hvac_mode} wordt niet ondersteund; gebruik een van: {modes}. Er is niets verzonden."
     }
   },
   "selector": {

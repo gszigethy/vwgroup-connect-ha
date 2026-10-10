@@ -2576,6 +2576,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Ya hay una exportación puntual del historial en curso para este vehículo. El portal solo procesa una solicitud de este tipo a la vez, así que espera a que la actual termine (o se agote el tiempo de espera) antes de solicitar otra."
+    },
+    "hvac_mode_not_supported": {
+      "message": "El modo HVAC {hvac_mode} no es compatible; usa uno de: {modes}. No se ha enviado nada."
     }
   },
   "selector": {

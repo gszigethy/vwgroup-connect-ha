@@ -49,6 +49,12 @@ def climate_targets_of(coordinator: Any) -> ClimateTargets | None:
     return targets if isinstance(targets, ClimateTargets) else None
 
 
+# start_climate_control fields the Air Conditioning sheet has no control for.
+_RICH_CLIMATE_ONLY = (
+    "glass_heating", "seat_fl", "seat_fr", "seat_rl", "seat_rr",
+    "climatisation_at_unlock", "climatisation_mode",
+)
+
 # VehicleData flags that default to False; only the opt-in departure-times
 # read supplies them.
 _UNREAD_FLAGS = (
@@ -299,10 +305,28 @@ class CompanionClient:
     async def command_start_climate(self, vin: str, *_a: Any, **_k: Any) -> None:
         await self._climate_command("command_start_climate", self._start_with_targets)
 
-    async def command_start_climate_control(self, vin: str, *_a: Any, **_k: Any) -> None:
-        # The rich payload (seats, zones) has no sheet control; start with the
-        # mode and temperature held in HA, like the plain start.
-        await self._climate_command("command_start_climate", self._start_with_targets)
+    async def command_start_climate_control(
+        self, vin: str, *_a: Any, temp_c: float | None = None, **kwargs: Any
+    ) -> None:
+        from ..cariad.exceptions import VehicleCommandError  # noqa: PLC0415
+
+        # The sheet has a mode, a dial and Start: the rest of the rich payload
+        # has no control there, so a call that sets any of it is refused.
+        unsupported = [key for key in _RICH_CLIMATE_ONLY if kwargs.get(key) is not None]
+        if unsupported:
+            raise VehicleCommandError(
+                "command_start_climate_control",
+                f"the companion (ADB) channel cannot set {', '.join(unsupported)}; "
+                "nothing was sent",
+            )
+
+        async def run() -> None:
+            # temp_c becomes the held temperature, which Start then applies.
+            if temp_c is not None:
+                self.store_climate_target_temperature(float(temp_c))
+            await self._start_with_targets()
+
+        await self._climate_command("command_start_climate", run)
 
     async def command_stop_climate(self, vin: str, *_a: Any, **_k: Any) -> None:
         await self._climate_command("command_stop_climate", self._climate.stop)

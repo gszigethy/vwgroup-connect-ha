@@ -2576,6 +2576,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Dla tego samochodu trwa już jednorazowy eksport danych historycznych. Portal obsługuje tylko jedno takie żądanie naraz, więc zaczekaj, aż bieżące się zakończy (lub wygaśnie), zanim poprosisz o kolejne."
+    },
+    "hvac_mode_not_supported": {
+      "message": "Tryb HVAC {hvac_mode} nie jest obsługiwany; użyj jednego z: {modes}. Nic nie zostało wysłane."
     }
   },
   "selector": {

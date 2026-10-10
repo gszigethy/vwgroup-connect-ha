@@ -2576,6 +2576,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Tälle autolle on jo käynnissä kertaluonteinen historiatietojen vienti. Portaali käsittelee vain yhtä tällaista pyyntöä kerrallaan, joten odota, että nykyinen valmistuu (tai aikakatkaistaan), ennen kuin pyydät uutta."
+    },
+    "hvac_mode_not_supported": {
+      "message": "HVAC-tilaa {hvac_mode} ei tueta; käytä jotakin näistä: {modes}. Mitään ei lähetetty."
     }
   },
   "selector": {

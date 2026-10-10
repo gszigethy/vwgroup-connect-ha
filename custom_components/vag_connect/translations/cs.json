@@ -2576,6 +2576,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Pro toto auto už probíhá jednorázový export historie. Portál zpracovává vždy jen jeden takový požadavek, takže než si vyžádáte další, počkejte, až se ten aktuální dokončí (nebo vyprší)."
+    },
+    "hvac_mode_not_supported": {
+      "message": "Režim HVAC {hvac_mode} není podporován; použijte jeden z: {modes}. Nic nebylo odesláno."
     }
   },
   "selector": {

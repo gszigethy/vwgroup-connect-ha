@@ -2611,6 +2611,9 @@
     },
     "historical_wedge_blocked": {
       "message": "A one-time historical export is already in progress for this car. The portal handles one request of this kind at a time, so wait for the current one to finish (or time out) before requesting another."
+    },
+    "hvac_mode_not_supported": {
+      "message": "The HVAC mode {hvac_mode} is not supported; use one of: {modes}. Nothing was sent."
     }
   },
   "triggers": {
