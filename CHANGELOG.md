@@ -42,6 +42,24 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.12.0-3] - 2026-10-10 — Companion: the climate dial moves by drag
+
+> Fork pre-release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.12.0** plus fork release **3**, on top of 4.12.0-2.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a pre-release. Turn on *Show beta versions* for this repository, select `v4.12.0-3`,
+> download, and restart Home Assistant.
+
+### Fixed
+- **Companion: a climate temperature change of 1 °C lands where it should.**
+  - In 4.12.0-2, 21 → 20 °C on a running climate landed at 20.5 °C. The app's dial animates each step, and a second tap during the animation stops it, so a quick series of taps moved the dial one step only.
+  - One step is now a tap on the next label. Two steps (1 °C) are one slow drag, which the dial settles from once, so it costs one car request. The drag is measured from the screen. The dial is read back after every move.
+  - A change takes at most two moves (2 °C, two car requests); a larger change is refused before anything moves. This applies to a running climate and to the dial setting before Start. (#76)
+
+### Not yet confirmed on a live car (app 4.6.4)
+- Dragging the climate dial.
+
 ## [4.12.0-2] - 2026-10-10 — Companion: a temperature change reaches a running climate
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
