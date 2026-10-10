@@ -169,6 +169,8 @@ class FakePhone:
         self.connected = True
         self.taps: list[str] = []
         self.bursts: list[int] = []  # one entry per tap_burst shell call
+        self.swipes: list[tuple] = []
+        self.animating_until = -1.0
         # The app's 1000 ms dial debounce, on a fake clock: a dump takes 1 s,
         # a tap 0.3 s. A change that rests for 1 s, or is pending when the
         # sheet closes or Start is pressed, is one settings request.
@@ -229,23 +231,32 @@ class FakePhone:
         self.taps.append(name)
         getattr(self, "_on_" + name.split(":")[0])(name)
 
-    can_tap_burst = True
-
     async def tap_burst(self, x, y, count):
-        # One shell call: the dial's slots stay where they are while the
-        # numbers scroll through them, so each tap hits the next step. Like
-        # tap_burst_script, it stops after a tap that came over 700 ms late.
+        # Taps chained like the old dial burst, 315 ms apart. On the real
+        # dial a tap starts a 450 ms animation, and a touch during it stops
+        # the animation instead of clicking: only the first tap moves it.
         self.bursts.append(count)
-        gaps = self.burst_gaps or [0.315] * count
-        made = 0
-        for i, gap in enumerate(gaps[:count]):
-            self.advance(gap)
+        for _ in range(count):
+            self.advance(0.315)
             self._render()
             self._hit(x, y)
-            made += 1
-            if i and gap > 0.7:
-                break
-        return made
+        return count
+
+    # The dial pager: one step is the distance between two label slots.
+    DIAL_PAGE = 441
+
+    async def swipe(self, x1, y1, x2, y2, dur_ms):
+        self.swipes.append((x1, y1, x2, y2, dur_ms))
+        self.advance(dur_ms / 1000)
+        if self.screen != "sheet" or not 1001 <= y1 <= 1322 or self.dial_locked:
+            return
+        pages = round((x1 - x2) / self.DIAL_PAGE)
+        if abs(x1 - x2) * 1000 / dur_ms > 600:
+            pages += 1 if pages > 0 else -1  # a fling runs past the target
+        if pages:
+            self.temp = min(30.0, max(15.5, self.temp + pages * 0.5))
+            self.advance(0.45)  # the snap
+            self.pending, self.changed_at = True, self.clock
 
     # rendering
     def _t(self, name, left, top, right, bottom, **kw) -> str:
@@ -354,9 +365,12 @@ class FakePhone:
             self.wh_toggle = not self.wh_toggle
 
     def _on_dial(self, name):
+        if self.clock < self.animating_until:
+            return  # a touch during the animation only stops it
         if not self.dial_locked:
             self.temp = float(name.split(":")[1])
-            self.pending, self.changed_at = True, self.clock
+            self.animating_until = self.clock + 0.45
+            self.pending, self.changed_at = True, self.clock + 0.45
 
     def _on_start(self, _):
         self._flush()  # Start sends a pending dial value first
@@ -606,22 +620,52 @@ async def test_commands_keep_the_minimum_interval():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("start", "target", "steps"), [
-    (22.0, 23.0, ["dial:22.5", "dial:23.0"]),
-    (22.0, 21.0, ["dial:21.5", "dial:21.0"]),
-    (16.0, 15.5, ["dial:15.5"]),          # LO
-    (29.5, 30.0, ["dial:30.0"]),          # HI
+@pytest.mark.parametrize(("start", "target", "taps", "drags"), [
+    (22.0, 23.0, [], 1),                  # two steps: one drag
+    (22.0, 21.0, [], 1),
+    (22.0, 22.5, ["dial:22.5"], 0),       # one step: one tap
+    (16.0, 15.5, ["dial:15.5"], 0),       # LO
+    (29.5, 30.0, ["dial:30.0"], 0),       # HI
 ])
-async def test_start_steps_the_dial_reads_it_back_then_starts(start, target, steps):
+async def test_start_sets_the_dial_reads_it_back_then_starts(start, target, taps, drags):
     phone = FakePhone(temp=start)
     channel, ctrl = _controller(phone)
     await ctrl.start(temp_c=target)
-    # The dial is set before Start, never after; several steps go out as ONE
-    # batch (one shell call), so the app's 1 s debounce sends one request.
-    assert phone.taps == ["tile", *steps, "start"]
-    assert phone.bursts == ([len(steps)] if len(steps) > 1 else [])
+    # The dial is set before Start, never after, with one gesture that
+    # settles once, so the app's 1 s debounce sends one request.
+    assert phone.taps == ["tile", *taps, "start"]
+    assert len(phone.swipes) == drags and phone.bursts == []
     assert phone.temp == target and phone.running == "ac"
+    assert phone.settings_requests == 1
     assert channel._nav_cache["target_temperature"] == target
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("start", "target", "x1", "x2"), [
+    (21.0, 20.0, 54, 936),    # lower: the dial is dragged to the right
+    (20.0, 21.0, 1026, 144),  # higher: to the left
+])
+async def test_a_drag_is_measured_from_the_dump_and_slow(start, target, x1, x2):
+    # Two label slots are 441 px apart on this 1080 px dial; the drag keeps
+    # 5 % from the edges and stays at the centre label's height.
+    phone = FakePhone(temp=start)
+    _ch, ctrl = _controller(phone)
+    await ctrl.start(temp_c=target)
+    [(sx1, sy1, sx2, sy2, dur)] = phone.swipes
+    assert (sx1, sx2) == (x1, x2) and sy1 == sy2 == (1027 + 1180) // 2
+    assert abs(sx1 - sx2) * 1000 / dur <= 350  # no fling past the target
+    assert phone.temp == target
+
+
+@pytest.mark.asyncio
+async def test_chained_taps_stop_the_dial_after_one_step():
+    # Why the dial is dragged: a touch during the step animation stops it.
+    phone = FakePhone(temp=21.0)
+    _ch, _ctrl = _controller(phone)
+    phone.screen = "sheet"
+    phone._render()
+    await phone.tap_burst(53, 1103, 2)
+    assert phone.temp == 20.5
 
 
 @pytest.mark.asyncio
@@ -636,10 +680,11 @@ async def test_start_with_the_dial_already_there_only_taps_start():
 async def test_a_locked_dial_is_reported_not_retried_and_start_is_not_pressed():
     phone = FakePhone(temp=22.0, dial_locked=True)
     _ch, ctrl = _controller(phone)
-    with pytest.raises(CompanionWriteBlocked, match="landed at 22 °C, not 24 °C"):
+    with pytest.raises(CompanionWriteBlocked, match="landed at 22 °C, not 23 °C"):
         await ctrl.start(temp_c=24.0)
-    assert phone.taps == ["tile", *["dial:22.5"] * 4, "up"]
-    assert phone.bursts == [4] and phone.running is None
+    # The first drag did not move it: the second is never made.
+    assert phone.taps == ["tile", "up"] and len(phone.swipes) == 1
+    assert phone.running is None
 
 
 @pytest.mark.asyncio
@@ -647,7 +692,7 @@ async def test_start_sets_the_mode_before_the_dial():
     phone = FakePhone(layout="pick", mode="wh", temp=22.0)
     _ch, ctrl = _controller(phone)
     await ctrl.start(temp_c=23.0)
-    assert phone.taps == ["tile", "pick", "row:ac", "dial:22.5", "dial:23.0", "start"]
+    assert phone.taps == ["tile", "pick", "row:ac", "start"] and len(phone.swipes) == 1
     assert phone.running == "ac" and phone.temp == 23.0
 
 
@@ -673,9 +718,9 @@ async def test_a_dial_that_springs_back_aborts_before_start():
     ctrl = ClimateController(channel, sleep=app_reverts)
     with pytest.raises(CompanionWriteBlocked, match=r"22 °C, not 23 °C.*Start was not pressed"):
         await ctrl.start(temp_c=23.0)
-    # Read back once, never corrected: a correcting tap is another request.
-    assert phone.taps == ["tile", "dial:22.5", "dial:23.0", "up"]
-    assert phone.bursts == [2] and phone.running is None
+    # Read back once, never corrected: a correcting move is another request.
+    assert phone.taps == ["tile", "up"] and len(phone.swipes) == 1
+    assert phone.running is None
     assert phone.screen == "overview"
 
 
@@ -712,16 +757,16 @@ async def test_toggle_layout_mismatch_aborts_before_start():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("start", "target", "steps"), [
-    (20.0, 21.0, ["dial:20.5", "dial:21.0"]),
-    (22.0, 21.5, ["dial:21.5"]),
+@pytest.mark.parametrize(("start", "target", "steps", "drags"), [
+    (21.0, 20.0, [], 1),  # the reported case: 1 °C is one drag
+    (22.0, 21.5, ["dial:21.5"], 0),
 ])
-async def test_adjust_moves_a_running_air_conditioning_dial(start, target, steps):
+async def test_adjust_moves_a_running_air_conditioning_dial(start, target, steps, drags):
     phone = FakePhone(layout="pick", running="ac", temp=start)
     channel, ctrl = _controller(phone)
     assert await ctrl.adjust(target) is True
-    # Dial only, in one batch: no Start, no Stop, no mode change.
-    assert phone.taps == ["tile", *steps, "up"]
+    # Dial only, in one gesture: no Start, no Stop, no mode change.
+    assert phone.taps == ["tile", *steps, "up"] and len(phone.swipes) == drags
     assert phone.temp == target and phone.running == "ac"
     assert phone.settings_requests == 1  # the app sends the change once
     assert channel._nav_cache["target_temperature"] == target
@@ -785,13 +830,15 @@ def test_snap_to_the_app_grid():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("start", "target"), [(15.5, 30.0), (30.0, 15.5)])
-async def test_lo_to_hi_is_one_batch_of_29_taps(start, target):
+@pytest.mark.parametrize(("start", "target"), [(15.5, 30.0), (21.0, 24.0), (24.0, 21.5)])
+async def test_a_change_of_more_than_2_degrees_is_refused_before_any_move(start, target):
+    # Each drag is a car request: more than two of them is refused.
     phone = FakePhone(temp=start)
     _ch, ctrl = _controller(phone)
-    await ctrl.start(temp_c=target)
-    assert phone.bursts == [29] and phone.temp == target
-    assert phone.taps[0] == "tile" and phone.taps[-1] == "start"
+    with pytest.raises(CompanionWriteBlocked, match="at most 2 °C at a time"):
+        await ctrl.start(temp_c=target)
+    assert _no_dial_taps(phone) and "start" not in phone.taps
+    assert phone.settings_requests == 0
 
 
 @pytest.mark.asyncio
@@ -813,15 +860,17 @@ async def test_a_wrong_landing_is_reported_and_neither_corrected_nor_started(lan
     ctrl = ClimateController(channel, sleep=overshoots)
     with pytest.raises(CompanionWriteBlocked, match="landed at .*not 23 °C.*not corrected"):
         await ctrl.start(temp_c=23.0)
-    dial_taps = [t for t in phone.taps if t.startswith("dial")]
-    assert dial_taps == ["dial:22.5", "dial:23.0"] and phone.bursts == [2]
+    assert len(phone.swipes) == 1 and not any(t.startswith("dial") for t in phone.taps)
     assert "start" not in phone.taps and phone.running is None
     assert channel._last_write_at is not None  # the change counts as a request
     assert phone.settings_requests == 1  # and only one: nothing was corrected
 
 
 def _no_dial_taps(phone: FakePhone) -> bool:
-    return not any(t.startswith("dial") for t in phone.taps) and phone.bursts == []
+    return (
+        not any(t.startswith("dial") for t in phone.taps)
+        and phone.bursts == [] and phone.swipes == []
+    )
 
 
 @pytest.mark.asyncio
@@ -894,13 +943,13 @@ async def test_a_build_newer_than_the_listed_ones_refuses_before_any_dial_tap():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("target", "taps"), [(24.0, None), (22.5, ["dial:22.5"])])
-async def test_the_relay_refuses_more_than_one_step(target, taps):
+@pytest.mark.parametrize(("target", "taps"), [(23.0, None), (22.5, ["dial:22.5"])])
+async def test_a_connection_without_drag_refuses_more_than_one_step(target, taps):
     phone = FakePhone(temp=22.0)
-    phone.can_tap_burst = False  # the relay agent: one request per tap
+    phone.swipe = None  # a transport that cannot drag
     _ch, ctrl = _controller(phone)
     if taps is None:
-        with pytest.raises(CompanionWriteBlocked, match="one tap per request"):
+        with pytest.raises(CompanionWriteBlocked, match="cannot drag the dial"):
             await ctrl.start(temp_c=target)
         assert _no_dial_taps(phone) and "start" not in phone.taps
     else:
@@ -966,23 +1015,17 @@ def test_the_burst_script_stops_after_a_late_tap(tmp_path, gaps, made):
 
 
 @pytest.mark.asyncio
-async def test_a_six_step_change_is_one_settings_request():
+@pytest.mark.parametrize(("target", "drags", "taps", "requests"), [
+    (23.0, 2, [], 2),             # 2 °C: two drags, two requests
+    (22.5, 1, ["dial:22.5"], 2),  # 1.5 °C: a drag, then a tap
+])
+async def test_each_dial_move_is_one_settings_request(target, drags, taps, requests):
     phone = FakePhone(temp=21.0)
     _ch, ctrl = _controller(phone)
-    await ctrl.start(temp_c=24.0)
-    assert phone.bursts == [6] and phone.temp == 24.0 and phone.running == "ac"
-    assert phone.settings_requests == 1
-
-
-@pytest.mark.asyncio
-async def test_a_late_tap_stops_the_batch_at_two_settings_requests_and_no_start():
-    phone = FakePhone(temp=21.0)
-    phone.burst_gaps = [0.3, 0.3, 1.2, 0.3, 0.3, 0.3]  # the third tap is late
-    _ch, ctrl = _controller(phone)
-    with pytest.raises(CompanionWriteBlocked, match="too slow.*after 3 of 6.*Start was not pressed"):
-        await ctrl.start(temp_c=24.0)
-    assert phone.temp == 22.5 and "start" not in phone.taps and phone.running is None
-    assert phone.settings_requests == 2  # 22.0 during the late gap, then 22.5
+    await ctrl.start(temp_c=target)
+    assert len(phone.swipes) == drags and phone.taps == ["tile", *taps, "start"]
+    assert phone.temp == target and phone.running == "ac"
+    assert phone.settings_requests == requests
 
 
 def test_dial_reads_lo_and_hi():

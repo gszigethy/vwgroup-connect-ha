@@ -19,19 +19,22 @@ Home Assistant climate entities. It is a stand-alone change against upstream
 | Air conditioning using battery (setting) | `climate_without_external_power` → binary sensor | `ClimatisationWithoutExternalPowerEnabled`, where shown |
 | Start / Stop | `command_start_climate` / `command_stop_climate` | `cta_start` / `cta_stop` |
 | Window heating only | `command_start_window_heating` / `command_stop_window_heating` | Picker row 2, or Mk8 toggles, then `cta_start` |
-| Set target temperature | `command_set_climate_temperature` (held; Start applies it; while the air conditioning runs, the dial is moved at once) | Before Start, or on the running sheet: all 0.5 steps tapped on the neighbouring dial label in one batch, then one readback |
+| Set target temperature | `command_set_climate_temperature` (held; Start applies it; while the air conditioning runs, the dial is moved at once) | Before Start, or on the running sheet: one step is a tap on the neighbouring label, two steps one slow drag; the dial is read back after each |
 
-A temperature change costs one car request of its own: the app sends the dial
-1 s after it stops moving (and when the sheet closes), whether or not Start is
-pressed. So before the first dial tap the integration checks the request limit,
-the app build and the dial's °C labels, and, before a Start, also the mode and
-the Start button. It sends every
-step inside that 1 s, and reads the dial back once. The phone times the batch
-itself and stops after a tap that came more than 700 ms after the previous one,
-so a slow phone costs at most two requests (and no Start), never one per step. A wrong reading is reported
-and Start is not pressed; it is never corrected, as that would be another
-request. The relay agent sends one request per tap, so over the relay only a
-0.5 °C change is made; a larger one is refused.
+The dial is a snapping pager. A tap on a neighbouring label animates one step,
+and a touch during that animation stops it, so taps cannot be chained (a burst
+of taps moved a live dial one step only). The app sends the value the dial
+settles on 1 s after it settles (and when the sheet closes), whether or not
+Start is pressed. So each gesture is one car request: one step is one tap, two
+steps (1 °C) are one slow drag that settles once, and a change takes at most two
+gestures (2 °C); a larger one is refused before anything moves. The drag is
+measured from the dump (the step width between the unclipped label edges) and
+is slow enough that the pager snaps instead of flinging. Before the first
+gesture the integration checks the request limit, the app build and the dial's
+°C labels, and, before a Start, also the mode and the Start button. A wrong
+reading is reported and Start is not pressed; it is never corrected, as that
+would be another request. A connection that cannot drag makes only 0.5 °C
+changes.
 
 The sheet is read when the **Read climate detail** switch is on. The Settings
 sheet is one tap deeper and has its own switch, **Read climate settings**. Both

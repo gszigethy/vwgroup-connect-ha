@@ -125,10 +125,10 @@ async def test_a_dial_moving_the_wrong_way_is_reported_not_corrected():
 
     phone._on_dial = backwards
     _ch, ctrl = _controller(phone)
-    with pytest.raises(CompanionWriteBlocked, match="landed at 20 °C, not 24 °C"):
-        await ctrl.start(temp_c=24.0)
-    # One batch, one readback; no correcting taps and no Start.
-    assert phone.bursts == [4] and "start" not in phone.taps
+    with pytest.raises(CompanionWriteBlocked, match="landed at 21.5 °C, not 22.5 °C"):
+        await ctrl.start(temp_c=22.5)
+    # One tap, one readback; no correcting tap and no Start.
+    assert phone.taps == ["tile", "dial:22.5", "up"] and "start" not in phone.taps
 
 
 @pytest.mark.asyncio
