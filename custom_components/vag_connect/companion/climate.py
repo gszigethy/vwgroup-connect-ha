@@ -39,7 +39,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, AsyncIterator, Awaitable, Callable
 
-from .presets import app_version_covered
+from .presets import app_version_covered, app_version_listed
 from .resources import (
     StringResources,
     climate_function_state,
@@ -337,10 +337,15 @@ class ClimateController:
             ch._live_app_version, CLIMATE_APP_VERSIONS
         ):
             raise self._blocked(
-                f"climate commands are mapped for app {'/'.join(CLIMATE_APP_VERSIONS)} "
-                f"and newer; the phone has {ch._live_app_version or 'an unknown version'}. "
+                f"climate commands are mapped for app {'/'.join(CLIMATE_APP_VERSIONS)}; "
+                f"the phone has {ch._live_app_version or 'an unknown version'}. "
                 "Reads still work."
             )
+        # Rule 9: the dial is walked with geometry from the listed builds.
+        if not app_version_listed(ch._live_app_version, CLIMATE_APP_VERSIONS):
+            from .channel import CompanionAppVersionUnverified  # noqa: PLC0415
+
+            raise CompanionAppVersionUnverified(ch._live_app_version)
         if ch._is_rate_limited():
             raise self._blocked("the channel is backed off after a rate limit; commands are paused")
         if ch._last_write_at is not None:

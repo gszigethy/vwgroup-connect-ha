@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_app_version_unverified": {
+      "message": "Opdrachten staan uit: de app op de telefoon is versie {version}, die nog niet is geverifieerd voor opdrachten. Opdrachten, opslaan en synchroniseren blijven uit totdat deze versie is geverifieerd. Voertuiggegevens worden nog steeds bijgewerkt."
+    },
     "vehicle_not_found": {
       "message": "Voertuig met VIN {vin} niet gevonden."
     },

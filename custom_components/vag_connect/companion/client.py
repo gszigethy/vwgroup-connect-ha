@@ -192,6 +192,7 @@ class CompanionClient:
         # A companion read is a two-way-capable source only when writes are on;
         # expose that so the entity layer can reflect it.
         data.companion_writes_enabled = self._channel.writes_enabled
+        data.companion_app_version = getattr(self._channel, "live_app_version", None)
         data.companion_source_age_s = self._channel.source_data_age_s
         self._last_data = data
         return data

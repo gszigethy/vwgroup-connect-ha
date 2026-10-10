@@ -1809,6 +1809,10 @@ class VehicleData:
     # actions) are currently allowed. None for every network channel. Lets the
     # entity layer show whether the experimental two-way path is live.
     companion_writes_enabled: bool | None = None
+    # Companion (ADB) channel only: the app version last read from the phone,
+    # shown next to the App request status so a build that is not verified
+    # for commands (rule 9) explains why commands are off. None elsewhere.
+    companion_app_version: str | None = None
     # v2.26.0 — companion (ADB) channel only. Age in seconds of the CAR's data
     # as the app itself reports it ("synchronised N ago"), distinct from how
     # fresh OUR read is. None for every network channel and when the app shows
