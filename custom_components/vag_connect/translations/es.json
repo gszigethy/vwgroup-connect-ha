@@ -1992,7 +1992,7 @@
         "name": "Desbloqueo automático del conector de carga"
       },
       "climate_at_unlock_switch": {
-        "name": "Climatización auxiliar al desbloquear"
+        "name": "Climatización al desbloquear"
       },
       "window_heating_auto_switch": {
         "name": "Calefacción automática de ventanas"

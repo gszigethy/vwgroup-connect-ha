@@ -1992,7 +1992,7 @@
         "name": "Avaa latauspistoke automaattisesti"
       },
       "climate_at_unlock_switch": {
-        "name": "Lisäilmastointi avattaessa"
+        "name": "Ilmastointi avattaessa"
       },
       "window_heating_auto_switch": {
         "name": "Automaattinen ikkunanlämmitys"

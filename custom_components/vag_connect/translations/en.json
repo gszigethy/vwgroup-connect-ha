@@ -1992,7 +1992,7 @@
         "name": "Auto-unlock charging plug"
       },
       "climate_at_unlock_switch": {
-        "name": "Auxiliary air conditioning at unlock"
+        "name": "Climate at unlock"
       },
       "window_heating_auto_switch": {
         "name": "Automatic window heating"

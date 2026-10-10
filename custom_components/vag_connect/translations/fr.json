@@ -1992,7 +1992,7 @@
         "name": "Déverrouillage auto de la prise de charge"
       },
       "climate_at_unlock_switch": {
-        "name": "Climatisation auxiliaire au déverrouillage"
+        "name": "Climatisation au déverrouillage"
       },
       "window_heating_auto_switch": {
         "name": "Dégivrage automatique des vitres"

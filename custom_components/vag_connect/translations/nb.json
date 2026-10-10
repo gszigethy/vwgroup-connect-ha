@@ -1992,7 +1992,7 @@
         "name": "Lås opp ladepluggen automatisk"
       },
       "climate_at_unlock_switch": {
-        "name": "Ekstra klimaanlegg ved opplåsing"
+        "name": "Klima ved opplåsing"
       },
       "window_heating_auto_switch": {
         "name": "Automatisk rutevarme"
