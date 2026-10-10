@@ -421,9 +421,14 @@ class CompanionChannel:
             # A sub-screen (behind a closed alert, or left by a walk that was
             # cut short): go home before reading, and never parse overview
             # selectors off another page. An empty dump is no screen at all,
-            # and BACK there could leave the app.
+            # and BACK there could leave the app. The walk back taps, so it
+            # needs the same version gate as any other tap.
+            if not self._version_ok:
+                return {}
             await self._return_to_overview(3)
             nodes, cleared = await self._dump_and_clear_overlays()
+            if self._limit_on_screen(nodes):
+                self._trip_rate_limit()
             if cleared and not has_anchor(nodes, self._preset):
                 return {}
         if not cleared:
@@ -1841,6 +1846,10 @@ class CompanionChannel:
             raise CompanionWriteBlocked(
                 "a nag screen is up and did not clear; not tapping blind"
             )
+        # Before the walk home below, whose BACK would close the alert unseen.
+        if self._limit_on_screen(nodes):
+            self._trip_rate_limit()
+            raise CompanionWriteBlocked(_LIMIT_REASON)
         if self._preset.screen_anchor is not None and not has_anchor(nodes, self._preset):
             # Every command starts from the overview. A walk cut short can
             # leave a sub-screen with a change staged but not saved, which the

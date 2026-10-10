@@ -508,6 +508,39 @@ async def test_a_command_is_refused_when_the_app_cannot_get_home():
 
 
 @pytest.mark.asyncio
+async def test_a_request_limit_alert_off_the_overview_pauses_before_any_tap():
+    # The walk home would close the alert with BACK before anything saw it.
+    phone = SettingsPhone()
+    phone.screen = "limit"
+    channel = _channel(phone)
+    with pytest.raises(CompanionWriteBlocked, match="request budget"):
+        await channel.set_climate_setting("climate_at_unlock", True)
+    assert channel._is_rate_limited()
+    assert phone.taps == [] and phone.saved["aux"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_request_limit_alert_off_the_overview_pauses_a_poll_too():
+    phone = SettingsPhone()
+    phone.screen = "limit"
+    channel = _channel(phone)
+    await channel.read()
+    assert channel._is_rate_limited()
+    assert "save" not in phone.taps
+
+
+@pytest.mark.asyncio
+async def test_a_poll_on_an_unverified_app_version_does_not_walk_home():
+    phone = SettingsPhone(version="0.0.0")
+    phone.screen = "settings"
+    phone.staged["aux"] = True
+    channel = _channel(phone)
+    assert await channel.read() == {}
+    assert phone.taps == []
+    assert phone.screen == "settings"
+
+
+@pytest.mark.asyncio
 async def test_unknown_setting_and_plain_action_path_are_refused():
     channel = _channel(SettingsPhone())
     with pytest.raises(CompanionWriteBlocked, match="not a climate setting"):
