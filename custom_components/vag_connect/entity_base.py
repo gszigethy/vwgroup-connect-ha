@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.typing import UndefinedType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .cariad.api.graphql import VehicleImageFetcher
@@ -105,18 +104,15 @@ class VagConnectEntity(CoordinatorEntity[VagConnectCoordinator]):
             vin, key, companion=self._companion_entry
         )
 
-    def _name_internal(
-        self,
-        device_class_name: str | None,
-        platform_translations: dict[str, str],
-    ) -> str | UndefinedType | None:
+    @property
+    def suggested_object_id(self) -> str | None:
         # A companion entry and a cloud entry can read the same car, each on
-        # its own device that the user may name alike: tag the companion's
-        # entity names (and so the entity ids HA derives for new entities).
-        name = super()._name_internal(device_class_name, platform_translations)
-        if getattr(self, "_companion_entry", False) and isinstance(name, str) and name:
-            return f"{COMPANION_NAME_TAG} {name}"
-        return name
+        # its own device: tag the entity ids HA derives for the companion's new
+        # entities (sensor.tiguan_adb_battery_level), not their names.
+        object_id = super().suggested_object_id
+        if getattr(self, "_companion_entry", False) and object_id:
+            return f"{COMPANION_NAME_TAG} {object_id}"
+        return object_id
 
     @property
     def _vehicle(self) -> dict[str, Any]:
