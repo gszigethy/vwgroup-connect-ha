@@ -83,11 +83,21 @@ class TestRendezvous:
         await broker.handle_poll(
             {"result": {"id": command["id"], "ok": False, "error": "no such node"}}
         )
-        with pytest.raises(CompanionTransportError, match="no such node"):
+        with pytest.raises(CompanionTransportError) as err:
             await task
+        assert str(err.value) == "the companion agent reported a failure (no such node)"
 
     @pytest.mark.asyncio
-    async def test_agent_free_text_never_reaches_the_error(self) -> None:
+    @pytest.mark.parametrize("error", [
+        "anna smith",
+        None,
+        123,
+        {"error": "no such node"},
+        ["no such node"],
+        "no such node" + "x" * 300,
+        "Somewhere: 22°C — New message from Anna " + "x" * 300,
+    ])
+    async def test_agent_free_text_never_reaches_the_error(self, error: object) -> None:
         # The agent is a separate app: screen text it might put in an error
         # (a place, a notification) must not reach HA's log or toast.
         broker = _broker()
@@ -97,7 +107,7 @@ class TestRendezvous:
         assert command is not None
         await broker.handle_poll({"result": {
             "id": command["id"], "ok": False,
-            "error": "Somewhere: 22°C — New message from Anna " + "x" * 300,
+            "error": error,
         }})
         with pytest.raises(CompanionTransportError) as err:
             await task
