@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_app_version_unverified": {
+      "message": "I comandi sono disattivati: l'app sul telefono è la versione {version}, che non è ancora stata verificata per i comandi. Comandi, salvataggi e sincronizzazioni restano disattivati finché questa versione non viene verificata. I dati del veicolo continuano ad aggiornarsi."
+    },
     "vehicle_not_found": {
       "message": "Veicolo con VIN {vin} non trovato. Verifica che l'integrazione sia avviata."
     },
@@ -2573,6 +2576,9 @@
     },
     "historical_wedge_blocked": {
       "message": "È già in corso un'esportazione una tantum dello storico per questo veicolo. Il portale gestisce una sola richiesta di questo tipo alla volta, quindi attendi che quella in corso si concluda (o vada in timeout) prima di richiederne un'altra."
+    },
+    "hvac_mode_not_supported": {
+      "message": "La modalità HVAC {hvac_mode} non è supportata; usa una tra: {modes}. Non è stato inviato nulla."
     }
   },
   "selector": {
