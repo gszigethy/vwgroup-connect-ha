@@ -392,6 +392,11 @@ class VagCompanionClimateTemperatureNumber(VagConnectNumber, RestoreNumber):
     where the app disables the dial.
     """
 
+    @property
+    def _companion_read_at(self) -> None:
+        """This HA-held Start setting has no app-screen read age."""
+        return None
+
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         targets = _companion_climate_targets(self.coordinator)

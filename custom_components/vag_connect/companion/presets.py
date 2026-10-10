@@ -294,15 +294,15 @@ _RATE_LIMIT_BANNER = OverlaySelector(
     name="rate_limited",
     content_desc_re=(
         r"(?:Zu\s*(?:viele|häufige)\s*Anfragen|Too\s*many\s*requests"
-        r"|vorübergehend\s*(?:gesperrt|blockiert|nicht\s*verfügbar)"
-        r"|temporarily\s*(?:blocked|unavailable)|Demasiadas\s*solicitudes"
+        r"|vorübergehend\s*(?:gesperrt|blockiert)"
+        r"|temporarily\s*blocked|Demasiadas\s*solicitudes"
         # VW 4.3.2 (dialog_maxrequest_bff_error_headline): the HTTP 429 form.
         r"|Request\s*limit\s*reached)"
     ),
     text_re=(
         r"(?:Zu\s*(?:viele|häufige)\s*Anfragen|Too\s*many\s*requests"
-        r"|vorübergehend\s*(?:gesperrt|blockiert|nicht\s*verfügbar)"
-        r"|temporarily\s*(?:blocked|unavailable)|Demasiadas\s*solicitudes"
+        r"|vorübergehend\s*(?:gesperrt|blockiert)"
+        r"|temporarily\s*blocked|Demasiadas\s*solicitudes"
         # VW 4.3.2 (dialog_maxrequest_bff_error_headline): the HTTP 429 form.
         r"|Request\s*limit\s*reached)"
     ),

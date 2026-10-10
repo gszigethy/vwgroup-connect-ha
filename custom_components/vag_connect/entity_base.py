@@ -3,13 +3,20 @@
 """Base entity class for all VW Group Connect entities."""
 
 from __future__ import annotations
+import time
+from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .cariad.api.graphql import VehicleImageFetcher
-from .const import DOMAIN, is_companion_entry_data, vehicle_unique_id
+from .const import (
+    COMPANION_NAV_MAX_AGE_S,
+    DOMAIN,
+    is_companion_entry_data,
+    vehicle_unique_id,
+)
 from .coordinator import VagConnectCoordinator
 
 
@@ -142,6 +149,9 @@ class VagConnectEntity(CoordinatorEntity[VagConnectCoordinator]):
                 return False
         if not self.coordinator.is_vehicle_available(self._vin):
             return False
+        read_at = self._companion_read_at
+        if read_at is not None and time.time() - read_at >= COMPANION_NAV_MAX_AGE_S:
+            return False
         if self._command_id is not None:
             try:
                 if self.coordinator.is_command_known_unsupported(
@@ -257,6 +267,26 @@ class VagConnectEntity(CoordinatorEntity[VagConnectCoordinator]):
         return VehicleImageFetcher.best_url(image_urls) if image_urls else None
 
     @property
+    def _companion_read_at(self) -> float | None:
+        """Oldest nav read backing this entity, only on the companion channel."""
+        if not getattr(self.coordinator, "is_companion", lambda: False)():
+            return None
+        desc = getattr(self, "entity_description", None)
+        key = str(getattr(desc, "data_key", None) or getattr(self, "_field", None)
+                  or getattr(self, "_key", "") or "")
+        keys = {
+            "position": ("latitude", "longitude"),
+            "climate": ("climatisation_active",),
+            "charging_switch": ("is_charging",),
+            "climatisation_switch": ("climatisation_active",),
+            "auto_unlock_plug_switch": ("auto_unlock_when_charged",),
+            "window_heating_switch": ("window_heating_front",),
+        }.get(key, (key.removesuffix("_set").replace("_switch", "_enabled"),))
+        stamps = self._vehicle.get("companion_nav_read_at") or {}
+        times = [stamps[k] for k in keys if k in stamps]
+        return min(times) if times else None
+
+    @property
     def _field_source(self) -> str | None:
         """Which read channel produced THIS entity's value.
 
@@ -336,6 +366,10 @@ class VagConnectEntity(CoordinatorEntity[VagConnectCoordinator]):
             # _field_source stays the raw token for internal keying.
             from ._channel_labels import channel_display_name  # noqa: PLC0415
             attrs["source"] = channel_display_name(source)
+
+        read_at = self._companion_read_at
+        if read_at is not None:
+            attrs["companion_read_at"] = datetime.fromtimestamp(read_at, tz=timezone.utc).isoformat()
 
         own = self._platform_attributes()
         if own:

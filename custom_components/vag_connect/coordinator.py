@@ -8231,6 +8231,25 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         if callable(setter):
             setter(opt_in, enabled)
 
+    async def _apply_companion_transport_flags(self) -> None:
+        """Push the wake/sleep and close-app options to the live transport.
+
+        Applied under the channel's screen lock, without rebuilding the channel,
+        so the write min-interval and cooldown state are preserved.
+        """
+        setter = getattr(self._cariad_client, "set_transport_flags", None)
+        if not self.is_companion() or not callable(setter):
+            return
+        from .const import (  # noqa: PLC0415
+            CONF_COMPANION_CLOSE_APP,
+            CONF_COMPANION_WAKE_SLEEP,
+        )
+
+        await setter(
+            wake_sleep=bool(self.entry.data.get(CONF_COMPANION_WAKE_SLEEP, False)),
+            close_app=bool(self.entry.data.get(CONF_COMPANION_CLOSE_APP, False)),
+        )
+
     def is_companion(self) -> bool:
         """v2.26.0 — True if this entry reads via the companion (ADB) channel."""
         from .const import CONF_STRATEGY, STRATEGY_COMPANION_ADB  # noqa: PLC0415

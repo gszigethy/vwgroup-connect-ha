@@ -1222,7 +1222,9 @@ async def _async_update_listener(
     - spin: coordinator reads it directly from entry.data at command time
 
     A full reload is only triggered when brand, username or password changes
-    (those require a new authenticated API client).
+    (those require a new authenticated API client). Companion wake/sleep and
+    close-app flags are pushed to the live transport instead: a reload would
+    build a new channel with no write-interval memory.
     """
     coordinator: VagConnectCoordinator | None = getattr(entry, "runtime_data", None)
 
@@ -1289,5 +1291,11 @@ async def _async_update_listener(
                     await apply_relogin()
                 except Exception:  # noqa: BLE001 — never break a settings save
                     _LOGGER.debug("vw.de cred-relogin re-apply skipped", exc_info=True)
+            apply_flags = getattr(coordinator, "_apply_companion_transport_flags", None)
+            if callable(apply_flags):
+                try:
+                    await apply_flags()
+                except Exception:  # noqa: BLE001 — never break a settings save
+                    _LOGGER.debug("companion transport flags re-apply skipped", exc_info=True)
             # Trigger one immediate refresh so users see the effect
             await coordinator.async_request_refresh()

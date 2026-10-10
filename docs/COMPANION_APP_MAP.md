@@ -27,6 +27,13 @@ the EU Data Act portal fills.
   Settings device is on (Read departure times, Read driving data, …).
 - *Not mapped* means it is shown in the app but not read.
 
+Cached navigation readings expire after 24 hours without a successful screen
+read. This tolerates temporary navigation failures and long refresh intervals
+without keeping yesterday's parking position or warnings available indefinitely.
+Affected entities expose `companion_read_at` (UTC), the time the app screen was
+read, not when the car last sent data. Expiry adds no navigation, retry or car
+request.
+
 ## Overview (Vehicle tab)
 
 The overview is read on every poll; no tap is needed. Each tile narrates
