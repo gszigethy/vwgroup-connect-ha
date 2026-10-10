@@ -3474,7 +3474,11 @@ class VagConnectOptionsFlow(config_entries.OptionsFlow):
         from .const import CONF_AUTO_UTILITY_METERS  # noqa: PLC0415
         from .utility_meter import any_source_sensor_present  # noqa: PLC0415
         _um_vins = list(_vehicles) if isinstance(_vehicles, dict) else []
-        if _um_vins and any_source_sensor_present(self.hass, _um_vins):
+        from .const import is_companion_entry_data  # noqa: PLC0415
+        if _um_vins and any_source_sensor_present(
+            self.hass, _um_vins,
+            companion=is_companion_entry_data(self._config_entry.data),
+        ):
             schema[vol.Optional(
                 CONF_AUTO_UTILITY_METERS,
                 default=current_options.get(

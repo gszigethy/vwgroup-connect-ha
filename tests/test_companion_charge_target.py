@@ -319,6 +319,30 @@ async def test_unknown_language_reaches_settings_through_resources():
 
 
 @pytest.mark.asyncio
+async def test_slider_left_at_the_target_by_an_aborted_walk_is_not_success():
+    # An earlier walk moved the slider to 60 and was cut off before Save; its
+    # Cancel never reached the phone. 60 on screen is not 60 saved.
+    phone = SettingsPhone(saved=80)
+    phone.where, phone.shown, phone.edit = "settings", 60, True
+    channel = channel_for(phone)
+    assert await channel.set_charge_target(60) == 60
+    # Cancel, back home, then the real walk and Save.
+    assert kinds(phone) == ["toolbar", "toolbar", "settings", "slider", "save", "toolbar"]
+    assert phone.saved == 60
+    assert channel._last_write_at is not None
+
+
+@pytest.mark.asyncio
+async def test_a_poll_left_on_settings_goes_home_before_reading():
+    phone = SettingsPhone(saved=80)
+    phone.where, phone.shown, phone.edit = "settings", 60, True
+    fields = await channel_for(phone).read()
+    assert kinds(phone)[:2] == ["toolbar", "toolbar"]
+    assert phone.where == "overview" and phone.saved == 80
+    assert fields["electric_range_km"] == 95  # read off the overview
+
+
+@pytest.mark.asyncio
 async def test_plain_action_path_refuses_the_valueless_command():
     with pytest.raises(CompanionWriteBlocked, match="target value"):
         await channel_for(SettingsPhone()).do_action("set_charge_target")
@@ -383,3 +407,112 @@ def test_request_limit_alert_is_recognised_in_any_installed_language():
     channel = channel_for(SettingsPhone())
     channel._app_strings = {"dialog_maxrequests_headline": {"Trop de demandes envoyées au véhicule"}}
     assert channel._limit_on_screen(nodes)
+
+
+class LaggingPhone(SettingsPhone):
+    """A phone whose dumps can lag the slider: B3 (review-battery).
+
+    ``lag`` holds, per slider tap, the values the next dumps show before the
+    real one (None: the value before the tap), as a dump caught before Compose
+    redraws the row would. ``jump`` is ``(n, value)``: the n-th dump after the
+    last slider tap shows ``value`` instead. ``cancel_ignored`` makes the
+    toolbar's X do nothing in edit mode.
+    """
+
+    def __init__(self, *, lag=(), jump=None, cancel_ignored=False, **kwargs):
+        super().__init__(**kwargs)
+        self.lag = [list(values) for values in lag]
+        self.pending: list[int] = []
+        self.jump = jump
+        self.since_slider: int | None = None  # dumps since the last slider tap
+        self.cancel_ignored = cancel_ignored
+        self.dumped: int | None = None
+        self.saved_from: list[int | None] = []  # the value each Save was pressed on
+
+    async def dump_ui(self):
+        real = self.shown
+        if self.where == "settings" and self.since_slider is not None:
+            self.since_slider += 1
+            if self.pending:
+                self.shown = self.pending.pop(0)
+            elif self.jump is not None and self.jump[0] == self.since_slider:
+                self.shown = self.jump[1]
+        try:
+            xml = self._render(consume=True)
+        finally:
+            self.shown = real
+        row = find_charge_target_row(parse_ui_dump(xml))
+        self.dumped = row.current if row is not None else None
+        return xml
+
+    async def tap(self, x, y):
+        if self.cancel_ignored and self.edit:
+            self.last = self._render(consume=False)
+            if self._hit("vwd_navigation_button", x, y):
+                self.taps.append(("toolbar", x, y))
+                return
+        before = self.shown
+        await super().tap(x, y)
+        kind = self.taps[-1][0]
+        if kind == "save":
+            self.saved_from.append(self.dumped)
+        elif kind == "slider":
+            self.since_slider = 0
+            lag = self.lag.pop(0) if self.lag else []
+            self.pending = [before if v is None else v for v in lag]
+
+
+@pytest.mark.asyncio
+async def test_stale_readback_never_saves_a_value_other_than_the_target():
+    # Review B3: tap 80; the first dump still shows 50. The old loop took that
+    # as an undershoot, aimed at 100, read a stale 80 and saved 100.
+    phone = LaggingPhone(saved=50, lag=[[None], [80]])
+    assert await channel_for(phone).set_charge_target(80) == 80
+    assert kinds(phone) == ["settings", "slider", "save", "toolbar"]
+    assert phone.saved == 80 and phone.saved_from == [80]
+
+
+@pytest.mark.asyncio
+async def test_stale_dump_then_overshoot_then_correction_saves_the_target():
+    # One step of drift: 80 lands on 90. Each tap's first dump is stale.
+    phone = LaggingPhone(saved=50, drift_px=136, lag=[[None], [None]])
+    assert await channel_for(phone).set_charge_target(80) == 80
+    assert kinds(phone) == ["settings", "slider", "slider", "save", "toolbar"]
+    assert phone.saved == 80 and phone.saved_from == [80]
+
+
+@pytest.mark.asyncio
+async def test_slider_that_never_redraws_is_discarded_unsaved():
+    # Every dump after the tap shows the old value: no proof the tap landed.
+    phone = LaggingPhone(saved=50, lag=[[None, None, None]])
+    channel = channel_for(phone)
+    with pytest.raises(CompanionWriteBlocked, match="nothing was saved"):
+        await channel.set_charge_target(80)
+    assert "save" not in kinds(phone) and phone.saved == 50
+    assert kinds(phone) == ["settings", "slider", "toolbar", "toolbar"]
+    assert phone.where == "overview" and channel._last_write_at is None
+
+
+@pytest.mark.asyncio
+async def test_pre_save_dump_off_target_refuses_save_and_discards():
+    phone = LaggingPhone(saved=50, jump=(2, 70))
+    channel = channel_for(phone)
+    with pytest.raises(CompanionWriteBlocked, match="shows 70 %.*nothing was saved") as err:
+        await channel.set_charge_target(80)
+    assert "did not confirm" not in str(err.value)  # the discard was verified
+    assert "save" not in kinds(phone) and phone.saved == 50
+    # The toolbar's X discards in place, then its arrow leaves Settings.
+    assert kinds(phone) == ["settings", "slider", "toolbar", "toolbar"]
+    assert phone.where == "overview" and channel._last_write_at is None
+
+
+@pytest.mark.asyncio
+async def test_discard_that_does_not_take_is_reported():
+    phone = LaggingPhone(saved=50, jump=(2, 70), cancel_ignored=True)
+    channel = channel_for(phone)
+    with pytest.raises(CompanionWriteBlocked, match="did not confirm discarding.*check it in the app"):
+        await channel.set_charge_target(80)
+    assert "save" not in kinds(phone) and phone.saved == 50
+    # One Cancel only: an unconfirmed discard is not retried or walked past.
+    assert kinds(phone) == ["settings", "slider", "toolbar"]
+    assert phone.edit and phone.where == "settings"

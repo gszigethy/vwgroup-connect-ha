@@ -2060,7 +2060,7 @@
         "name": "Avläsningsintervall"
       },
       "app_sync_interval": {
-        "name": "Intervall för fordonssynkronisering"
+        "name": "Intervall för fordonssynkronisering (väcker bilen)"
       }
     },
     "button": {
@@ -2534,6 +2534,12 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "Appen synkroniserade inte bilen. Varje synkronisering väcker bilen, så den nekas medan kommandon är pausade eller för kort tid efter förra kommandot. Se sensorn Appens förfrågningsstatus."
+    },
+    "companion_app_version_unverified": {
+      "message": "Kommandon är avstängda: appen på telefonen har version {version}, som ännu inte har verifierats för kommandon. Kommandon, sparningar och synkroniseringar förblir avstängda tills den här versionen har verifierats. Fordonsdata uppdateras fortfarande."
+    },
     "vehicle_not_found": {
       "message": "Fordon med VIN {vin} hittades inte."
     },
@@ -2558,6 +2564,9 @@
     "read_only_attestation_blocked": {
       "message": "VW blockerar fjärrkommandon för SEAT/CUPRA bakom en enhetskontroll från Google (Play Integrity / App Check) som bara den officiella appen på en riktig telefon klarar. Lås, klimat och laddning kan därför inte skickas härifrån. Det är en permanent blockering på VW:s serversida, inte en inställning du kan stänga av. Fordonsdata uppdateras fortfarande via EU Data Act-portalen."
     },
+    "departure_timer_enabled_required": {
+      "message": "Ange 'enabled' för fordonets avgångstimer: anslutningen kräver det. Bara companion-kanalen (ADB) kan utelämna det."
+    },
     "export_file_not_allowed": {
       "message": "Home Assistant får inte läsa {path}. Lägg exportfilen i konfigurationsmappen (eller en mapp som anges under allowlist_external_dirs) och ange sökvägen igen."
     },
@@ -2575,6 +2584,9 @@
     },
     "historical_wedge_blocked": {
       "message": "En engångsexport av historiken pågår redan för den här bilen. Portalen hanterar bara en sådan begäran i taget, så vänta tills den pågående är klar (eller når tidsgränsen) innan du begär en ny."
+    },
+    "hvac_mode_not_supported": {
+      "message": "HVAC-läget {hvac_mode} stöds inte; använd ett av: {modes}. Inget skickades."
     }
   },
   "selector": {

@@ -2060,7 +2060,7 @@
         "name": "Interval dotazování"
       },
       "app_sync_interval": {
-        "name": "Interval synchronizace vozidla"
+        "name": "Interval synchronizace vozidla (probouzí vozidlo)"
       }
     },
     "button": {
@@ -2534,6 +2534,12 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "Aplikace vozidlo nesynchronizovala. Každá synchronizace probouzí vozidlo, proto je odmítnuta, když jsou příkazy pozastaveny nebo příliš brzy po posledním příkazu. Zkontrolujte senzor Stav požadavků aplikace."
+    },
+    "companion_app_version_unverified": {
+      "message": "Příkazy jsou vypnuté: aplikace v telefonu má verzi {version}, která zatím nebyla ověřena pro příkazy. Příkazy, ukládání a synchronizace zůstanou vypnuté, dokud nebude tato verze ověřena. Data vozidla se dál aktualizují."
+    },
     "vehicle_not_found": {
       "message": "Vozidlo s VIN {vin} nebylo nalezeno."
     },
@@ -2558,6 +2564,9 @@
     "read_only_attestation_blocked": {
       "message": "VW blokuje vzdálené příkazy pro SEAT/CUPRA za ověřením zařízení od Googlu (Play Integrity / App Check), kterým projde jen oficiální aplikace na skutečném telefonu. Zamýkání, klimatizaci ani nabíjení proto odsud nelze odeslat. Jde o trvalé serverové omezení ze strany VW, nikoli o přepínatelné nastavení. Data vozidla se dál aktualizují přes portál EU Data Act."
     },
+    "departure_timer_enabled_required": {
+      "message": "Nastavte 'enabled' pro časovač odjezdu tohoto vozidla: jeho připojení to vyžaduje. Vynechat to může jen kanál companion (ADB)."
+    },
     "export_file_not_allowed": {
       "message": "Home Assistant nemá povoleno číst {path}. Umístěte soubor s exportem do konfigurační složky (nebo do složky uvedené v allowlist_external_dirs) a zadejte cestu znovu."
     },
@@ -2575,6 +2584,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Pro toto auto už probíhá jednorázový export historie. Portál zpracovává vždy jen jeden takový požadavek, takže než si vyžádáte další, počkejte, až se ten aktuální dokončí (nebo vyprší)."
+    },
+    "hvac_mode_not_supported": {
+      "message": "Režim HVAC {hvac_mode} není podporován; použijte jeden z: {modes}. Nic nebylo odesláno."
     }
   },
   "selector": {

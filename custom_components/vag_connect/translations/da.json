@@ -2060,7 +2060,7 @@
         "name": "Pollingsinterval"
       },
       "app_sync_interval": {
-        "name": "Interval for synkronisering af bil"
+        "name": "Interval for synkronisering af bil (vækker bilen)"
       }
     },
     "button": {
@@ -2534,6 +2534,12 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "Appen synkroniserede ikke bilen. Hver synkronisering vækker bilen, så den afvises, mens kommandoer er sat på pause, eller for kort tid efter den sidste kommando. Se sensoren Appens anmodningsstatus."
+    },
+    "companion_app_version_unverified": {
+      "message": "Kommandoer er slået fra: appen på telefonen er version {version}, som endnu ikke er verificeret til kommandoer. Kommandoer, gemning og synkronisering forbliver slået fra, indtil denne version er verificeret. Køretøjsdata opdateres stadig."
+    },
     "vehicle_not_found": {
       "message": "Køretøj med VIN {vin} blev ikke fundet. Tjek, at integrationen er startet."
     },
@@ -2558,6 +2564,9 @@
     "read_only_attestation_blocked": {
       "message": "VW blokerer fjernkommandoer til SEAT/CUPRA bag en Google-enhedskontrol (Play Integrity / App Check), som kun den officielle app på en rigtig telefon kan bestå. Lås, klima og opladning kan derfor ikke sendes herfra. Det er en permanent serverside-blokering fra VW, ikke en indstilling, du kan slå fra. Køretøjsdata opdateres stadig via EU Data Act-portalen."
     },
+    "departure_timer_enabled_required": {
+      "message": "Angiv 'enabled' for dette køretøjs afgangstimer: dets forbindelse kræver det. Kun companion-kanalen (ADB) kan udelade det."
+    },
     "export_file_not_allowed": {
       "message": "Home Assistant har ikke lov til at læse {path}. Læg eksportfilen i config-mappen (eller en mappe, der står under allowlist_external_dirs), og angiv stien igen."
     },
@@ -2575,6 +2584,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Der er allerede en engangseksport af historikken i gang for denne bil. Portalen håndterer kun én sådan anmodning ad gangen, så vent, til den nuværende er færdig (eller får timeout), før du beder om en ny."
+    },
+    "hvac_mode_not_supported": {
+      "message": "HVAC-tilstanden {hvac_mode} understøttes ikke; brug en af: {modes}. Intet blev sendt."
     }
   },
   "selector": {

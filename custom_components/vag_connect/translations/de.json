@@ -2060,7 +2060,7 @@
         "name": "Abfrageintervall"
       },
       "app_sync_interval": {
-        "name": "Fahrzeug-Synchronisierungsintervall"
+        "name": "Fahrzeug-Synchronisierungsintervall (weckt das Fahrzeug)"
       }
     },
     "button": {
@@ -2569,6 +2569,12 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "Die App hat das Fahrzeug nicht synchronisiert. Jede Synchronisierung weckt das Fahrzeug, daher wird sie abgelehnt, solange Befehle pausiert sind oder der letzte Befehl zu kurz zurückliegt. Siehe den Sensor App-Anfragestatus."
+    },
+    "companion_app_version_unverified": {
+      "message": "Befehle sind aus: Die App auf dem Handy hat die Version {version}, die noch nicht für Befehle geprüft wurde. Befehle, Speichern und Synchronisieren bleiben aus, bis diese Version geprüft ist. Die Fahrzeugdaten werden weiter aktualisiert."
+    },
     "vehicle_not_found": {
       "message": "Fahrzeug mit VIN {vin} nicht gefunden. Prüfe ob die Integration gestartet ist."
     },
@@ -2593,6 +2599,9 @@
     "read_only_attestation_blocked": {
       "message": "VW sperrt Fernbefehle für SEAT/CUPRA hinter einer Google-Geräteprüfung (Play Integrity / App Check), die nur die offizielle App auf einem echten Smartphone besteht. Verriegeln, Klima und Laden lassen sich daher von hier nicht senden. Das ist eine dauerhafte serverseitige Sperre von VW, keine umschaltbare Einstellung. Fahrzeugdaten werden weiterhin über das EU-Data-Act-Portal aktualisiert."
     },
+    "departure_timer_enabled_required": {
+      "message": "Setze 'enabled' für den Abfahrtstimer dieses Fahrzeugs: seine Verbindung braucht es. Nur der Companion-Kanal (ADB) kann es weglassen."
+    },
     "export_file_not_allowed": {
       "message": "Home Assistant darf {path} nicht lesen. Lege die Export-Datei in den Konfig-Ordner (oder einen unter allowlist_external_dirs erlaubten Ordner) und gib den Pfad erneut an."
     },
@@ -2610,6 +2619,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Für dieses Fahrzeug läuft bereits ein einmaliger Verlaufsexport. Das Portal bearbeitet immer nur eine solche Anfrage gleichzeitig – warte deshalb, bis die aktuelle abgeschlossen ist (oder das Zeitlimit abläuft), bevor du eine neue anforderst."
+    },
+    "hvac_mode_not_supported": {
+      "message": "Der HVAC-Modus {hvac_mode} wird nicht unterstützt; verwende einen von: {modes}. Es wurde nichts gesendet."
     }
   },
   "triggers": {
