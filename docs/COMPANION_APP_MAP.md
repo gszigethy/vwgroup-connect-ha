@@ -167,6 +167,14 @@ units; durations by `duration_hours` / `duration_minutes`.
 | Profile tab | Account, app settings, help, We Charge, wallbox, roadside assistance. Not read. |
 | Authorised workshop, Digital extras | Text and offers. Not read. |
 
+The **Read parking position** switch opts into opening Map, Find vehicle, the
+parking marker and Share to read the coordinate preview; nothing is shared.
+On app 4.6.4, this walk also taps **Agree** if the Google Maps consent appears,
+only while that switch is on. Other reads and commands press BACK without
+agreeing and stop that attempt, even if BACK reveals the overview. A missing
+Agree button makes the walk back out and stop. Consent that remains after the
+bounded dismissal attempts also stops the walk.
+
 ## Other brands in the #968 dumps
 
 | Car | Overview read today | Detail screens |

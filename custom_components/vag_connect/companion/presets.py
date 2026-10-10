@@ -222,7 +222,10 @@ class OverlaySelector:
     # 2026-10-07 — a screen BACK cannot clear (the Google Maps consent: BACK
     # only leaves the map, and the parking read needs it) names the button to
     # tap instead. BACK stays the fallback when that button is not on screen.
+    # The tap is made only on the walk of the opt-in named in ``tap_opt_in``,
+    # and only while the user has it on; every other read backs out instead.
     tap: ActionSelector | None = None
+    tap_opt_in: str | None = None
 
 
 @dataclass(frozen=True)
@@ -335,7 +338,7 @@ _VW = BrandPreset(
     # charge sheet, Vehicle Health, vehicle Settings (incl. Synchronise now),
     # climate sheet and settings, driving data and departure times all read the
     # same as on 4.3.2. The parking read needs the app's Google Maps consent,
-    # which the update resets; the user accepts it in the app.
+    # which the update resets; only the opted-in parking walk accepts it.
     verified_app_version=("4.6.4", "4.3.2", "3.64.0", "3.63.2", "4.2.1"),
     # v2.26.0 — READ vocabulary re-grounded against ckomma/charge-app-connector-vw
     # (real-device VW app 4.2.x). The old words ("Ladezustand", "Reichweite",
@@ -1003,7 +1006,8 @@ _VW = BrandPreset(
         ),
         # 2026-10-07 — app 4.6.4 asks again for the Google Maps consent
         # (modal_google_maps_disclaimer_title) on the Map tab, which blocks the
-        # parking read. Agreed on the user's request (common_button_agree).
+        # parking read. Agreed only on the parking walk, with its opt-in on
+        # (common_button_agree); any other screen backs out without agreeing.
         OverlaySelector(
             name="google_maps_consent",
             text_re=r"^(?:This\s*app\s*uses|Diese\s*App\s*(?:nutzt|verwendet))\s*Google\s*Maps",
@@ -1011,6 +1015,7 @@ _VW = BrandPreset(
                 action="agree_google_maps",
                 label_re=r"^(?:Agree|Zustimmen|Einverstanden|Akzeptieren)$",
             ),
+            tap_opt_in="parking_position",
         ),
         # 2026-10-07 — the app's rating prompt (dialog_app_survey_prompt,
         # layout dialog_app_rating_alert): thumbs down / thumbs up and no close

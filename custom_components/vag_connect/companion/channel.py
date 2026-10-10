@@ -653,7 +653,12 @@ class CompanionChannel:
         done = 0
         try:
             for nav in group:
-                detail, taps = await self._walk_to_detail(nav.path[done:], here)
+                if nav.name == "parking_position":
+                    detail, taps = await self._walk_to_detail(
+                        nav.path[done:], here, agree_opt_in=nav.opt_in
+                    )
+                else:
+                    detail, taps = await self._walk_to_detail(nav.path[done:], here)
                 walked += taps
                 if taps:
                     reached = nav
@@ -708,6 +713,7 @@ class CompanionChannel:
         self,
         steps: "tuple[ActionSelector, ...]",
         here: list[UiNode] | None = None,
+        agree_opt_in: str | None = None,
     ) -> tuple[list[UiNode] | None, int]:
         """Tap an ordered path of controls and return (detail_nodes, taps_made).
 
@@ -717,7 +723,8 @@ class CompanionChannel:
         Stops without tapping as soon as a step is not on the current screen, so
         we never tap into the dark on a layout that moved; the caller backs out
         by however many taps actually happened. Overlays are cleared before
-        every step and after the last one.
+        every step and after the last one. ``agree_opt_in`` names the opt-in
+        walk this is, so an overlay that needs a consent tap gets it only there.
         """
         taps = 0
         detail: list[UiNode] | None = None
@@ -730,7 +737,9 @@ class CompanionChannel:
             if index == 0 and here is not None:
                 nodes, cleared = here, True
             else:
-                nodes, cleared = await self._dump_and_clear_overlays(pending)
+                nodes, cleared = await self._dump_and_clear_overlays(
+                    pending, agree_opt_in
+                )
             pending = None
             if not cleared:
                 return None, taps
@@ -766,7 +775,7 @@ class CompanionChannel:
                     return self._step_node(n, s) is not None
 
             pending = await self._settle(ready)
-        detail, cleared = await self._dump_and_clear_overlays(pending)
+        detail, cleared = await self._dump_and_clear_overlays(pending, agree_opt_in)
         return (detail if cleared else None), taps
 
     async def _read_driving_data(self, nodes: list[UiNode]) -> dict[str, object]:
@@ -968,19 +977,24 @@ class CompanionChannel:
             pass
 
     async def _dump_and_clear_overlays(
-        self, known_xml: str | None = None
+        self, known_xml: str | None = None, agree_opt_in: str | None = None
     ) -> tuple[list[UiNode], bool]:
         """Dump the screen; if a known overlay is up, BACK past it and re-dump.
 
         v2.26.0 (ckomma #8/#13/#20). Returns (parsed_nodes, cleared). ``cleared``
-        is False when an overlay is still present after the capped retries, so
-        the caller can decline to read/tap the wrong screen. BACK-only, so this
-        is safe to run on the read-only brands too.
+        is False when an overlay is still present after the capped retries or
+        a consent was backed out of, so the caller can decline to read/tap the
+        wrong screen. Only an opted-in parking walk may accept map consent.
 
         v4.4.0 — ``known_xml`` lets a caller that has just settled a screen pass
         what it already read instead of paying for another dump. Overlay
         handling is unchanged: if one turns out to be up, it is dismissed and
         the screen re-read as before.
+
+        An overlay that carries a ``tap`` (the Google Maps consent) is tapped
+        only when ``agree_opt_in`` is the opt-in it belongs to and the user has
+        that opt-in on. Everywhere else it is backed out of and reported as
+        not cleared: BACK can leave the map rather than reveal its contents.
         """
         xml = known_xml if known_xml is not None else await self._t.dump_ui()
         for _ in range(_OVERLAY_MAX_DISMISS):
@@ -988,7 +1002,17 @@ class CompanionChannel:
             overlay = find_overlay(nodes, self._preset)
             if overlay is None:
                 return nodes, True
-            node = find_node_for(nodes, overlay.tap) if overlay.tap is not None else None
+            agree = (
+                overlay.tap is not None
+                and agree_opt_in is not None
+                and overlay.tap_opt_in == agree_opt_in
+                and agree_opt_in in self._nav_opt_ins
+            )
+            node = (
+                find_node_for(nodes, overlay.tap)
+                if agree and overlay.tap is not None
+                else None
+            )
             point = node.tap_point if node is not None else None
             if point is not None:
                 _LOGGER.debug(
@@ -1003,6 +1027,10 @@ class CompanionChannel:
                 )
                 await self._t.key_back()
             xml = await self._t.dump_ui()
+            if overlay.tap is not None and point is None:
+                # BACK leaves the consent's screen; do not continue a read or
+                # command on the assumption that its intended screen is clear.
+                return parse_ui_dump(xml), False
         nodes = parse_ui_dump(xml)
         still = find_overlay(nodes, self._preset)
         if still is not None:
