@@ -373,6 +373,12 @@ def ensure_relay_view(hass: "HomeAssistant") -> None:
         )
     from homeassistant.components.http import HomeAssistantView  # noqa: PLC0415
 
+    try:
+        from homeassistant.components.http.const import KEY_HASS  # noqa: PLC0415
+    except ImportError:
+        # Older HA releases stored the instance under a plain string key.
+        KEY_HASS = "hass"  # type: ignore[assignment]
+
     class CompanionAgentView(HomeAssistantView):  # type: ignore[misc]
         """The agent's long-poll endpoint. Open by necessity, token-gated in fact."""
 
@@ -381,7 +387,7 @@ def ensure_relay_view(hass: "HomeAssistant") -> None:
         requires_auth = False
 
         async def post(self, request: Any) -> Any:
-            status, body = await handle_agent_request(request.app["hass"], request)
+            status, body = await handle_agent_request(request.app[KEY_HASS], request)
             return self.json(body, status_code=status)
 
     hass.http.register_view(CompanionAgentView)

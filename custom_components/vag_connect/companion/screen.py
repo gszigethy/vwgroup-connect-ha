@@ -85,6 +85,10 @@ def parse_ui_dump(xml: str) -> list[UiNode]:
     """
     if not xml or not xml.strip():
         return []
+    # Device and relay dumps are untrusted. UI dumps need no DTD or entities;
+    # refuse declarations before ElementTree can expand an internal entity.
+    if "<!DOCTYPE" in xml.upper() or "<!ENTITY" in xml.upper():
+        return []
     try:
         root = ET.fromstring(xml)
     except ET.ParseError:

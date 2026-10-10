@@ -163,9 +163,9 @@
           "adb_port": "Meestal 5555 voor ADB via Wi-Fi.",
           "vin": "Het VIN van 17 tekens van de auto die in de app wordt getoond.",
           "companion_use_addon": "Vink dit aan voor een telefoon met Android 11 of nieuwer, die alleen draadloos debuggen biedt. Voer dan hierboven het adres van de ADD-ON in in plaats van dat van de telefoon.",
-          "companion_addon_token": "Alleen nodig als je api_token in de add-on hebt ingesteld.",
+          "companion_addon_token": "Required for new add-on connections. Set the same api_token in the add-on. The bridge uses plain HTTP; use a trusted network.",
           "companion_use_relay": "Vink dit aan als de telefoon de companion-agent-app draait. De telefoon belt dan Home Assistant, dus ADB, draadloos debuggen en een vast IP zijn niet nodig — laat het adresveld leeg.",
-          "companion_agent_token": "Het willekeurige token uit de agent-app. Minstens 32 tekens, en voor elk voertuig een ander."
+          "companion_agent_token": "A random token is generated for you. Copy it into the agent app; use a different token for every vehicle. Custom tokens need at least 32 characters and 16 distinct characters, with no character making up more than half."
         }
       },
       "audi_mbb_fallback": {
@@ -204,10 +204,12 @@
       "companion_needs_addon": "Dit lijkt een telefoon met Android 11 of nieuwer die draadloos debuggen gebruikt; de directe verbinding hier kan daar niet mee overweg (dat is TLS + koppelen). Installeer de add-on 'VW Group App ADB Bridge' (github.com/its-me-prash/vwgroup-app-adb-bridge) en laat de companion daarnaar wijzen. Oudere telefoons (Android 10 of ouder) verbinden hier rechtstreeks.",
       "companion_app_not_found": "Verbonden met de telefoon, maar de merk-app is er niet op geïnstalleerd.",
       "companion_unknown_brand": "Voor dat merk is nog geen voorinstelling voor de reservetelefoon beschikbaar.",
-      "companion_agent_token_too_short": "Het agent-token is te kort. Plak het willekeurige token dat de agent-app heeft gegenereerd (minstens 32 tekens).",
+      "companion_agent_token_too_short": "The agent token is too short. Use a random token with at least 32 characters, such as the generated token.",
       "companion_host_required": "Voer het IP-adres van de telefoon in — of vink de agent-optie aan als de telefoon Home Assistant belt.",
       "missing_captcha": "Voer de tekens in die in de afbeelding hierboven worden getoond.",
-      "captcha_retry": "Los de captcha hierboven op om door te gaan."
+      "captcha_retry": "Los de captcha hierboven op om door te gaan.",
+      "companion_addon_token_required": "An add-on token is required for new connections. Set api_token in the ADB Bridge add-on and enter the same token here.",
+      "companion_agent_token_weak": "The agent token is too predictable. Use the generated random token or a random token with at least 32 characters and 16 distinct characters, with no character making up more than half."
     },
     "abort": {
       "already_configured": "Dit account is al geconfigureerd.",

@@ -163,9 +163,9 @@
           "adb_port": "Di solito 5555 per ADB su Wi-Fi.",
           "vin": "Il VIN di 17 caratteri dell'auto mostrata nell'app.",
           "companion_use_addon": "Seleziona questa opzione per un telefono Android 11 o più recente, che offre solo il debug wireless. Inserisci quindi qui sopra l'indirizzo dell'ADD-ON anziché quello del telefono.",
-          "companion_addon_token": "Necessario solo se hai impostato api_token nell'add-on.",
+          "companion_addon_token": "Required for new add-on connections. Set the same api_token in the add-on. The bridge uses plain HTTP; use a trusted network.",
           "companion_use_relay": "Seleziona questa opzione se sul telefono gira l'app agent. Sarà il telefono a chiamare Home Assistant: niente ADB, niente debug wireless e nessun IP fisso — lascia vuoto il campo indirizzo.",
-          "companion_agent_token": "Il token casuale generato dall'app agent. Almeno 32 caratteri, e uno diverso per ogni veicolo."
+          "companion_agent_token": "A random token is generated for you. Copy it into the agent app; use a different token for every vehicle. Custom tokens need at least 32 characters and 16 distinct characters, with no character making up more than half."
         }
       },
       "audi_mbb_fallback": {
@@ -204,10 +204,12 @@
       "companion_needs_addon": "Sembra un telefono con Android 11 o successivo che usa il debug wireless, che la connessione diretta qui non può utilizzare (richiede TLS + accoppiamento). Installa l'add-on 'VW Group App ADB Bridge' (github.com/its-me-prash/vwgroup-app-adb-bridge) e fai puntare il companion a quello. I telefoni più vecchi (Android 10 o precedenti) si collegano qui direttamente.",
       "companion_app_not_found": "Connessione al telefono riuscita, ma l'app della marca non è installata.",
       "companion_unknown_brand": "Questa marca non ha ancora un preset per il telefono di appoggio.",
-      "companion_agent_token_too_short": "Il token dell'agent è troppo corto. Incolla il token casuale generato dall'app agent (almeno 32 caratteri).",
+      "companion_agent_token_too_short": "The agent token is too short. Use a random token with at least 32 characters, such as the generated token.",
       "companion_host_required": "Inserisci l'indirizzo IP del telefono — oppure seleziona l'opzione agent se è il telefono a chiamare Home Assistant.",
       "missing_captcha": "Inserisci i caratteri mostrati nell'immagine qui sopra.",
-      "captcha_retry": "Risolvi il captcha mostrato qui sopra per continuare."
+      "captcha_retry": "Risolvi il captcha mostrato qui sopra per continuare.",
+      "companion_addon_token_required": "An add-on token is required for new connections. Set api_token in the ADB Bridge add-on and enter the same token here.",
+      "companion_agent_token_weak": "The agent token is too predictable. Use the generated random token or a random token with at least 32 characters and 16 distinct characters, with no character making up more than half."
     },
     "abort": {
       "already_configured": "Questo account è già configurato.",
