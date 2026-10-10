@@ -24,19 +24,28 @@ from typing import Any
 
 import logging
 
-import voluptuous as vol
 
-from homeassistant import data_entry_flow
-from homeassistant.components.repairs import RepairsFlow
+# RepairsFlowResult, not the bare FlowResult: HA 2026.10 parameterised
+# RepairsFlow as FlowHandler[RepairsFlowContext, RepairsFlowResult, str], so a
+# step annotated with the unparameterised result no longer matches what
+# async_show_form returns here. The name goes back to at least 2026.9, so this
+# is the annotation both versions agree on.
+from homeassistant.components.repairs import RepairsFlow, RepairsFlowResult
 from homeassistant.core import HomeAssistant
 import homeassistant.helpers.issue_registry as ir
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
     TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
 )
 
+from ._vol import vol
+
+from ._vwde_reauth import VwDeReauthMixin
 from .cariad._util import mask_vin
 from .const import DOMAIN
 
@@ -653,10 +662,16 @@ def raise_issue_historical_timeout(
     surface this rather than leaving the request pending forever. WARNING,
     dismissible; the pending state is cleared so a new export can be requested.
     """
+    # #1768 — the repair id lands verbatim in Home Assistant’s own config-entry
+    # diagnostics, which our VIN redaction never sees, and a user uploaded two
+    # of those to a public issue with a full VIN in them. The identical fix was
+    # applied to the stale_data sibling under #1626 and missed here. Delete the
+    # legacy raw-VIN id first so a card raised before this upgrade disappears.
+    ir.async_delete_issue(hass, DOMAIN, f"{entry_id}_historical_timeout_{vin}")
     ir.async_create_issue(
         hass,
         DOMAIN,
-        f"{entry_id}_historical_timeout_{vin}",
+        f"{entry_id}_historical_timeout_{mask_vin(vin)}",
         is_fixable=False,
         is_persistent=False,
         severity=ir.IssueSeverity.WARNING,
@@ -666,7 +681,14 @@ def raise_issue_historical_timeout(
 
 
 def clear_issue_historical_timeout(hass: HomeAssistant, entry_id: str, vin: str) -> None:
-    """Clear the per-VIN historical-export timeout repair."""
+    """Clear the per-VIN historical-export timeout repair.
+
+    Deletes both the masked-VIN id (#1768) and the legacy raw-VIN one, so a
+    card raised before the upgrade is cleared too (delete is idempotent).
+    """
+    ir.async_delete_issue(
+        hass, DOMAIN, f"{entry_id}_historical_timeout_{mask_vin(vin)}"
+    )
     ir.async_delete_issue(hass, DOMAIN, f"{entry_id}_historical_timeout_{vin}")
 
 
@@ -684,12 +706,12 @@ class _AuthRepairFlow(RepairsFlow):
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> data_entry_flow.FlowResult:
+    ) -> RepairsFlowResult:
         return await self.async_step_confirm()
 
     async def async_step_confirm(
         self, user_input: dict[str, Any] | None = None
-    ) -> data_entry_flow.FlowResult:
+    ) -> RepairsFlowResult:
         if user_input is None:
             return self.async_show_form(
                 step_id="confirm",
@@ -704,8 +726,8 @@ class _AuthRepairFlow(RepairsFlow):
         return self.async_create_entry(title="", data={})
 
 
-class _SupplementaryReauthRepairFlow(RepairsFlow):
-    """#1717 — take the user straight to the volkswagen.de login step.
+class _SupplementaryReauthRepairFlow(VwDeReauthMixin, RepairsFlow):
+    """#1717 — carry the volkswagen.de login inside the repair itself.
 
     The sibling ``_AuthRepairFlow`` cannot be reused: it starts a CONFIG flow,
     and this login lives on the OPTIONS flow. Starting a config flow here would
@@ -713,28 +735,103 @@ class _SupplementaryReauthRepairFlow(RepairsFlow):
     primary channel keeps working while this notice is up, so that would ask the
     user to fix something that is fine.
 
+    The first attempt instead called ``options.async_init`` from here and then
+    resolved the issue. That was wrong twice over, reported by @fschulte2812 on
+    #1313: Home Assistant presents CONFIG flows, so an options flow started from
+    the backend is never shown to anyone, and ``async_create_entry`` marked the
+    notice fixed regardless — the repair vanished, the login never happened and
+    the channel stayed down. The test that was supposed to cover it asserted
+    that ``options.async_init`` had been awaited, i.e. it checked the call and
+    not the outcome.
+
+    So the login happens here: credentials, then the e-mail code if Volkswagen
+    asks for one, and the issue resolves ONLY once cookies have been captured
+    and written. Every step reuses the options flow's own machinery through
+    :class:`VwDeReauthMixin`, so there is one implementation of the login.
+
     The one-time code is unavoidable and untouched; Volkswagen wants it and only
     the user has it. What this removes is the navigation in front of it.
     """
 
     def __init__(self, entry_id: str) -> None:
         self._entry_id = entry_id
+        self._config_entry: Any = None
+        self.ovw_reset()
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> data_entry_flow.FlowResult:
+    ) -> RepairsFlowResult:
         return await self.async_step_confirm()
 
     async def async_step_confirm(
         self, user_input: dict[str, Any] | None = None
-    ) -> data_entry_flow.FlowResult:
+    ) -> RepairsFlowResult:
         if user_input is None:
             return self.async_show_form(step_id="confirm")
-        # The marker is read by the options flow's first step, which jumps to
-        # the vw.de login instead of showing the full settings form.
-        await self.hass.config_entries.options.async_init(
-            self._entry_id, data={"goto": "add_vwde"}
+        return await self.async_step_credentials()
+
+    async def async_step_credentials(
+        self, user_input: dict[str, Any] | None = None
+    ) -> RepairsFlowResult:
+        """Volkswagen ID e-mail + password, driven straight from the repair."""
+        entry = self.hass.config_entries.async_get_entry(self._entry_id)
+        if entry is None:
+            return self.async_abort(reason="entry_gone")
+        self._config_entry = entry
+
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            self._ovw_username = str(user_input.get(CONF_USERNAME, ""))
+            try:
+                needs_code = await self._ovw_begin_login(
+                    self._ovw_username, str(user_input.get(CONF_PASSWORD, "")),
+                )
+            except ValueError as err:
+                # The mixin raises the strings.json error key verbatim.
+                errors["base"] = str(err) or "cannot_connect"
+            else:
+                if needs_code:
+                    return await self.async_step_otp()
+                return await self._async_resolve()
+
+        return self.async_show_form(
+            step_id="credentials",
+            data_schema=vol.Schema({
+                vol.Required(CONF_USERNAME): TextSelector(),
+                vol.Required(CONF_PASSWORD): TextSelector(
+                    TextSelectorConfig(type=TextSelectorType.PASSWORD)
+                ),
+            }),
+            errors=errors,
         )
+
+    async def async_step_otp(
+        self, user_input: dict[str, Any] | None = None
+    ) -> RepairsFlowResult:
+        """The e-mail one-time code, when Volkswagen asks for it."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                ok = await self._ovw_submit_otp(
+                    str(user_input.get("mfa_code", "")).strip()
+                )
+            except ValueError as err:
+                errors["base"] = str(err) or "cannot_connect"
+            else:
+                if ok:
+                    return await self._async_resolve()
+                errors["base"] = "invalid_credentials"
+
+        return self.async_show_form(
+            step_id="otp",
+            data_schema=vol.Schema({vol.Required("mfa_code"): TextSelector()}),
+            errors=errors,
+            description_placeholders={"username": self._ovw_username},
+        )
+
+    async def _async_resolve(self) -> RepairsFlowResult:
+        """Write the cookies, reload, and only THEN mark the issue fixed."""
+        await self._ovw_persist()
         return self.async_create_entry(title="", data={})
 
 
@@ -780,12 +877,12 @@ class _SkodaOfficialKeyRepairFlow(RepairsFlow):
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
-    ) -> data_entry_flow.FlowResult:
+    ) -> RepairsFlowResult:
         return await self.async_step_enter_key(user_input)
 
     async def async_step_enter_key(
         self, user_input: dict[str, Any] | None = None
-    ) -> data_entry_flow.FlowResult:
+    ) -> RepairsFlowResult:
         from .const import CONF_SKODA_OFFICIAL_KEYS  # noqa: PLC0415
 
         errors: dict[str, str] = {}

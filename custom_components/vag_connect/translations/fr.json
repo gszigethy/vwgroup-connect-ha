@@ -221,6 +221,7 @@
       "porsche_login_wall": "Tes identifiants sont corrects — la connexion a passé l'étape du mot de passe, mais s'est arrêtée à un écran captcha/consentement de Porsche qu'elle ne peut pas terminer automatiquement (observé à my.porsche.com). C'est un blocage du côté de Porsche, suivi dans #1337, pas un mot de passe incorrect. Ne réessaie pas en boucle — des tentatives répétées ont bloqué des comptes Porsche. Si possible, merci de le signaler pour que nous puissions corriger le problème (joindre les diagnostics) : {report_url}",
       "porsche_portal_step": "Porsche a redirigé cette connexion vers son portail web (my.porsche.com) pour une étape unique que l'intégration ne peut pas terminer elle-même. Ouvre {portal_url} dans un navigateur normal — idéalement sur le même réseau que Home Assistant — connecte-toi avec le même compte, effectue ce qui s'affiche (consentement, conditions, avis sur les cookies), puis reviens et réessaie. Ne réessaie pas en boucle : des tentatives échouées répétées ont bloqué des comptes Porsche. Toujours bloqué ? Signale-le ici : {report_url}",
       "porsche_captcha_failed": "Ce captcha n'a pas pu être vérifié et il est désormais épuisé. Veuillez fermer cette boîte de dialogue et relancer la connexion Porsche pour en obtenir un nouveau. Si possible, merci de le signaler pour que nous puissions corriger le problème (joindre les diagnostics) : {report_url}",
+      "porsche_captcha_credentials": "Porsche a refusé la connexion à cette étape, le captcha est donc épuisé — mais le captcha n'était pas le problème : l'adresse e-mail ou le mot de passe n'a pas été accepté. Vérifiez-les, puis relancez la connexion Porsche. N'essayez pas en boucle : des tentatives échouées répétées ont conduit Porsche à verrouiller des comptes. Si les identifiants sont certainement corrects, merci de le signaler pour que nous puissions corriger le problème (joindre les diagnostics) : {report_url}",
       "porsche_captcha_cooldown": "Trop de tentatives de captcha. Des essais répétés peuvent amener Porsche à verrouiller temporairement le compte ou à signaler votre réseau ; l'opération a donc été arrêtée pour protéger votre compte. Attendez quelques minutes avant de réessayer. Si possible, merci de le signaler pour que nous puissions corriger le problème (joindre les diagnostics) : {report_url}",
       "reconfigure_failed": "Échec de la reconfiguration : l'entrée de configuration est introuvable. Veuillez réessayer.",
       "reauth_failed": "Échec de la ré-authentification : l'entrée de configuration est introuvable. Veuillez réessayer."
@@ -1279,6 +1280,9 @@
       "dashboard_warnings_raw": {
         "name": "Voyants d'alerte (brut)"
       },
+      "dashboard_warnings_last_at": {
+        "name": "Derniers témoins enregistrés"
+      },
       "climate_error_code": {
         "name": "Code d'erreur climatisation"
       },
@@ -2304,7 +2308,38 @@
           "confirm": {
             "title": "Reconnecter le canal Volkswagen.de",
             "description": "Le canal de lecture volkswagen.de n'a pas pu reprendre sa session — Volkswagen redemande le code à usage unique par e-mail. Les données principales de votre véhicule ne sont pas affectées. Continuez et vous arriverez directement à la connexion pour ce véhicule ; inutile de chercher vous-même les options de l'intégration."
+          },
+          "credentials": {
+            "title": "Site Volkswagen.de (BÊTA, lecture seule)",
+            "data": {
+              "username": "Adresse e-mail",
+              "password": "Mot de passe",
+              "scan_interval": "Intervalle de mise à jour"
+            },
+            "data_description": {
+              "username": "L'e-mail de votre compte Volkswagen ID / myVolkswagen.",
+              "password": "Le mot de passe de votre Volkswagen ID.",
+              "scan_interval": "Fréquence de récupération des données (minutes). Minimum : 5."
+            }
+          },
+          "otp": {
+            "title": "Code de vérification par e-mail",
+            "description": "Un code de vérification a été envoyé à l'e-mail de **{username}**.\n\nSaisissez le code pour terminer la connexion au canal du site Volkswagen.de (bêta).",
+            "data": {
+              "mfa_code": "Code de vérification"
+            },
+            "data_description": {
+              "mfa_code": "Code de votre boîte de réception — valable quelques minutes."
+            }
           }
+        },
+        "error": {
+          "invalid_credentials": "Adresse e-mail ou mot de passe incorrect.",
+          "cannot_connect": "Impossible de joindre Volkswagen. Veuillez réessayer.",
+          "website_login_failed": "Votre adresse e-mail et votre mot de passe ne sont pas en cause — la connexion à volkswagen.de a passé cette étape puis a échoué plus loin (par exemple session expirée, boucle de redirection ou page non reconnue). La raison figure dans le journal de Home Assistant. Changer de mot de passe n'y changera rien ; si cela persiste, ouvrez un ticket en joignant cette ligne de journal."
+        },
+        "abort": {
+          "entry_gone": "Cette entrée d'intégration n'existe plus."
         }
       }
     },
@@ -2334,7 +2369,7 @@
     },
     "skoda_official_enrolled": {
       "title": "API officielle Škoda — vous êtes désormais inscrit automatiquement",
-      "description": "Bonne nouvelle : nous avons utilisé votre connexion Škoda existante pour créer une clé d'API officielle Škoda pour votre voiture, afin que Home Assistant puisse désormais la lire via le nouveau canal officiel et durable de Škoda — comme sauvegarde automatique si la connexion habituelle rencontre un jour des difficultés. Comme ce canal officiel est limité en débit (seulement un petit nombre de requêtes par heure), il reste en veille et ne lit que lorsque votre connexion principale n'y arrive pas — il ne ralentira donc rien. Rien à faire de votre côté ; ceci est juste une information, et vous pouvez l'ignorer."
+      "description": "Bonne nouvelle : nous avons utilisé votre connexion Škoda existante pour créer une clé d'API officielle Škoda pour votre voiture, afin que Home Assistant puisse désormais la lire via le canal officiel et durable de Škoda. Il est lu à chaque mise à jour normale en parallèle de votre connexion habituelle, et ses relevés du constructeur complètent et corrigent ce que celle-ci rapporte — et il prend le relais de lui-même si la connexion habituelle tombe en panne. Comme le canal officiel n'autorise qu'un petit nombre de requêtes par heure, l'intégration répartit ce budget et l'ignore lorsqu'il s'épuise, de sorte que rien ne ralentit. Rien à faire de votre côté ; ceci est juste une information, et vous pouvez la fermer."
     },
     "skoda_official_quota_full": {
       "title": "API officielle Škoda — limite de clés atteinte",

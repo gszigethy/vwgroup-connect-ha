@@ -1,17 +1,17 @@
 # App Atlas — Cross-Brand Summary
 
-> Auto-generated · Last refreshed: 2026-10-04 10:16 UTC
+> Auto-generated · Last refreshed: 2026-10-09 10:57 UTC
 
 | Brand | Android package | Latest version | Source | Expected backend | OLA enforced? |
 |---|---|---|---|---|---|
 | **SEAT** | `com.seat.myseat.ola` | `2.22.1` | `google_play` | `ola` |  |
 | **CUPRA** | `com.cupra.mycupra` | `2.22.1` | `google_play` | `ola` |  |
-| **Volkswagen EU (We Connect ID)** | `com.volkswagen.weconnect` | `4.3.2` | `google_play` | `cariad_bff` |  |
+| **Volkswagen EU (We Connect ID)** | `com.volkswagen.weconnect` | `4.6.4` | `google_play` | `cariad_bff` |  |
 | **Audi (myAudi)** | `de.myaudi.mobile.assistant` | `5.8.1` | `google_play` | `cariad_bff` |  |
 | **Škoda (MyŠkoda)** | `cz.skodaauto.myskoda` | `8.17.0` | `google_play` | `mysmob` |  |
 | **Volkswagen US/CA (myVW)** | `com.vw.carnet.release` | `2026.9.29-9674` | `google_play` | `con_veh_net` |  |
 | **Porsche (My Porsche, North America)** | `com.porsche.one` | `21.26.39` | `apkmirror` | `ppa` |  |
-| **Porsche (My Porsche, rest-of-world)** | `de.porsche.one` | `21.26.39` | `apkcombo` | `ppa` |  |
+| **Porsche (My Porsche, rest-of-world)** | `de.porsche.one` | `21.26.39 (not re-confirmed)` | `apkcombo` | `ppa` |  |
 
 ## Methodology
 
