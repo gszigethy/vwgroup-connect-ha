@@ -17,6 +17,7 @@ from custom_components.vag_connect.companion.channel import (
     CompanionChannel,
     CompanionWriteBlocked,
 )
+from custom_components.vag_connect.companion.climate import ClimateController
 from custom_components.vag_connect.companion.presets import PRESETS
 from custom_components.vag_connect.companion.screen import parse_ui_dump
 from custom_components.vag_connect.const import (
@@ -26,6 +27,7 @@ from custom_components.vag_connect.const import (
     STRATEGY_COMPANION_ADB,
 )
 from tests.test_companion_app_sync import SyncPhone
+from tests.test_companion_climate_tile import FakePhone as ClimatePhone
 
 VW = PRESETS["volkswagen"]
 WALL = 1_700_000_000.0
@@ -259,3 +261,75 @@ def test_other_channels_persist_nothing():
     c = _coord({CONF_STRATEGY: "device_grant_portal"}, until=WALL, last=WALL)
     c._persist_companion_rate_limit()
     c.hass.config_entries.async_update_entry.assert_not_called()
+
+
+# ── review follow-ups: climate gap, late alerts after the readback ──────────
+
+def _climate(phone, wall):
+    ch = CompanionChannel(
+        phone, VW, time_fn=time.monotonic, wall_clock_fn=lambda: wall,
+        nav_opt_ins={"climate_detail"},
+    )
+
+    async def no_sleep(_s):
+        return None
+
+    return ch, ClimateController(ch, sleep=no_sleep)
+
+
+@pytest.mark.asyncio
+async def test_a_climate_start_keeps_the_gap_across_a_restart():
+    phone = ClimatePhone(layout="pick")
+    first, ctrl = _climate(phone, WALL)
+    await ctrl.start()
+    assert first.last_write_at == WALL
+    # HA restarts ten seconds later and restores what was persisted.
+    second, ctrl = _climate(phone, WALL + 10)
+    second.restore_last_write(first.last_write_at)
+    with pytest.raises(CompanionWriteBlocked, match="s ago"):
+        await ctrl.stop()
+    assert phone.taps.count("stop") == 0 and phone.running == "ac"
+
+
+def test_an_alert_after_the_readback_still_fails_the_command():
+    phone = SeqPhone(
+        [OVERVIEW, OVERVIEW, SHEET, SHEET, SHEET, SHEET, SHEET, ALERT, OVERVIEW]
+    )
+    ch = _channel(phone)
+    ch._request_state = "available"  # an earlier sync was accepted
+    with pytest.raises(CompanionWriteBlocked, match="daily request budget"):
+        asyncio.run(ch.do_action("start_charging"))
+    assert len(phone.taps) == 2 and phone.backs == 1
+    assert ch.rate_limited_until == WALL + 12 * 3600
+    assert ch.request_state == "restricted"
+
+
+class LateBudgetClimatePhone(ClimatePhone):
+    """Start flips the sheet's CTA; the limit alert replaces it a dump later."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.after_start: int | None = None
+
+    def _on_start(self, _):
+        self.running = "ac"
+        self.after_start = 0
+
+    async def dump_ui(self) -> str:
+        if self.after_start is not None and self.screen == "sheet":
+            self.after_start += 1
+            if self.after_start > 1:
+                self.screen = "budget"
+        return await super().dump_ui()
+
+
+@pytest.mark.asyncio
+async def test_a_late_alert_after_a_climate_start_fails_the_command():
+    phone = LateBudgetClimatePhone(layout="pick")
+    ch, ctrl = _climate(phone, WALL)
+    ch._request_state = "available"
+    with pytest.raises(CompanionWriteBlocked, match="daily request budget"):
+        await ctrl.start()
+    assert phone.taps.count("start") == 1 and phone.screen == "overview"
+    assert ch.rate_limited_until == WALL + 12 * 3600
+    assert ch.request_state == "restricted"

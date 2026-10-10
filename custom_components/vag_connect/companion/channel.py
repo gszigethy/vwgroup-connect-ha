@@ -334,6 +334,7 @@ class CompanionChannel:
         was_limited = self._is_rate_limited()
         self._rate_limited_until = self._wall() + _RATE_LIMIT_BACKOFF_S
         self._limit_trips += 1
+        self._request_state = REQUESTS_RESTRICTED
         if was_limited:
             # One alert is often seen by a command and then by its cleanup.
             _LOGGER.debug("companion %s: request limit still up", self._preset.brand)
@@ -488,6 +489,8 @@ class CompanionChannel:
     @property
     def request_state(self) -> str | None:
         """What the vehicle sync flow last found (#968), or None.
+
+        Any request-limit trip also sets it to restricted.
 
         Before the first sync of this session, a request-limit pause restored
         from the last run already says the car is restricted.
@@ -1025,6 +1028,7 @@ class CompanionChannel:
         spec, nodes = await self._command_gate(action)
         walked = 0
         nav = next((n for n in self._preset.nav_reads if n.name == spec.nav_read), None)
+        trips = self._limit_trips
         try:
             if spec.nav_read:
                 if nav is None:
@@ -1083,6 +1087,10 @@ class CompanionChannel:
         finally:
             if nav is not None:
                 await self._return_to_overview(min(walked, nav.back_presses))
+        if self._limit_trips != trips:
+            # The limit alert arrived after the readback, and the walk back
+            # closed it: the car refused the command after all.
+            raise CompanionWriteBlocked(_LIMIT_REASON)
 
     async def set_charge_target(self, target: float) -> int:
         """Set the vehicle Settings charge limit; returns the value saved.
