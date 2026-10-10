@@ -256,10 +256,18 @@ async def test_set_temperature_with_hvac_mode_stores_then_starts():
 async def test_set_temperature_with_an_unlisted_hvac_mode_sends_nothing(mode):
     # Through HA's own schema and service handler: "heat" passes HA's
     # validation, and must not become a Stop (only "off" means Stop).
-    from homeassistant.components.climate import (
-        SET_TEMPERATURE_SCHEMA,
-        async_service_temperature_set,
-    )
+    try:  # Home Assistant 2026.10 moved both into the services module.
+        from homeassistant.components.climate.services import (
+            SET_TEMPERATURE_SCHEMA,
+        )
+        from homeassistant.components.climate.services import (
+            _async_service_temperature_set as async_service_temperature_set,
+        )
+    except ImportError:
+        from homeassistant.components.climate import (  # type: ignore[attr-defined,no-redef]
+            SET_TEMPERATURE_SCHEMA,
+            async_service_temperature_set,
+        )
     from homeassistant.const import UnitOfTemperature
     from homeassistant.exceptions import ServiceValidationError
 

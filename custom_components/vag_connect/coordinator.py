@@ -1356,6 +1356,17 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             RateLimitError,
         )
 
+        # #1740 - the portal operator asked that requests to their domain carry a
+        # dedicated user-agent. Handed in here rather than read off disk in the
+        # connector, which is imported from inside coroutines.
+        try:
+            from .cariad.auth._eu_data_act import (  # noqa: PLC0415
+                set_integration_version,
+            )
+            set_integration_version(self._integration_version())
+        except Exception:  # noqa: BLE001
+            pass
+
         brand    = self.entry.data[CONF_BRAND]
         # v3.0.0-alpha — a companion (ADB) entry carries no username/password
         # (the phone is already signed in), so read these defensively rather
@@ -3266,10 +3277,25 @@ class VagConnectCoordinator(DataUpdateCoordinator):
 
     def _arm_official_from_map(self, keys_map: dict[str, Any]) -> None:
         """Arm the Škoda official failover channel from a persisted per-VIN key map
-        ({vin: {key, id, validUntil}})."""
+        ({vin: {key, id, validUntil}}).
+
+        The manual key rides along deliberately. ``arm_supplementary_official``
+        REPLACES the channel from what it is handed, and its own docstring calls
+        ``api_key`` "the single manual-fallback key (applied to any VIN without
+        its own)" — so arming from the map alone silently dropped it. A user who
+        had typed a key for one car and then auto-enrolled another lost the typed
+        one on the next re-arm, taking that car's read failover (and, since the
+        command fallback landed, its commands) with it. Setup has always passed
+        both; this is the same call shape.
+        """
         arm = getattr(self._cariad_client, "arm_supplementary_official", None)
         if arm is None:
             return
+        from .const import CONF_SKODA_OFFICIAL_API_KEY  # noqa: PLC0415
+
+        # entry.data, never entry.options: the options flow writes through to
+        # data here, so options is always {}.
+        manual_key = str((self.entry.data or {}).get(CONF_SKODA_OFFICIAL_API_KEY) or "")
         by_vin = {
             str(vin).upper(): (rec.get("key") or "")
             for vin, rec in (keys_map or {}).items()
@@ -3277,7 +3303,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         }
         if by_vin:
             try:
-                arm(keys_by_vin=by_vin)
+                arm(api_key=manual_key, keys_by_vin=by_vin)
             except Exception as exc:  # noqa: BLE001
                 # class-only — by_vin holds the per-VIN X-API-Key; a validation
                 # error could echo the key value.
@@ -5184,6 +5210,18 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                     first_seen_at=now,
                 ))
 
+    def _integration_version(self) -> str:
+        """The manifest version for the two reports, or "" — never raises.
+
+        #1736/#1738 — a Scout or error report is read by us days later, on a
+        build we cannot see, so the report has to name it. The lookup (and the
+        reason it must not be the awaitable one) lives in ``_version`` now that
+        the Porsche login report needs the same line.
+        """
+        from ._version import integration_version  # noqa: PLC0415
+
+        return integration_version(self.hass)
+
     def _refresh_reporter_issues(self) -> None:
         """Recreate / delete the two HA repair issues from current buffers.
 
@@ -5195,6 +5233,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         """
         brand = self.entry.data.get(CONF_BRAND, "")
         entry_id = getattr(self.entry, "entry_id", "") or ""
+        version = self._integration_version()
 
         # Vehicle model name (e.g. "ID.4") makes the GitHub issue recognizable
         # at a glance and doubles as the maintainer's private per-model stat.
@@ -5220,6 +5259,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 findings=all_findings,
                 brand=brand,
                 model=model,
+                integration_version=version,
             )
         except Exception:  # noqa: BLE001
             pass
@@ -5233,6 +5273,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 records=records,
                 brand=brand,
                 model=model,
+                integration_version=version,
             )
         except Exception:  # noqa: BLE001
             pass
@@ -9192,6 +9233,33 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                         " (%s) — surfacing the original BFF error.",
                         method, mask_vin(vin), type(fb_err).__name__,
                     )
+            # Škoda: mysmob refused in a way that proves the car never saw the
+            # command (and mysmob is the channel expected to be retired). Try the
+            # official public API ONCE. Same contract as the MBB branch above:
+            # success ends here, failure surfaces the ORIGINAL mysmob error. The
+            # official client's own AuthenticationError is a CariadError rather
+            # than an APIError, so letting it escape would show a traceback for a
+            # button press — it is swallowed here by construction.
+            sk = self._skoda_official_command_fallback(vin, method, err, kwargs)
+            if sk is not None:
+                try:
+                    await getattr(sk, method)(vin)
+                    try:
+                        self.record_command_success(vin, method)
+                    except Exception:  # noqa: BLE001
+                        pass
+                    _LOGGER.info(
+                        "VW Group Connect: %s(%s) recovered via the official Škoda"
+                        " API after mysmob refused it (HTTP %s).",
+                        method, mask_vin(vin), getattr(err, "status", "?"),
+                    )
+                    return
+                except Exception as sk_err:  # noqa: BLE001
+                    _LOGGER.info(
+                        "VW Group Connect: the official Škoda API also refused"
+                        " %s(%s) (%s) — surfacing the original error.",
+                        method, mask_vin(vin), type(sk_err).__name__,
+                    )
             # v2.18.0 (#659) — surface the failure instead of letting the raw
             # APIError escape. HA doesn't know our exception types, so it logged
             # "Unexpected exception" and showed the user a Python traceback for
@@ -9278,6 +9346,83 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             except Exception:  # noqa: BLE001
                 pass  # enrichment must never change the command outcome
             raise HomeAssistantError(msg) from err
+
+    #: The Škoda commands the official public API actually implements with the
+    #: SAME signature as the mysmob one — vin and nothing else. Aux heating is
+    #: deliberately absent although an official method exists: the coordinator
+    #: passes ``spin=`` for Škoda while the official method takes
+    #: ``(vin, target_c=None)``, and the official client holds ONE entry-wide
+    #: S-PIN where the coordinator resolves it per VIN (#759). On a multi-car
+    #: entry that would send the wrong PIN, and repeated wrong PINs are how
+    #: S-PINs get locked.
+    _SKODA_OFFICIAL_COMMANDS: frozenset[str] = frozenset({
+        "command_start_charging",
+        "command_stop_charging",
+        "command_start_climate",
+        "command_stop_climate",
+        "command_start_active_ventilation",
+        "command_stop_active_ventilation",
+    })
+
+    #: mysmob failures that PROVE the car never saw the command. Everything else
+    #: is treated as "may have executed" and must not be retried on a second
+    #: channel — see the b7 note in ``_cariad_cmd`` about a non-idempotent
+    #: command reaching the car twice. In particular NOT 5xx and NOT the
+    #: transient ``APIError(0)``: ``base._request`` already retried those up to
+    #: three times, so the POST may have been delivered and only the response
+    #: lost, and 429/430 mean an account-wide lockout where a second channel is
+    #: the last thing that should be touched.
+    _SKODA_FALLBACK_STATUSES: frozenset[int] = frozenset({401, 403, 404})
+
+    def _skoda_official_command_fallback(
+        self, vin: str, method: str, err: Exception, kwargs: dict[str, Any],
+    ) -> Any | None:
+        """The official Škoda client to retry this command on, or None.
+
+        mysmob carries every Škoda command today and is expected to be retired;
+        the official public API implements six of them. This is the narrow bridge
+        between the two, shaped exactly like ``_mbb_command_fallback``: one
+        attempt, only on a refusal that proves nothing was actuated, and the
+        ORIGINAL error surfaces if the second channel fails too.
+
+        Returns None — i.e. no fallback — for anything outside that: a command
+        the official API has no route for, any kwargs at all (the official
+        signatures take ``vin`` only, and a blind splat would raise TypeError
+        into the user's face), a non-Škoda entry, ``mysmob_only`` mode, a VIN
+        without a key, or an exhausted official quota.
+        """
+        # Cheapest guards first, and read the ENTRY, never the client: a
+        # MagicMock test client auto-vivifies any attribute to something truthy,
+        # which is how a fallback gate silently stops gating (same hazard the MBB
+        # selector documents below).
+        try:
+            if str(self.entry.data.get(CONF_BRAND, "")).lower() != "skoda":
+                return None
+        except Exception:  # noqa: BLE001
+            return None
+        if method not in self._SKODA_OFFICIAL_COMMANDS:
+            return None
+        if kwargs:
+            # Both sides take vin only. A caller that passes anything else is
+            # either a signature drift or a different command wearing the same
+            # name — either way, not ours to translate.
+            return None
+        # Read the mode from the entry at command time. The client's cached
+        # ``_official_mode`` is only refreshed on read cycles and can be stale
+        # after an options change.
+        if self._skoda_official_mode() == "mysmob_only":
+            return None
+        from .cariad.exceptions import APIError  # noqa: PLC0415
+        if isinstance(err, HomeAssistantError) or not isinstance(err, APIError):
+            return None
+        if getattr(err, "status", None) not in self._SKODA_FALLBACK_STATUSES:
+            return None
+        client = getattr(self, "_cariad_client", None)
+        getter = getattr(client, "official_command_connector", None)
+        fb = getter(vin) if callable(getter) else None
+        if fb is None:
+            return None
+        return fb if callable(getattr(fb, method, None)) else None
 
     def _mbb_command_fallback(self, method: str, err: Exception) -> Any | None:
         """b15 — the armed MBB fallback connector to retry a command on, or None.
