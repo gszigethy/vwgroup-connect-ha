@@ -264,8 +264,8 @@ class VagConnectEntity(CoordinatorEntity[VagConnectCoordinator]):
         if not getattr(self.coordinator, "is_companion", lambda: False)():
             return None
         desc = getattr(self, "entity_description", None)
-        key = (getattr(desc, "data_key", None) or getattr(self, "_field", None)
-               or getattr(self, "_key", ""))
+        key = str(getattr(desc, "data_key", None) or getattr(self, "_field", None)
+                  or getattr(self, "_key", "") or "")
         keys = {
             "position": ("latitude", "longitude"),
             "climate": ("climatisation_active",),
