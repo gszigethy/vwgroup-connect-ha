@@ -4986,6 +4986,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
     async def async_shutdown(self) -> None:
         """Stop polling loop and release resources."""
         self._started = False
+        self._shutting_down = True
         # v2.0.0 (Big-Bang) — stop push managers before dropping client.
         await self.async_stop_push_managers()
         # v2.15.0b1 (C1) — close the dedicated supplementary vw.de session so
@@ -6635,6 +6636,13 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         once when coming back online — never fills logs with repeated errors.
         Also removes stale devices when vehicles disappear from the account.
         """
+        if getattr(self, "_shutting_down", False):
+            # A poll the unload let finish: HA removes this entry's listeners
+            # only after the unload, so a push here would spawn entities on the
+            # cleared platform, tied to this dead coordinator (stuck values, and
+            # the reloaded entry's twins rejected as duplicate unique ids). The
+            # read is already in the vehicle cache the reloaded entry restores.
+            return
         if success:
             if not self._was_available:
                 _LOGGER.info(
