@@ -2533,7 +2533,7 @@
   },
   "exceptions": {
     "companion_limit_language_unavailable": {
-      "message": "Le scritture e la sincronizzazione sono disabilitate: le risorse di traduzione dell’app non sono disponibili e non è possibile confermare che la lingua attuale dell’interfaccia sia inglese, tedesco o spagnolo. Le letture continuano."
+      "message": "La scrittura e la sincronizzazione sono disabilitate: le risorse di traduzione dell’app non sono disponibili e non è possibile confermare che la lingua attuale dell’interfaccia sia l’inglese, il tedesco o lo spagnolo. La lettura dei dati continua a funzionare."
     },
     "vehicle_not_found": {
       "message": "Veicolo con VIN {vin} non trovato. Verifica che l'integrazione sia avviata."

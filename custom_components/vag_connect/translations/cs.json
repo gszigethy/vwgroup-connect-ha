@@ -2533,7 +2533,7 @@
   },
   "exceptions": {
     "companion_limit_language_unavailable": {
-      "message": "Zápisy a synchronizace jsou zakázány: překladové prostředky aplikace nejsou dostupné a nelze potvrdit, že aktuální jazyk rozhraní je angličtina, němčina nebo španělština. Čtení pokračuje."
+      "message": "Zápis a synchronizace jsou zakázány: překladové prostředky aplikace nejsou k dispozici a nelze ověřit, zda je aktuální jazyk uživatelského rozhraní angličtina, němčina nebo španělština. Čtení dat nadále funguje."
     },
     "vehicle_not_found": {
       "message": "Vozidlo s VIN {vin} nebylo nalezeno."

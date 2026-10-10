@@ -2533,7 +2533,7 @@
   },
   "exceptions": {
     "companion_limit_language_unavailable": {
-      "message": "Zapis i synchronizacja są wyłączone: zasoby tłumaczeń aplikacji są niedostępne i nie można potwierdzić, że bieżący język interfejsu to angielski, niemiecki lub hiszpański. Odczyty są kontynuowane."
+      "message": "Zapis i synchronizacja są wyłączone: zasoby tłumaczeń aplikacji są niedostępne i nie można potwierdzić, że bieżący język interfejsu to angielski, niemiecki lub hiszpański. Odczyt danych nadal działa."
     },
     "vehicle_not_found": {
       "message": "Pojazd z VIN {vin} nie znaleziony."

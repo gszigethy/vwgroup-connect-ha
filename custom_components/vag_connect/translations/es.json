@@ -2533,7 +2533,7 @@
   },
   "exceptions": {
     "companion_limit_language_unavailable": {
-      "message": "Las escrituras y la sincronización están desactivadas: los recursos de traducción de la aplicación no están disponibles y no se puede confirmar que el idioma actual de la interfaz sea inglés, alemán o español. Las lecturas continúan."
+      "message": "La escritura y la sincronización están desactivadas: los recursos de traducción de la aplicación no están disponibles y no se puede confirmar que el idioma actual de la interfaz sea inglés, alemán o español. La lectura de datos sigue funcionando."
     },
     "vehicle_not_found": {
       "message": "Vehículo con VIN {vin} no encontrado."
