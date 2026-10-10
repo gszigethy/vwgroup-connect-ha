@@ -159,6 +159,9 @@ jobs:
           # of a digit followed by a/b/rc — e.g. '.0b3' or '.0rc1'.
           # Without this, tags like v2.7.0b3 published as non-prerelease
           # and needed a manual gh release edit --prerelease afterwards.
-          prerelease: ${{ contains(github.ref_name, 'a') || contains(github.ref_name, 'b') || contains(github.ref_name, 'rc') || contains(github.ref_name, 'pre') }}
+          # Fork: the repository variable FORK_PRERELEASE=true publishes every
+          # release as a prerelease, so a series in testing does not reach
+          # people who follow the fork's releases.
+          prerelease: ${{ vars.FORK_PRERELEASE == 'true' || contains(github.ref_name, 'a') || contains(github.ref_name, 'b') || contains(github.ref_name, 'rc') || contains(github.ref_name, 'pre') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
