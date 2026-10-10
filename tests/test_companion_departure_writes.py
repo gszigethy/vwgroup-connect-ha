@@ -427,6 +427,7 @@ async def test_moving_a_one_time_timer_to_another_day():
     # Picking a second day turns Repeat back on in the app; it is turned
     # off again once the old day is gone.
     phone = DeparturePhone()
+    phone.saved[2] = Timer(18, 0, {"sat"}, False)  # told apart from timer 2 by its time
     await channel_for(phone).set_departure_timer(2, weekdays=["sun"], repeat=False, time="09:15")
     assert phone.saved[1].key() == (9, 15, frozenset({"sun"}), False)
     assert kinds(phone)[:5] == ["tile", "open2", "sun", "sat", "repeat"]
@@ -444,7 +445,7 @@ async def test_unchanged_page_sends_nothing():
 @pytest.mark.asyncio
 async def test_time_and_switch_in_one_command():
     phone = DeparturePhone()
-    phone.saved[1].enabled = False
+    phone.saved[2] = Timer(18, 0, {"sat"}, False)  # told apart from timer 2 by its time
     await channel_for(phone).set_departure_timer(3, time="06:00", enabled=True)
     assert phone.saved[2].hour == 6 and phone.saved[2].enabled is True
 
@@ -618,6 +619,7 @@ async def test_time_on_an_off_timer_is_one_send():
     # The app's Save sends the timer switched on (4.6.4 saveSettings), so the
     # time entity's enabled=True costs no second request.
     phone = DeparturePhone()
+    phone.saved[2] = Timer(18, 0, {"sat"}, False)  # told apart from timer 2 by its time
     client = _client(phone)
     client._channel._nav_cache = {"departure_timer_2_enabled": False, "departure_timer_enabled_count": 0}
     await client.command_set_departure_timer("VIN", timer_id=2, enabled=True, departure_time="06:00")
@@ -765,3 +767,34 @@ async def test_days_only_edit_on_the_channel_taps_no_switch():
     await _client(phone).command_set_departure_timer("VIN", timer_id=1, recurring_on=["MONDAY"])
     assert not any(t.startswith("switch") for t in phone.taps)
     assert phone.saved[0].days == {"mon"}
+
+
+class SwappedPagePhone(DeparturePhone):
+    """Timer 2's row opens timer 3's page; both show 00:00 on the list."""
+
+    async def tap(self, x, y):
+        await super().tap(x, y)
+        if self.where == "page" and self.taps[-1] == "open2":
+            self.slot, self.edit = 2, self.saved[2].copy()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("slot", [2, 3])
+@pytest.mark.parametrize("kwargs", [{"time": "08:00"}, {"weekdays": ["sun"]}, {"repeat": True}])
+async def test_timers_with_the_same_time_are_not_edited(slot, kwargs):
+    # The page shows no timer number, and its time alone cannot tell timer 2
+    # from timer 3, so nothing is opened, let alone saved.
+    phone = SwappedPagePhone()
+    channel = channel_for(phone)
+    with pytest.raises(CompanionWriteBlocked, match="same time"):
+        await channel.set_departure_timer(slot, **kwargs)
+    assert phone.taps == ["tile"] and channel._last_write_at is None
+    assert [t.key() for t in phone.saved] == [t.key() for t in DeparturePhone().saved]
+    assert phone.where == "overview"
+
+
+@pytest.mark.asyncio
+async def test_the_switch_alone_still_works_on_timers_with_the_same_time():
+    phone = SwappedPagePhone()
+    await channel_for(phone).set_departure_timer(3, enabled=True)
+    assert phone.taps == ["tile", "switch3"] and phone.saved[2].enabled is True

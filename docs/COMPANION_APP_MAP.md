@@ -118,8 +118,10 @@ Writes (VW, app 4.6.4; the switch also on 4.3.2), all through
   edit with `enabled: false` is refused; `enabled` may be left out. The
   service refuses `charging`, `climatisation` and `target_soc_pct`, and maps
   `one_off_day` (today to six days ahead) to a one-time timer on that weekday.
-- A write needs all three rows read, and the opened page's time must match its
-  row. Anything unexpected before Save cancels the page; nothing is sent.
+- A write needs all three rows read. A page edit also needs the timer's time
+  to differ from the other two (the page shows no timer number), and the
+  opened page's time must match its row. Anything unexpected before Save
+  cancels the page; nothing is sent.
 
 ## Driving data
 

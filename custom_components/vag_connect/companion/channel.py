@@ -1436,10 +1436,23 @@ class CompanionChannel:
                     f"could not find departure timer {slot} on the Departure times screen"
                 )
             # A row is found by position; an unread row would shift the rest.
-            if len(departure_rows(listing)) != 3:
+            rows = departure_rows(listing)
+            if len(rows) != 3:
                 raise CompanionWriteBlocked(
                     "could not read all three timers on the Departure times screen; "
                     "nothing was sent"
+                )
+            # The page shows no timer number: its time, checked against the
+            # row, is the only identity both share (the row's recurrence is
+            # app text, and the page has no switch). Two rows at one time
+            # cannot be told apart, so a page edit is refused before opening.
+            twin = next((i + 1 for i, row in enumerate(rows)
+                         if i != slot - 1 and row.time == rows[slot - 1].time), None)
+            if edit and twin is not None:
+                raise CompanionWriteBlocked(
+                    f"departure timers {slot} and {twin} show the same time, so the "
+                    "app's page cannot be matched to one; give one of them another "
+                    "time first"
                 )
             if edit:
                 listing = await self._edit_timer(listing, slot, clock, days, repeat)
