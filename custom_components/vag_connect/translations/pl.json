@@ -2535,6 +2535,9 @@
     "companion_sync_refused": {
       "message": "Aplikacja nie zsynchronizowała pojazdu. Każda synchronizacja wybudza pojazd, więc jest odrzucana, gdy polecenia są wstrzymane lub zbyt wcześnie po ostatnim poleceniu. Sprawdź czujnik Stan żądań aplikacji."
     },
+    "companion_app_version_unverified": {
+      "message": "Polecenia są wyłączone: aplikacja na telefonie ma wersję {version}, która nie została jeszcze zweryfikowana dla poleceń. Polecenia, zapisywanie i synchronizacja pozostaną wyłączone, dopóki ta wersja nie zostanie zweryfikowana. Dane pojazdu są nadal aktualizowane."
+    },
     "vehicle_not_found": {
       "message": "Pojazd z VIN {vin} nie znaleziony."
     },
@@ -2576,6 +2579,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Dla tego samochodu trwa już jednorazowy eksport danych historycznych. Portal obsługuje tylko jedno takie żądanie naraz, więc zaczekaj, aż bieżące się zakończy (lub wygaśnie), zanim poprosisz o kolejne."
+    },
+    "hvac_mode_not_supported": {
+      "message": "Tryb HVAC {hvac_mode} nie jest obsługiwany; użyj jednego z: {modes}. Nic nie zostało wysłane."
     }
   },
   "selector": {

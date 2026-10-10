@@ -2535,6 +2535,9 @@
     "companion_sync_refused": {
       "message": "Aplikace vozidlo nesynchronizovala. Každá synchronizace probouzí vozidlo, proto je odmítnuta, když jsou příkazy pozastaveny nebo příliš brzy po posledním příkazu. Zkontrolujte senzor Stav požadavků aplikace."
     },
+    "companion_app_version_unverified": {
+      "message": "Příkazy jsou vypnuté: aplikace v telefonu má verzi {version}, která zatím nebyla ověřena pro příkazy. Příkazy, ukládání a synchronizace zůstanou vypnuté, dokud nebude tato verze ověřena. Data vozidla se dál aktualizují."
+    },
     "vehicle_not_found": {
       "message": "Vozidlo s VIN {vin} nebylo nalezeno."
     },
@@ -2576,6 +2579,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Pro toto auto už probíhá jednorázový export historie. Portál zpracovává vždy jen jeden takový požadavek, takže než si vyžádáte další, počkejte, až se ten aktuální dokončí (nebo vyprší)."
+    },
+    "hvac_mode_not_supported": {
+      "message": "Režim HVAC {hvac_mode} není podporován; použijte jeden z: {modes}. Nic nebylo odesláno."
     }
   },
   "selector": {

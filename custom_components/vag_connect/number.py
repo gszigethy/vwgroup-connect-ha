@@ -9,6 +9,7 @@ from homeassistant.components.number import (
     NumberDeviceClass,
     NumberEntity,
     NumberEntityDescription,
+    NumberExtraStoredData,
     NumberMode,
     RestoreNumber,
 )
@@ -398,8 +399,9 @@ class VagCompanionClimateTemperatureNumber(VagConnectNumber, RestoreNumber):
             return
         value: float | None = None
         last = await self.async_get_last_number_data()
-        if last is not None and last.native_value is not None:
-            value = float(last.native_value)
+        if last is not None:
+            # Only a held value is stored (see extra_restore_state_data).
+            value = float(last.native_value) if last.native_value is not None else None
         else:
             state = await self.async_get_last_state()
             try:
@@ -418,8 +420,20 @@ class VagCompanionClimateTemperatureNumber(VagConnectNumber, RestoreNumber):
 
     @property
     def native_value(self) -> float | None:
+        # Nothing held yet: Start leaves the dial, so show what the dial reads.
         targets = _companion_climate_targets(self.coordinator)
-        return targets.temp_c if targets is not None else None
+        if targets is not None and targets.temp_c is not None:
+            return targets.temp_c
+        return super().native_value
+
+    @property
+    def extra_restore_state_data(self) -> NumberExtraStoredData:
+        # Restore only a held value, never the dial reading shown in its place:
+        # a restored value would make the next Start move the dial.
+        data = super().extra_restore_state_data
+        targets = _companion_climate_targets(self.coordinator)
+        data.native_value = targets.temp_c if targets is not None else None
+        return data
 
     async def async_set_native_value(self, value: float) -> None:
         # Stores only (the coordinator skips the command path for companion).

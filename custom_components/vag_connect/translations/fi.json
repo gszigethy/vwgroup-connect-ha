@@ -2535,6 +2535,9 @@
     "companion_sync_refused": {
       "message": "Sovellus ei synkronoinut autoa. Jokainen synkronointi herättää auton, joten se hylätään, kun komennot ovat tauolla tai liian pian edellisen komennon jälkeen. Katso anturi Sovelluksen pyyntöjen tila."
     },
+    "companion_app_version_unverified": {
+      "message": "Komennot ovat pois päältä: puhelimen sovellus on versio {version}, jota ei ole vielä varmennettu komennoille. Komennot, tallennukset ja synkronoinnit pysyvät pois päältä, kunnes tämä versio on varmennettu. Ajoneuvon tiedot päivittyvät edelleen."
+    },
     "vehicle_not_found": {
       "message": "Ajoneuvoa, jonka VIN on {vin}, ei löytynyt. Tarkista, että integraatio on käynnistetty."
     },
@@ -2576,6 +2579,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Tälle autolle on jo käynnissä kertaluonteinen historiatietojen vienti. Portaali käsittelee vain yhtä tällaista pyyntöä kerrallaan, joten odota, että nykyinen valmistuu (tai aikakatkaistaan), ennen kuin pyydät uutta."
+    },
+    "hvac_mode_not_supported": {
+      "message": "HVAC-tilaa {hvac_mode} ei tueta; käytä jotakin näistä: {modes}. Mitään ei lähetetty."
     }
   },
   "selector": {

@@ -2535,6 +2535,9 @@
     "companion_sync_refused": {
       "message": "L'app n'a pas synchronisé le véhicule. Chaque synchronisation réveille le véhicule ; elle est donc refusée tant que les commandes sont en pause ou trop tôt après la dernière commande. Consultez le capteur État des requêtes de l'app."
     },
+    "companion_app_version_unverified": {
+      "message": "Les commandes sont désactivées : l'application du téléphone est en version {version}, qui n'a pas encore été vérifiée pour les commandes. Les commandes, enregistrements et synchronisations restent désactivés jusqu'à la vérification de cette version. Les données du véhicule continuent d'être mises à jour."
+    },
     "vehicle_not_found": {
       "message": "Véhicule avec VIN {vin} introuvable."
     },
@@ -2576,6 +2579,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Un export ponctuel de l'historique est déjà en cours pour ce véhicule. Le portail ne traite qu'une seule demande de ce type à la fois : attendez donc que celle en cours se termine (ou expire) avant d'en demander une autre."
+    },
+    "hvac_mode_not_supported": {
+      "message": "Le mode CVC {hvac_mode} n'est pas pris en charge ; utilisez l'un de : {modes}. Rien n'a été envoyé."
     }
   },
   "selector": {

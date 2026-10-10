@@ -2535,6 +2535,9 @@
     "companion_sync_refused": {
       "message": "Appen synkroniserede ikke bilen. Hver synkronisering vækker bilen, så den afvises, mens kommandoer er sat på pause, eller for kort tid efter den sidste kommando. Se sensoren Appens anmodningsstatus."
     },
+    "companion_app_version_unverified": {
+      "message": "Kommandoer er slået fra: appen på telefonen er version {version}, som endnu ikke er verificeret til kommandoer. Kommandoer, gemning og synkronisering forbliver slået fra, indtil denne version er verificeret. Køretøjsdata opdateres stadig."
+    },
     "vehicle_not_found": {
       "message": "Køretøj med VIN {vin} blev ikke fundet. Tjek, at integrationen er startet."
     },
@@ -2576,6 +2579,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Der er allerede en engangseksport af historikken i gang for denne bil. Portalen håndterer kun én sådan anmodning ad gangen, så vent, til den nuværende er færdig (eller får timeout), før du beder om en ny."
+    },
+    "hvac_mode_not_supported": {
+      "message": "HVAC-tilstanden {hvac_mode} understøttes ikke; brug en af: {modes}. Intet blev sendt."
     }
   },
   "selector": {

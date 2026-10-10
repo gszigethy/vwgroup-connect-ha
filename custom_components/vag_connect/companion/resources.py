@@ -660,12 +660,19 @@ def climate_function_state(text: str, resources: StringResources) -> bool | None
     return None
 
 
+_AC_TITLE_FALLBACK = re.compile(r"\s*(?:Air\s*conditioning|Klimatisierung)\s*", re.I)
+
+
 def climate_mode_is_window_heating(title: str, resources: StringResources) -> bool | None:
     """The mode row's title: True for window heating alone, False for AC."""
     value = title.strip().casefold()
     if not resources.get(CLIMA_MODE_WINDOW_HEATING):
         fallback = coerce("clima_mode_window_heating", title)
-        return fallback if isinstance(fallback, bool) else None
+        if isinstance(fallback, bool):
+            return fallback
+        # The English/German air conditioning title, so a climate Start can
+        # still tell the modes apart without the tables (a migration target).
+        return False if _AC_TITLE_FALLBACK.fullmatch(title) else None
     if value in _labels(resources, CLIMA_MODE_WINDOW_HEATING):
         return True
     if value in _labels(resources, CLIMA_MODE_AC):

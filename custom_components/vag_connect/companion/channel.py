@@ -35,6 +35,7 @@ from .presets import (
     BrandPreset,
     NavReadSelector,
     app_version_covered,
+    app_version_listed,
 )
 from .screen import (
     UiNode,
@@ -129,11 +130,14 @@ _SETTLE_MAX_DUMPS = 2              # dumps spent waiting for a Compose screen to
                                    # otherwise spend half a minute dumping.
 _SLIDER_TRIES = 3                  # charge-limit taps, each read back, before
                                    # giving up without saving
+_SLIDER_READS = 3                  # dumps per slider tap to see it redrawn
 _SAVE_POLLS = 15                   # dumps to wait for the app to confirm a save
 _SYNC_SCROLLS = 3                  # swipes down vehicle Settings to reach
                                    # "Synchronise now" (one is enough on 4.3.2)
 _SCREEN_TRIES = 5                  # dumps to wait for the screen a tap should
                                    # produce (a dump is about a second on ADB)
+_LIMIT_READBACK_DUMPS = 3          # dumps after a one-tap command, looking for
+                                   # the request-limit alert (about 1 s late)
 _DAY_TAPS = 16                     # weekday/Repeat taps, each read back, before
                                    # giving up on a timer page without saving
 _CLOCK_TAPS = 40                   # one-step time wheel taps, each read back
@@ -149,6 +153,23 @@ _LIMIT_REASON = (
 
 class CompanionWriteBlocked(RuntimeError):
     """A write was refused by the quarantine, with a human-readable reason."""
+
+
+class CompanionAppVersionUnverified(CompanionWriteBlocked):
+    """Rule 9: a write on an app build that was not verified for writes.
+
+    Carries a translation key so the user sees the refusal in their language.
+    """
+
+    translation_key = "companion_app_version_unverified"
+
+    def __init__(self, version: str | None) -> None:
+        super().__init__(
+            f"commands are off on app version {version}: it has not been "
+            "verified for commands yet, and writes stay off until it is. "
+            "Reads still work."
+        )
+        self.translation_placeholders = {"version": str(version)}
 
 
 REQUESTS_AVAILABLE = "available"
@@ -215,6 +236,10 @@ class CompanionChannel:
         # version_ok True but no writes.
         self._version_ok: bool | None = None
         self._last_write_at: float | None = None  # write min-interval (ckomma #21)
+        # The same moment as wall clock, persisted next to the pause so a
+        # restart cannot shorten the gap.
+        self._last_write_wall: float = 0.0
+        self._limit_trips = 0  # counts trips, so a cleanup can tell it saw one
         # C9 nav-read cache: the opted-in detail screens are re-read on every
         # app refresh (the poll interval is the only read cadence), and the
         # values persist between reads so a walk that misses one does not make
@@ -237,14 +262,20 @@ class CompanionChannel:
         return self._preset
 
     @property
+    def live_app_version(self) -> str | None:
+        """The app version last read from the phone."""
+        return self._live_app_version
+
+    @property
     def writes_enabled(self) -> bool:
         """Whether writes are currently allowed, with all gates applied."""
         return (
             bool(self._version_ok)
             and self._preset.writable
+            and app_version_listed(self._live_app_version, self._preset.verified_app_version)
             and any(
                 a.app_versions is None
-                or app_version_covered(self._live_app_version, a.app_versions)
+                or app_version_listed(self._live_app_version, a.app_versions)
                 for a in self._preset.actions
             )
             and not self._is_rate_limited()
@@ -315,17 +346,47 @@ class CompanionChannel:
             self._rate_limited_until = float(until)
             self._limit_kind = None  # unknown: no sync probe until it runs out
 
+    @property
+    def last_write_at(self) -> float:
+        """Wall-clock unix time of the last command tap (0 = none this run).
+
+        Persisted with the pause, so the minimum gap between commands holds
+        across a restart.
+        """
+        return self._last_write_wall
+
+    def restore_last_write(self, at: float) -> None:
+        """Re-apply a persisted last command time at setup."""
+        if not at:
+            return
+        # A time in the future (a clock step) counts as just now.
+        ago = max(0.0, self._wall() - float(at))
+        if ago < _WRITE_MIN_INTERVAL_S:
+            self._last_write_at = self._now() - ago
+            self._last_write_wall = float(at)
+
+    def _stamp_write(self) -> None:
+        self._last_write_at = self._now()
+        self._last_write_wall = self._wall()
+
     def _is_rate_limited(self) -> bool:
         return self._wall() < self._rate_limited_until
 
     def _trip_rate_limit(self) -> None:
+        was_limited = self._is_rate_limited()
         kind, self._limit_seen_kind = self._limit_seen_kind or LIMIT_BACKEND, None
         # A power-budget alert never softens a pause already running for
         # another (or an unknown) reason.
-        if not self._is_rate_limited() or kind == LIMIT_BACKEND:
+        if not was_limited or kind == LIMIT_BACKEND:
             self._limit_kind = kind
         self._limit_probe_at = self._wall()
         self._rate_limited_until = self._wall() + _RATE_LIMIT_BACKOFF_S
+        self._limit_trips += 1
+        self._request_state = REQUESTS_RESTRICTED
+        if was_limited:
+            # One alert is often seen by a command and then by its cleanup.
+            _LOGGER.debug("companion %s: request limit still up", self._preset.brand)
+            return
         _LOGGER.warning(
             "companion %s: a rate-limit / lockout banner is up; backing off for "
             "%d h and disabling writes. This is a backend limit on the account, "
@@ -432,16 +493,28 @@ class CompanionChannel:
         # the long persisted backoff, which pauses commands. #968 — the alert
         # is a dialog left over from a request, so close it (and the generic
         # "Vehicle data unavailable" that follows it) and read the screen
-        # behind it, instead of going blind for the whole pause.
-        if self._limit_on_screen(nodes):
-            self._trip_rate_limit()
+        # behind it, instead of going blind for the whole pause. Closing it
+        # trips the pause.
         if self._is_alert(nodes):
             nodes, closed = await self._close_dialogs(nodes)
             if not closed:
                 return None  # nothing readable, and not a failed poll
-            if self._preset.screen_anchor is not None and not has_anchor(nodes, self._preset):
-                await self._return_to_overview(2)
-                nodes, cleared = await self._dump_and_clear_overlays()
+        if cleared and nodes and self._preset.screen_anchor is not None and not has_anchor(
+            nodes, self._preset
+        ):
+            # A sub-screen (behind a closed alert, or left by a walk that was
+            # cut short): go home before reading, and never parse overview
+            # selectors off another page. An empty dump is no screen at all,
+            # and BACK there could leave the app. The walk back taps, so it
+            # needs the same version gate as any other tap.
+            if not self._version_ok:
+                return {}
+            await self._return_to_overview(3)
+            nodes, cleared = await self._dump_and_clear_overlays()
+            if self._limit_on_screen(nodes):
+                self._trip_rate_limit()
+            if cleared and not has_anchor(nodes, self._preset):
+                return {}
         if not cleared:
             # A nag/interstitial we could not dismiss is up; the screen behind it
             # is not the data screen. Return no fields rather than parsing the
@@ -479,6 +552,8 @@ class CompanionChannel:
     def request_state(self) -> str | None:
         """What the vehicle sync flow last found (#968), or None.
 
+        Any request-limit trip also sets it to restricted.
+
         Before the first sync of this session, a request-limit pause restored
         from the last run already says the car is restricted.
         """
@@ -494,11 +569,19 @@ class CompanionChannel:
         """
         return self._limit_on_screen(nodes) or find_app_alert(nodes, self._app_strings)
 
-    async def _close_dialogs(self, nodes: list[UiNode]) -> tuple[list[UiNode], bool]:
-        """BACK past the app's alerts; (nodes, True) once none is left."""
+    async def _close_dialogs(
+        self, nodes: list[UiNode], *, trip: bool = True
+    ) -> tuple[list[UiNode], bool]:
+        """BACK past the app's alerts; (nodes, True) once none is left.
+
+        A request-limit alert trips the pause before it is closed, unless the
+        caller (the sync probe) decides that itself.
+        """
         for _ in range(_OVERLAY_MAX_DISMISS):
             if not self._is_alert(nodes):
                 return nodes, True
+            if trip and self._limit_on_screen(nodes):
+                self._trip_rate_limit()
             await self._t.key_back()
             nodes, _cleared = await self._dump_and_clear_overlays()
         return nodes, not self._is_alert(nodes)
@@ -842,11 +925,16 @@ class CompanionChannel:
         failure-soft throughout: a transport blip here must not turn a good
         read into an error.
         """
+        await self._reconnect_for_cleanup()
         for _ in range(max(0, presses)):
             try:
                 nodes, _cleared = await self._dump_and_clear_overlays()
             except CompanionTransportError:
                 return
+            # The limit alert can land after the step that caused it; this
+            # BACK would close it, so it trips the pause first.
+            if self._limit_on_screen(nodes):
+                self._trip_rate_limit()
             if self._preset.screen_anchor is not None and has_anchor(
                 nodes, self._preset
             ):
@@ -864,6 +952,20 @@ class CompanionChannel:
                     await self._t.key_back()
             except CompanionTransportError:
                 return
+
+    async def _reconnect_for_cleanup(self) -> None:
+        """Reconnect once, so a dropped shell does not skip the cleanup.
+
+        The direct ADB transport closes the device on any shell error, and
+        every later call would fail as "not connected": a staged switch or a
+        moved slider would then stay on screen for the next command.
+        """
+        if self._t.connected:
+            return
+        try:
+            await self._t.connect()
+        except CompanionTransportError:
+            pass
 
     async def _dump_and_clear_overlays(
         self, known_xml: str | None = None
@@ -1004,8 +1106,9 @@ class CompanionChannel:
         if live_version not in want_set and live_version != self._newer_logged:
             self._newer_logged = live_version
             _LOGGER.info(
-                "companion %s: app %s is newer than the verified %s; taps rely "
-                "on finding each control on screen",
+                "companion %s: app %s is newer than the verified %s; nav reads "
+                "rely on finding each control on screen, commands stay off "
+                "until this version is verified",
                 self._preset.brand, live_version, "/".join(want_set),
             )
         return True
@@ -1034,6 +1137,8 @@ class CompanionChannel:
         spec, nodes = await self._command_gate(action)
         walked = 0
         nav = next((n for n in self._preset.nav_reads if n.name == spec.nav_read), None)
+        on_detail = False
+        trips = self._limit_trips
         try:
             if spec.nav_read:
                 if nav is None:
@@ -1065,7 +1170,7 @@ class CompanionChannel:
                     f"could not find the '{action}' control on the current screen"
                 )
             # Prevent repeated taps even if a transport fails after delivery.
-            self._last_write_at = self._now()
+            self._stamp_write()
             # Re-read this command's own detail path on the next poll: a
             # delivered tap is not proof that the vehicle accepted it, and the
             # cached pre-command values are not readback. Only that path is
@@ -1076,11 +1181,29 @@ class CompanionChannel:
                     self._nav_cache.pop(value.target, None)
                 self._nav_only.add(nav.name)
             await self._t.tap(*node.tap_point)
+            # The app shows the request-limit alert about a second after the
+            # tap; look for it, so it trips the pause and fails the command.
+            # The tap is delivered, so a failed look does not fail the command.
+            for _ in range(_LIMIT_READBACK_DUMPS):
+                try:
+                    after, _cleared = await self._dump_and_clear_overlays()
+                except CompanionTransportError:
+                    break
+                if self._limit_on_screen(after):
+                    self._trip_rate_limit()
+                    raise CompanionWriteBlocked(_LIMIT_REASON)
         except CompanionTransportError as err:
             raise CompanionWriteBlocked(str(err)) from err
         finally:
             if nav is not None:
-                await self._return_to_overview(min(walked, nav.back_presses))
+                # A command started on the sheet still closes it (review B12).
+                await self._return_to_overview(
+                    min(max(walked, int(on_detail)), nav.back_presses)
+                )
+        if self._limit_trips != trips:
+            # The limit alert arrived after the readback, and the walk back
+            # closed it: the car refused the command after all.
+            raise CompanionWriteBlocked(_LIMIT_REASON)
 
     async def set_charge_target(self, target: float) -> int:
         """Set the vehicle Settings charge limit; returns the value saved.
@@ -1099,6 +1222,10 @@ class CompanionChannel:
         nav = next((n for n in self._preset.nav_reads if n.name == spec.nav_read), None)
         if nav is None:
             raise CompanionWriteBlocked("the vehicle Settings path is not mapped")
+        # The saved value while a slider position may be pending; None once
+        # there is nothing to discard (not moved yet, or Save was pressed).
+        unsaved_from: int | None = None
+        leave = True
         try:
             row = find_charge_target_row(nodes)
             if row is None:
@@ -1113,31 +1240,73 @@ class CompanionChannel:
                 )
             if row.current == target:
                 return target  # nothing to change, nothing sent
+            unsaved_from = row.current
             await self._move_charge_slider(row, target)
-            # Save is the one tap that sends. Stamp first, so a transport that
-            # fails after delivery still blocks an immediate repeat.
+            # Save is the one tap that sends, so the dump right before it must
+            # show exactly the target (review B3). Stamp first, so a transport
+            # that fails after delivery still blocks an immediate repeat.
             nodes, _cleared = await self._dump_and_clear_overlays()
+            ready = find_charge_target_row(nodes)
+            if ready is None or ready.current != target:
+                shown = "no charge limit" if ready is None else f"{ready.current} %"
+                raise CompanionWriteBlocked(
+                    f"the app shows {shown} before Save, not {target} %; nothing was saved"
+                )
             save = find_save_button(nodes)
             if save is None or save.tap_point is None:
                 raise CompanionWriteBlocked("the app did not offer Save for the new limit")
-            self._last_write_at = self._now()
+            unsaved_from = None
+            self._stamp_write()
             self._nav_cache.pop("target_soc", None)
             await self._t.tap(*save.tap_point)
             await self._await_charge_target_saved(target)
             self._nav_cache["target_soc"] = target
             return target
-        except CompanionTransportError as err:
-            raise CompanionWriteBlocked(str(err)) from err
+        except (CompanionWriteBlocked, CompanionTransportError) as err:
+            if unsaved_from is not None and not await self._discard_charge_target(unsaved_from):
+                # Cancel did not take: another press of the same control
+                # proves nothing more, so tap nothing else.
+                leave = False
+                raise CompanionWriteBlocked(
+                    f"{err}; the app did not confirm discarding the change, check it in the app"
+                ) from err
+            if isinstance(err, CompanionTransportError):
+                raise CompanionWriteBlocked(str(err)) from err
+            raise
         finally:
             # The app's own toolbar button: Back after a save, and Cancel (which
             # discards the unsaved position) if anything stopped us before it.
-            await self._return_to_overview(2)
+            if leave:
+                await self._return_to_overview(2)
 
     async def _move_charge_slider(self, row: ChargeTargetRow, target: int) -> None:
-        """Tap the track until the row reads ``target``; a tap sends nothing."""
+        """Tap the track until the row reads ``target``; a tap sends nothing.
+
+        A dump can predate the tap's redraw (review B3), so a reading counts
+        only once it differs from the value before the tap, or two dumps in a
+        row agree. A tap that changed nothing is never corrected from.
+        """
         aim = target
         for _ in range(_SLIDER_TRIES):
+            before = row.current
             await self._t.tap(*row.tap_point(aim))
+            seen = await self._read_slider(before)
+            if seen is None or seen.current == before:
+                break
+            if seen.current == target:
+                return
+            # Correct by what the slider actually did; the steps are wide, so
+            # this only matters if the layout drifted.
+            aim = snap_target(aim + (target - seen.current))
+            row = seen
+        raise CompanionWriteBlocked(
+            f"the charge limit slider did not reach {target} %; nothing was saved"
+        )
+
+    async def _read_slider(self, before: int) -> ChargeTargetRow | None:
+        """The row once it is redrawn after a tap; None if that is not proven."""
+        previous: int | None = None
+        for _ in range(_SLIDER_READS):
             nodes, cleared = await self._dump_and_clear_overlays()
             seen = find_charge_target_row(nodes)
             if seen is None and not cleared:
@@ -1158,15 +1327,33 @@ class CompanionChannel:
                     raise CompanionWriteBlocked(
                         "the app showed a note over the charge limit that did not close"
                     )
-            if seen.current == target:
-                return
-            # Correct by what the slider actually did; the steps are wide, so
-            # this only matters if the layout drifted.
-            aim = snap_target(aim + (target - seen.current))
-            row = seen
-        raise CompanionWriteBlocked(
-            f"the charge limit slider did not reach {target} %; nothing was saved"
-        )
+            if seen.current != before or seen.current == previous:
+                return seen
+            previous = seen.current
+        return None
+
+    async def _discard_charge_target(self, saved: int) -> bool:
+        """Cancel a pending slider position with the app's own toolbar X.
+
+        True once the row shows ``saved`` again with no Save pending. Taps
+        only when Save is pending, and then only the cancel the walk back
+        would have pressed anyway.
+        """
+        try:
+            nodes, _cleared = await self._dump_and_clear_overlays()
+            if find_save_button(nodes) is not None:
+                cancel = next((
+                    node for node in (find_node_for(nodes, s) for s in self._preset.up_controls)
+                    if node is not None and node.tap_point is not None
+                ), None)
+                if cancel is None or cancel.tap_point is None:
+                    return False
+                await self._t.tap(*cancel.tap_point)
+                nodes = await self._await_screen(lambda n: find_save_button(n) is None)
+            row = find_charge_target_row(nodes)
+            return row is not None and row.current == saved and find_save_button(nodes) is None
+        except CompanionTransportError:
+            return False
 
     async def _await_charge_target_saved(self, target: int) -> None:
         """Wait for the app to finish sending; fail unless it confirms."""
@@ -1247,8 +1434,10 @@ class CompanionChannel:
                 )
             # Save is the one tap that sends. Stamp first, so a transport that
             # fails after delivery still blocks an immediate repeat.
-            self._last_write_at = self._now()
+            self._stamp_write()
             self._nav_cache.pop(key, None)
+            # The readback refresh re-reads this page only, not every path.
+            self._nav_only.add(nav.name)
             await self._t.tap(*save.tap_point)
             staged = None
             after = await self._await_climate_settings_saved(nav, name)
@@ -1408,6 +1597,7 @@ class CompanionChannel:
         ``climatisationSettingsLeading`` leaves Settings without Save.
         """
         if staged is not None and key in CLIMATE_TOGGLES:
+            await self._reconnect_for_cleanup()
             try:
                 nodes, _cleared = await self._dump_and_clear_overlays()
                 toggle = find_toggle(nodes, key)
@@ -1461,7 +1651,7 @@ class CompanionChannel:
         )
         if edit and enabled is not None:
             toggle = next((a for a in self._preset.actions if a.action == "toggle_departure_timer"), None)
-            if toggle is None or (toggle.app_versions and not app_version_covered(
+            if toggle is None or (toggle.app_versions and not app_version_listed(
                 self._live_app_version, toggle.app_versions
             )):
                 raise CompanionWriteBlocked(
@@ -1536,7 +1726,7 @@ class CompanionChannel:
             raise
         # Save is the one tap that sends. Stamp first, so a transport that
         # fails after delivery still blocks an immediate repeat.
-        self._last_write_at = self._now()
+        self._stamp_write()
         for part in ("time", "weekdays", "repeat"):
             self._nav_cache.pop(f"departure_timer_{slot}_{part}", None)
         self._nav_only.add("departure_times")
@@ -1687,7 +1877,7 @@ class CompanionChannel:
         if row.switch.tap_point is None:
             raise CompanionWriteBlocked(f"departure timer {slot}'s switch has no place on screen")
         key = f"departure_timer_{slot}_enabled"
-        self._last_write_at = self._now()
+        self._stamp_write()
         self._nav_cache.pop(key, None)
         self._nav_cache.pop("departure_timer_enabled_count", None)
         self._nav_only.add("departure_times")
@@ -1743,6 +1933,7 @@ class CompanionChannel:
         nav = next((n for n in self._preset.nav_reads if n.name == spec.nav_read), None)
         if nav is None:
             raise CompanionWriteBlocked("the vehicle Settings path is not mapped")
+        trips = self._limit_trips
         try:
             button = find_sync_button(nodes)
             if button is None:
@@ -1769,7 +1960,7 @@ class CompanionChannel:
                 return False  # the app is already waiting for the car
             # Stamp first, so a transport that fails after delivery still
             # blocks an immediate repeat.
-            self._last_write_at = self._now()
+            self._stamp_write()
             await self._t.tap(*button.tap_point)
             nodes, _cleared = await self._dump_and_clear_overlays(await self._settle())
             if self._limit_on_screen(nodes):
@@ -1791,11 +1982,6 @@ class CompanionChannel:
                 after = find_sync_button(nodes)
             if after is None or after.enabled:
                 raise CompanionWriteBlocked("the app did not start the vehicle sync")
-            # Accepted: the car takes requests again, so the pause is over.
-            self._rate_limited_until = 0.0
-            self._limit_kind = None
-            self._request_state = REQUESTS_AVAILABLE
-            return True
         except CompanionTransportError as err:
             raise CompanionWriteBlocked(str(err)) from err
         finally:
@@ -1805,6 +1991,16 @@ class CompanionChannel:
             except CompanionTransportError:
                 pass
             await self._return_to_overview(2)
+        if self._limit_trips != trips:
+            # The limit alert arrived after the button changed, and the
+            # cleanup closed it: the car refused the sync after all.
+            self._request_state = REQUESTS_RESTRICTED
+            raise CompanionWriteBlocked(_LIMIT_REASON)
+        # Accepted: the car takes requests again, so the pause is over.
+        self._rate_limited_until = 0.0
+        self._limit_kind = None
+        self._request_state = REQUESTS_AVAILABLE
+        return True
 
     async def _command_gate(
         self, action: str, *, probe: bool = False
@@ -1840,10 +2036,13 @@ class CompanionChannel:
                 f"match the one this preset was verified against "
                 f"({_want_str}). Reads still work."
             )
+        # Rule 9: a newer build keeps reads, but writes need a listed build.
+        if not app_version_listed(self._live_app_version, self._preset.verified_app_version):
+            raise CompanionAppVersionUnverified(self._live_app_version)
         spec = next((a for a in self._preset.actions if a.action == action), None)
         if spec is None:
             raise CompanionWriteBlocked(f"no confirmed control for '{action}'")
-        if spec.app_versions and not app_version_covered(
+        if spec.app_versions and not app_version_listed(
             self._live_app_version, spec.app_versions
         ):
             raise CompanionWriteBlocked(
@@ -1883,13 +2082,35 @@ class CompanionChannel:
             if probe and cleared and self._is_alert(nodes):
                 # An alert left over from an earlier request; the probe's own
                 # tap is what tells whether the limit still holds.
-                nodes, cleared = await self._close_dialogs(nodes)
+                nodes, cleared = await self._close_dialogs(nodes, trip=False)
         except CompanionTransportError as err:
             raise CompanionWriteBlocked(str(err)) from err
         if not cleared:
             raise CompanionWriteBlocked(
                 "a nag screen is up and did not clear; not tapping blind"
             )
+        # Before the walk home below, whose BACK would close the alert unseen.
+        if self._limit_on_screen(nodes):
+            self._trip_rate_limit()
+            raise CompanionWriteBlocked(_LIMIT_REASON)
+        if self._preset.screen_anchor is not None and not has_anchor(nodes, self._preset):
+            # Every command starts from the overview. A walk cut short can
+            # leave a sub-screen with a change staged but not saved, which the
+            # next Save would send too; the app's own up/Cancel discards it.
+            # An empty dump is no screen to walk back from.
+            if not nodes:
+                raise CompanionWriteBlocked(
+                    "the app's screen could not be read; not tapping blind"
+                )
+            await self._return_to_overview(3)
+            try:
+                nodes, cleared = await self._dump_and_clear_overlays()
+            except CompanionTransportError as err:
+                raise CompanionWriteBlocked(str(err)) from err
+            if not cleared or not has_anchor(nodes, self._preset):
+                raise CompanionWriteBlocked(
+                    "the app did not return to its overview; not tapping blind"
+                )
         if self._limit_on_screen(nodes):
             self._trip_rate_limit()
             raise CompanionWriteBlocked(_LIMIT_REASON)
