@@ -221,6 +221,7 @@
       "porsche_login_wall": "Le tue credenziali sono corrette — l'accesso ha superato il passaggio della password, ma si è fermato a una schermata captcha/consenso di Porsche che non può completare automaticamente (vista su my.porsche.com). È un blocco lato Porsche, tracciato in #1337, non una password errata. Non riprovare in un ciclo — tentativi ripetuti hanno bloccato account Porsche. Se puoi, segnalalo così possiamo risolverlo (allega la diagnostica): {report_url}",
       "porsche_portal_step": "Porsche ha inoltrato questo accesso al suo portale web (my.porsche.com) per un passaggio una tantum che l'integrazione non può completare da sola. Apri {portal_url} in un normale browser — preferibilmente sulla stessa rete di Home Assistant — accedi con lo stesso account, completa ciò che mostra (consenso, termini, avviso sui cookie), quindi torna qui e riprova. Non riprovare in un ciclo: tentativi falliti ripetuti hanno bloccato account Porsche. Ancora bloccato? Segnalalo qui: {report_url}",
       "porsche_captcha_failed": "Impossibile verificare il captcha ed è ormai scaduto. Chiudi questa finestra e riavvia l'accesso Porsche per ottenerne uno nuovo. Se puoi, segnalalo così possiamo risolverlo (allega la diagnostica): {report_url}",
+      "porsche_captcha_credentials": "Porsche ha rifiutato l'accesso in questo passaggio, quindi il captcha è ormai scaduto — ma il captcha non era il problema: l'e-mail o la password non sono state accettate. Controllale e riavvia l'accesso Porsche. Non riprovare in continuazione: tentativi falliti ripetuti hanno portato Porsche a bloccare degli account. Se le credenziali sono certamente corrette, segnalalo così possiamo risolverlo (allega la diagnostica): {report_url}",
       "porsche_captcha_cooldown": "Troppi tentativi di captcha. Tentativi ripetuti possono far bloccare temporaneamente l'account da parte di Porsche o segnalare la tua rete, quindi l'operazione è stata interrotta per proteggere il tuo account. Attendi qualche minuto prima di riprovare. Se puoi, segnalalo così possiamo risolverlo (allega la diagnostica): {report_url}",
       "reconfigure_failed": "Riconfigurazione non riuscita: voce di configurazione non trovata. Riprova.",
       "reauth_failed": "Ri-autenticazione non riuscita: voce di configurazione non trovata. Riprova."
@@ -1279,6 +1280,9 @@
       "dashboard_warnings_raw": {
         "name": "Avvisi del cruscotto (grezzi)"
       },
+      "dashboard_warnings_last_at": {
+        "name": "Ultima registrazione delle spie"
+      },
       "climate_error_code": {
         "name": "Codice errore clima"
       },
@@ -2304,7 +2308,38 @@
           "confirm": {
             "title": "Riconnetti il canale Volkswagen.de",
             "description": "Il canale di lettura volkswagen.de non ha potuto riprendere la sessione — Volkswagen richiede di nuovo il codice monouso via e-mail. I dati principali del veicolo non sono interessati. Continua e arriverai direttamente al login per questa auto; non devi cercare tu le opzioni dell'integrazione."
+          },
+          "credentials": {
+            "title": "Sito Volkswagen.de (BETA, solo lettura)",
+            "data": {
+              "username": "Indirizzo email",
+              "password": "Password",
+              "scan_interval": "Intervallo di aggiornamento"
+            },
+            "data_description": {
+              "username": "L'email del tuo account Volkswagen ID / myVolkswagen.",
+              "password": "La password del tuo Volkswagen ID.",
+              "scan_interval": "Con quale frequenza vengono recuperati i dati (minuti). Minimo: 5."
+            }
+          },
+          "otp": {
+            "title": "Codice di verifica email",
+            "description": "Un codice di verifica è stato inviato all'email di **{username}**.\n\nInserisci il codice per completare l'accesso al canale del sito Volkswagen.de (beta).",
+            "data": {
+              "mfa_code": "Codice di verifica"
+            },
+            "data_description": {
+              "mfa_code": "Codice dalla tua casella di posta — valido per alcuni minuti."
+            }
           }
+        },
+        "error": {
+          "invalid_credentials": "Indirizzo email o password errati.",
+          "cannot_connect": "Impossibile raggiungere Volkswagen. Riprova.",
+          "website_login_failed": "La tua email e la password non sono il problema — l'accesso a volkswagen.de le ha superate e si è interrotto in un passaggio successivo (per esempio sessione scaduta, ciclo di reindirizzamenti o una pagina non riconosciuta). Il motivo è nel log di Home Assistant. Cambiare password non serve; se continua, apri una segnalazione allegando quella riga di log."
+        },
+        "abort": {
+          "entry_gone": "Quella voce di integrazione non esiste più."
         }
       }
     },
@@ -2334,7 +2369,7 @@
     },
     "skoda_official_enrolled": {
       "title": "API ufficiale di Škoda — ora sei registrato in automatico",
-      "description": "Buone notizie: abbiamo usato il tuo accesso Škoda esistente per creare una chiave API ufficiale Škoda per la tua auto, così Home Assistant può ora leggerla tramite il nuovo canale ufficiale e duraturo di Škoda — come backup automatico nel caso in cui la connessione normale dovesse avere difficoltà. Poiché questo canale ufficiale ha un limite di frequenza (solo poche richieste all'ora), resta in standby e legge solo quando la connessione principale non ci riesce — così non rallenterà nulla. Non devi fare nulla; è solo un promemoria, e puoi ignorarlo."
+      "description": "Buone notizie: abbiamo usato il tuo accesso Škoda esistente per creare una chiave API ufficiale Škoda per la tua auto, così Home Assistant può ora leggerla tramite il canale ufficiale e duraturo di Škoda. Viene letto a ogni aggiornamento normale insieme alla tua connessione abituale, e le sue letture del costruttore completano e correggono quanto riporta quella connessione — e subentra da solo se la connessione abituale viene a mancare. Poiché il canale ufficiale consente solo un piccolo numero di richieste all'ora, l'integrazione distribuisce quel budget e lo salta quando sta per esaurirsi, così nulla rallenta. Da parte tua non c'è nulla da fare; è solo un avviso e puoi chiuderlo."
     },
     "skoda_official_quota_full": {
       "title": "API ufficiale di Škoda — limite di chiavi raggiunto",

@@ -221,6 +221,7 @@
       "porsche_login_wall": "Dine loginoplysninger er i orden — loginnet kom forbi adgangskodetrinnet, men stoppede ved en Porsche captcha-/samtykkeskærm, som det ikke kan gennemføre automatisk (set på my.porsche.com). Det er en blokering på Porsches side, fulgt i #1337, ikke en forkert adgangskode. Prøv ikke igen i en løkke — gentagne forsøg har låst Porsche-konti. Hvis du kan, så rapportér det, så vi kan rette det (vedhæft diagnostik): {report_url}",
       "porsche_portal_step": "Porsche sendte dette login til sin webportal (my.porsche.com) for et engangstrin, som integrationen ikke kan gennemføre selv. Åbn {portal_url} i en almindelig browser — helst på samme netværk som Home Assistant — log ind med den samme konto, gennemfør det, den viser (samtykke, betingelser, cookiemeddelelse), og kom så tilbage og prøv igen. Prøv ikke igen i en løkke: gentagne mislykkede forsøg har låst Porsche-konti. Sidder du stadig fast? Rapportér det her: {report_url}",
       "porsche_captcha_failed": "Captchaen kunne ikke bekræftes og er nu brugt. Luk denne dialog, og start Porsche-loginet igen for at få en ny. Hvis du kan, så rapportér det, så vi kan rette det (vedhæft diagnostik): {report_url}",
+      "porsche_captcha_credentials": "Porsche afviste loginnet i dette trin, så captchaen er brugt — men captchaen var ikke problemet: e-mailen eller adgangskoden blev ikke accepteret. Kontrollér dem, og start Porsche-loginet igen. Lad være med at prøve igen og igen: gentagne mislykkede forsøg har fået Porsche til at låse konti. Hvis loginoplysningerne helt sikkert er rigtige, så rapportér det, så vi kan rette det (vedhæft diagnostik): {report_url}",
       "porsche_captcha_cooldown": "For mange captcha-forsøg. Gentagne forsøg kan få Porsche til midlertidigt at låse kontoen eller markere dit netværk, så processen blev stoppet for at beskytte din konto. Vent et par minutter, før du prøver igen. Hvis du kan, så rapportér det, så vi kan rette det (vedhæft diagnostik): {report_url}",
       "reconfigure_failed": "Genkonfiguration mislykkedes: konfigurationsposten blev ikke fundet. Prøv igen.",
       "reauth_failed": "Gengodkendelse mislykkedes: konfigurationsposten blev ikke fundet. Prøv igen."
@@ -1279,6 +1280,9 @@
       "dashboard_warnings_raw": {
         "name": "Instrumentbrætadvarsler (rå)"
       },
+      "dashboard_warnings_last_at": {
+        "name": "Advarselslamper senest registreret"
+      },
       "climate_error_code": {
         "name": "Klimafejlkode"
       },
@@ -2304,7 +2308,38 @@
           "confirm": {
             "title": "Forbind Volkswagen.de-kanalen igen",
             "description": "Volkswagen.de-læsekanalen kunne ikke genoptage sin session — Volkswagen beder igen om engangskoden på e-mail. Bilens primære data er upåvirkede. Fortsæt, og du kommer direkte til login for denne bil; du behøver ikke selv finde integrationens indstillinger."
+          },
+          "credentials": {
+            "title": "Volkswagen.de-websted (BETA, skrivebeskyttet)",
+            "data": {
+              "username": "E-mailadresse",
+              "password": "Adgangskode",
+              "scan_interval": "Opdateringsinterval"
+            },
+            "data_description": {
+              "username": "E-mailen til din Volkswagen ID- / myVolkswagen-konto.",
+              "password": "Din Volkswagen ID-adgangskode.",
+              "scan_interval": "Hvor ofte data hentes (minutter). Minimum: 5."
+            }
+          },
+          "otp": {
+            "title": "E-mailbekræftelseskode",
+            "description": "En bekræftelseskode blev sendt til e-mailen for **{username}**.\n\nIndtast koden for at fuldføre login på Volkswagen.de-webstedskanalen (beta).",
+            "data": {
+              "mfa_code": "Bekræftelseskode"
+            },
+            "data_description": {
+              "mfa_code": "Kode fra din e-mailindbakke — gyldig i et par minutter."
+            }
           }
+        },
+        "error": {
+          "invalid_credentials": "E-mailadresse eller adgangskode er forkert.",
+          "cannot_connect": "Kunne ikke få forbindelse til Volkswagen. Prøv venligst igen.",
+          "website_login_failed": "Din e-mail og adgangskode er ikke problemet — logind på volkswagen.de kom forbi dem og fejlede i et senere trin (for eksempel en udløbet session, en omdirigeringsløkke eller en side den ikke genkendte). Årsagen står i Home Assistant-loggen. En ny adgangskode hjælper ikke; hvis det bliver ved, så opret et issue med den loglinje."
+        },
+        "abort": {
+          "entry_gone": "Den integrationspost findes ikke længere."
         }
       }
     },
@@ -2334,7 +2369,7 @@
     },
     "skoda_official_enrolled": {
       "title": "Škodas officielle API — du er nu tilmeldt automatisk",
-      "description": "Gode nyheder: Vi brugte dit eksisterende Škoda-login til at oprette en officiel Škoda-API-nøgle til din bil, så Home Assistant nu kan læse den via Škodas nye officielle og varige kanal — som en automatisk reserve, hvis den normale forbindelse en dag skulle få problemer. Fordi denne officielle kanal er hastighedsbegrænset (kun et lille antal anmodninger i timen), står den i standby og læser kun, når din hovedforbindelse ikke kan — så den bremser ikke noget. Du skal ikke gøre noget; det her er bare til orientering, og du kan roligt lukke den."
+      "description": "Godt nyt: vi brugte dit eksisterende Škoda-login til at oprette en officiel Škoda-API-nøgle til din bil, så Home Assistant nu kan læse den via Škodas egen officielle, holdbare kanal. Den læses ved hver almindelig opdatering sammen med din normale forbindelse, og dens målinger fra producenten udfylder og retter det, forbindelsen rapporterer — og den tager selv over, hvis den normale forbindelse svigter. Fordi den officielle kanal kun tillader et lille antal forespørgsler i timen, fordeler integrationen budgettet og springer den over, når det bliver knapt, så intet bliver langsommere. Du skal ikke gøre noget; dette er blot en orientering, som du kan lukke."
     },
     "skoda_official_quota_full": {
       "title": "Škodas officielle API — grænsen for nøgler er nået",
