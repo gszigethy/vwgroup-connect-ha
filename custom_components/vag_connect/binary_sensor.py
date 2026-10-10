@@ -1037,45 +1037,6 @@ _DATA_PRESENT_REQUIRED: frozenset[str] = frozenset({
 })
 
 
-# Companion: read-only sensors whose field a companion switch also shows as its
-# state (the Air Conditioning Settings switches, and window heating). Where that
-# switch exists the sensor repeats it, so it is not created.
-def _companion_switch_twins() -> dict[str, str]:
-    from .switch import COMPANION_CLIMATE_SETTINGS  # noqa: PLC0415
-
-    twins = {field: command for _key, field, command, _icon in COMPANION_CLIMATE_SETTINGS}
-    twins["window_heating_front"] = "command_start_window_heating"
-    return twins
-
-
-def _has_switch_twin(coordinator: VagConnectCoordinator, vin: str, key: str) -> bool:
-    """True when a companion switch shows this sensor's field (same gates)."""
-    command = _companion_switch_twins().get(key)
-    if command is None or not coordinator.is_companion() or coordinator.is_read_only():
-        return False
-    client = coordinator._cariad_client
-    return (
-        coordinator.command_capability_supported(vin, command) is not False
-        and client is not None
-        and hasattr(client, command)
-        and coordinator.command_method_available(command)
-    )
-
-
-def _remove_twin_sensor(hass: HomeAssistant, vin: str, key: str) -> None:
-    """Drop the registry entry an earlier version created for a twin sensor."""
-    from homeassistant.helpers import entity_registry as er  # noqa: PLC0415
-
-    from .const import DOMAIN, vehicle_unique_id  # noqa: PLC0415
-
-    registry = er.async_get(hass)
-    entity_id = registry.async_get_entity_id(
-        "binary_sensor", DOMAIN, vehicle_unique_id(vin, key, companion=True),
-    )
-    if entity_id is not None:
-        registry.async_remove(entity_id)
-
-
 # b13 — platinum parallel-updates rule: the coordinator's background poll
 # loop owns every API request, so entity updates need no throttling. HA reads
 # this MODULE-level constant (an entity attr is a no-op).
@@ -1096,6 +1057,7 @@ async def async_setup_entry(
     # Only None is treated as "no data" — False is a real "off" reading. The
     # per-id spawner re-spawns the sensor when its value first appears.
     from .const import CONF_HIDE_EMPTY_ENTITIES  # noqa: PLC0415
+    from .companion.entity_twins import has_control_twin, remove_twin  # noqa: PLC0415
     hide_empty = bool(entry.options.get(
         CONF_HIDE_EMPTY_ENTITIES,
         entry.data.get(CONF_HIDE_EMPTY_ENTITIES, True),
@@ -1121,8 +1083,8 @@ async def async_setup_entry(
         for desc in BINARY_DESCRIPTIONS:
             if desc.condition == "electric" and not has_battery:
                 continue
-            if _has_switch_twin(coordinator, vin, desc.key):
-                _remove_twin_sensor(hass, vin, desc.key)
+            if has_control_twin(coordinator, vin, vehicle, "binary_sensor", desc.key):
+                remove_twin(hass, "binary_sensor", vin, desc.key)
                 continue
             # v4.0.0 grounding wave — soft capability gate (opt-in via
             # desc.capability; hidden only on an explicitly-absent cap).
