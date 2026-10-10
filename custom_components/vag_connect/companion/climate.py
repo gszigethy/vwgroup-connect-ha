@@ -70,6 +70,18 @@ _DIAL_MAX_STEPS = round((DIAL_MAX_C - DIAL_MIN_C) / DIAL_STEP_C)
 _DIAL_NUMBER_RE = re.compile(r"-?\d{1,3}(?:[.,]\d)?")
 # The app debounces dial changes by 1000 ms before it sends them.
 _DIAL_FLUSH_S = 1.2
+# Steps one drag covers: about 41 % of the dial's width each, so two fit with
+# room to spare on the captured phones.
+_DRAG_STEPS = 2
+# Gestures (car requests) one temperature change may take.
+_DIAL_MAX_GESTURES = 2
+# The step width must look like the captured dials' (about 0.41 of the width).
+_DIAL_PAGE_MIN, _DIAL_PAGE_MAX = 0.25, 0.6
+# Distance kept from the dial's edges when a drag starts.
+_DRAG_MARGIN = 0.05
+# Drag speed: well below the pager's 400 dp/s fling threshold on any density.
+_DRAG_MAX_PX_S = 350
+_DRAG_MIN_MS = 1000
 # Dumps spent waiting for the screen a tap should produce. A dump already takes
 # about a second on ADB, so these poll back to back rather than sleeping.
 _SCREEN_TRIES = 5
@@ -522,23 +534,24 @@ class ClimateController:
     async def _apply_dial(
         self, nodes: list[UiNode], target: float, *, starting: bool = True,
     ) -> list[UiNode]:
-        """Set the dial to ``target`` with one batch of taps; return the readback.
+        """Set the dial to ``target``; return the readback.
 
         ``starting`` False is a running air conditioning: there is no Start to
         check or press, and the dial change itself is the request.
 
-        The app sends every dial change to the car once the dial has rested
-        for 1 s, and again when the sheet closes, so a change costs one car
-        request even if Start is never pressed. Everything that could stop
-        Start is therefore checked before the first tap (the app build already
-        in ``_gate``), all the steps are tapped back to back inside that 1 s
-        (the phone stops the batch when a tap comes late; at most two sends
-        then reach the car), and the dial is read back once,
-        past the debounce. A wrong reading is reported, never corrected: a
-        correction would be another request, and Start would send a wrong value.
+        The dial is a snapping pager. A tap on a neighbouring label animates
+        one step, and a touch during that animation stops it, so taps cannot
+        be chained. The app sends the value the dial settles on, 1 s after it
+        settles (and when the sheet closes), whether or not Start is pressed.
+        So one step is one tap, and two steps are one slow drag that settles
+        once; each gesture is one car request. A change needs at most
+        ``_DIAL_MAX_GESTURES`` of them. Everything that could stop Start is
+        checked before the first gesture, and the dial is read back after
+        each one. A wrong reading is reported, never corrected: a correction
+        would be another request, and Start would send a wrong value.
         """
         strings = self._strings
-        current, lower, higher = read_dial(nodes, strings)
+        current = read_dial(nodes, strings)[0]
         if current is None:
             raise self._blocked("could not read the temperature dial")
         if not dial_is_celsius(nodes, strings):
@@ -552,56 +565,108 @@ class ClimateController:
         self._dial_preflight(nodes, starting=starting)
         no_start = "; Start was not pressed" if starting else ""
         steps = round(abs(target - current) / DIAL_STEP_C)
-        if not 0 < steps <= _DIAL_MAX_STEPS:
-            raise self._blocked(f"{steps} dial steps is outside the dial; not changing it")
-        neighbour = higher if target > current else lower
+        gestures = -(-steps // _DRAG_STEPS)
+        if not 0 < steps <= _DIAL_MAX_STEPS or gestures > _DIAL_MAX_GESTURES:
+            raise self._blocked(
+                f"a change of {abs(target - current):g} °C needs {gestures} dial "
+                f"moves, each one car request; at most "
+                f"{_DIAL_MAX_GESTURES * _DRAG_STEPS * DIAL_STEP_C:g} °C at a time"
+            )
+        if steps > 1 and getattr(self._ch._t, "swipe", None) is None:
+            raise self._blocked(
+                "this connection cannot drag the dial, so a change of more than "
+                f"{DIAL_STEP_C:g} °C is not possible here; not changing it"
+            )
+        self._mark_write()
+        up = target > current
+        value = current
+        moves = 0
+        while value != target:
+            move = min(round(abs(target - value) / DIAL_STEP_C), _DRAG_STEPS)
+            await self._move_dial(nodes, up=up, steps=move)
+            moves += 1
+            # Past the app's 1 s debounce, then read the dial once.
+            await self._sleep(_DIAL_FLUSH_S)
+            nodes, _cleared = await self._ch._dump_and_clear_overlays()
+            if self._ch._limit_on_screen(nodes):
+                self._ch._trip_rate_limit()
+                raise self._blocked(_LIMIT_REASON)
+            landed = read_dial(nodes, strings)[0]
+            expected = value + (move if up else -move) * DIAL_STEP_C
+            if landed != expected:
+                sent = "this change" if moves == 1 else f"these {moves} changes"
+                raise self._blocked(
+                    f"the temperature dial landed at "
+                    f"{'an unreadable value' if landed is None else f'{landed:g} °C'}, "
+                    f"not {expected:g} °C{no_start}. The app sends the dial to the "
+                    f"car on its own, so {sent} reached the car; it was not "
+                    "corrected, as that would cost another request"
+                )
+            value = expected
+        return nodes
+
+    async def _move_dial(self, nodes: list[UiNode], *, up: bool, steps: int) -> None:
+        """One gesture: a tap on the neighbouring label, or a drag of ``steps``.
+
+        Every position comes from the dump. The labels at the dial's edges are
+        clipped by the screen, so the step width is taken from the edges the
+        screen does not clip: the left edges of the centre and right labels,
+        or the right edges of the left and centre labels.
+        """
+        _current, lower, higher = read_dial(nodes, self._strings)
+        neighbour = higher if up else lower
         if neighbour is None or neighbour.tap_point is None:
             raise self._blocked("the next temperature step is not on the dial")
         t = self._ch._t
-        if steps > 1 and not getattr(t, "can_tap_burst", False):
-            # One request per tap would reach the car: refuse instead.
-            raise self._blocked(
-                "this connection sends one tap per request, so a dial change of "
-                f"more than {DIAL_STEP_C:g} °C would reach the car as several "
-                "requests; not changing it"
-            )
-        self._mark_write()
-        made: int | None = steps
         if steps == 1:
             await t.tap(*neighbour.tap_point)
+            return
+        dial = _find(nodes, "clima_compose_view")
+        centre = self._dial_centre(nodes)
+        if dial is None or dial.bounds is None or centre is None or centre.bounds is None:
+            raise self._blocked("could not measure the temperature dial")
+        left, _top, right, _bottom = dial.bounds
+        width = right - left
+        if higher is not None and higher.bounds is not None:
+            page = higher.bounds[0] - centre.bounds[0]
+        elif lower is not None and lower.bounds is not None:
+            page = centre.bounds[2] - lower.bounds[2]
         else:
-            made = await t.tap_burst(*neighbour.tap_point, steps)
-        # Keep the sheet open past the app's 1 s debounce, then read it once.
-        await self._sleep(_DIAL_FLUSH_S)
-        nodes, _cleared = await self._ch._dump_and_clear_overlays()
-        if self._ch._limit_on_screen(nodes):
-            self._ch._trip_rate_limit()
-            raise self._blocked(_LIMIT_REASON)
-        landed = read_dial(nodes, strings)[0]
-        if made == 0:
+            page = 0
+        if not _DIAL_PAGE_MIN * width <= page <= _DIAL_PAGE_MAX * width:
             raise self._blocked(
-                "the phone gave no clock to time the dial taps, so none was "
-                f"made{no_start}"
+                "the temperature dial's steps are not where this integration "
+                "expects them; not changing it"
             )
-        if made is not None and made < steps:
-            # The phone stopped the batch: a tap came more than 700 ms after
-            # the one before, so the app may already have sent a step between.
-            raise self._blocked(
-                f"the phone was too slow between dial taps and stopped after "
-                f"{made} of {steps}; the dial shows "
-                f"{'an unreadable value' if landed is None else f'{landed:g} °C'}, "
-                f"not {target:g} °C{no_start}. At most two "
-                "temperature changes reached the car; none was corrected"
-            )
-        if landed != target:
-            raise self._blocked(
-                f"the temperature dial landed at "
-                f"{'an unreadable value' if landed is None else f'{landed:g} °C'}, "
-                f"not {target:g} °C{no_start}. The app sends the dial "
-                "to the car on its own, so this change reached the car once; it "
-                "was not corrected, as that would cost another request"
-            )
-        return nodes
+        margin = int(width * _DRAG_MARGIN)
+        distance = steps * page
+        if distance > width - 2 * margin:
+            raise self._blocked("the dial is too narrow to drag that far; not changing it")
+        y = (centre.bounds[1] + centre.bounds[3]) // 2
+        # Higher values sit to the right: they come to the centre when the
+        # dial is dragged to the left.
+        x1 = right - margin if up else left + margin
+        x2 = x1 - distance if up else x1 + distance
+        # Slow enough that the pager snaps to the nearest step instead of
+        # flinging past it.
+        duration_ms = max(_DRAG_MIN_MS, int(distance * 1000 / _DRAG_MAX_PX_S))
+        await t.swipe(x1, y, x2, y, duration_ms)
+
+    def _dial_centre(self, nodes: list[UiNode]) -> UiNode | None:
+        """The label of the dial's current value (nearest the dial's centre)."""
+        dial = _find(nodes, "clima_compose_view")
+        if dial is None or dial.bounds is None:
+            return None
+        mid = (dial.bounds[0] + dial.bounds[2]) / 2
+        labels = [
+            n for n in nodes
+            if n.text and n.bounds and _inside(n, dial.bounds)
+            and dial_value(n.text, self._strings) is not None
+        ]
+        return min(
+            labels, key=lambda n: abs((n.bounds[0] + n.bounds[2]) / 2 - mid),  # type: ignore[index]
+            default=None,
+        )
 
     def _dial_preflight(self, nodes: list[UiNode], *, starting: bool = True) -> None:
         """Refuse before the first dial tap unless Start will follow it.
