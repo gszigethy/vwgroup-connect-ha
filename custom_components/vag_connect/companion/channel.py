@@ -26,7 +26,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Callable
+from typing import Callable, Literal
 
 from .presets import (
     ACTION_TO_COMMAND,
@@ -178,7 +178,7 @@ class _ScreenLock(asyncio.Lock):
         self.closing = False
         self.phone_keys: tuple[str, ...] = ()
 
-    async def acquire(self) -> bool:
+    async def acquire(self) -> Literal[True]:
         await super().acquire()
         try:
             if self.closing:
