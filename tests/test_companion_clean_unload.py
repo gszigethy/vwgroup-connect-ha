@@ -32,6 +32,15 @@ from custom_components.vag_connect.const import (
 VIN = "WVWZZZTESTVIN0001"
 
 
+@pytest.fixture(autouse=True)
+def _no_unsettled_phones():
+    from custom_components.vag_connect.companion import channel
+
+    channel._UNSETTLED.clear()
+    yield
+    channel._UNSETTLED.clear()
+
+
 class _Phone:
     """One phone shared by the old and the new client; logs who did what."""
 
@@ -216,23 +225,39 @@ class TestTransportShutdown:
             await t.connect()
 
     @pytest.mark.asyncio
-    async def test_addon_shutdown_abandons_the_shell_in_flight(self) -> None:
+    async def test_addon_shutdown_waits_for_the_shell_in_flight(self) -> None:
         t = AddOnAdbTransport("addon", 8129)
         t._device = "serial"
         started = asyncio.Event()
 
         async def _slow_post(_cmd: str, _timeout: float) -> str:
             started.set()
-            await asyncio.sleep(30)
-            return ""
+            await asyncio.sleep(0.05)
+            return "ok"
 
         t._post_shell = _slow_post
         call = asyncio.create_task(t.shell("input tap 1 1"))
         await started.wait()
-        await t.shutdown()
+        assert await t.shutdown() is True
+        assert call.done() and call.result() == "ok"
         with pytest.raises(CompanionTransportError):
-            await asyncio.wait_for(call, timeout=2)
-        assert not t._inflight
+            await t.shell("input tap 2 2")  # nothing further is sent
+
+    @pytest.mark.asyncio
+    async def test_addon_shutdown_reports_an_unanswered_command(self) -> None:
+        t = AddOnAdbTransport("addon", 8129)
+        t._device = "serial"
+
+        async def _timed_out(_cmd: str, _timeout: float) -> str:
+            await asyncio.sleep(0.01)
+            raise CompanionTransportError("the ADB Bridge add-on became unreachable")
+
+        t._post_shell = _timed_out
+        call = asyncio.create_task(t.shell("input tap 1 1"))
+        await asyncio.sleep(0)
+        assert await t.shutdown() is False
+        with pytest.raises(CompanionTransportError):
+            await call
 
     @pytest.mark.asyncio
     async def test_cancelling_the_caller_still_cancels(self) -> None:
@@ -251,6 +276,131 @@ class TestTransportShutdown:
         call.cancel()
         with pytest.raises(asyncio.CancelledError):
             await call
+
+
+# ── a command the add-on finishes on its own ─────────────────────────────────
+
+
+class _AddOnBackend:
+    """The add-on side: a /shell it accepted runs to completion on the phone
+    whatever happens to the HTTP request that sent it."""
+
+    def __init__(self, phone: _Phone, run_s: float, http_s: float) -> None:
+        self._phone = phone
+        self._run_s = run_s
+        self._http_s = http_s
+        self.jobs: list[asyncio.Task] = []
+
+    async def _run(self, cmd: str) -> str:
+        await asyncio.sleep(self._run_s)
+        self._phone.events.append(("old", "tap" if "tap" in cmd else "shell"))
+        return ""
+
+    async def post(self, cmd: str, _timeout: float) -> str:
+        job = asyncio.ensure_future(self._run(cmd))
+        self.jobs.append(job)
+        try:
+            return await asyncio.wait_for(asyncio.shield(job), self._http_s)
+        except TimeoutError as err:
+            raise CompanionTransportError("the add-on became unreachable") from err
+
+
+def _addon_client(phone: _Phone, backend: _AddOnBackend) -> CompanionClient:
+    t = AddOnAdbTransport("phone", 5555)
+    t._device = "serial"
+    t._post_shell = backend.post
+    return _client(t)
+
+
+def _new_client(phone: _Phone) -> tuple[CompanionClient, Any]:
+    new_t = _PhoneTransport(phone, "new")
+    new = _client(new_t)
+
+    async def _first_read() -> dict[str, object]:
+        await new_t.dump_ui()
+        return {}
+
+    new._channel._read_serialized = _first_read
+    return new, new_t
+
+
+class TestCommandTheAddOnFinishesAlone:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(("run_s", "http_s"), [(0.1, 5.0), (0.3, 0.05)])
+    async def test_new_first_dump_waits_for_the_old_tap(
+        self, run_s: float, http_s: float
+    ) -> None:
+        """The walk outlives the unload wait with a tap still running in the
+        add-on: answered late (first case), or never, its HTTP request timing
+        out while the add-on carries on (second case)."""
+        phone = _Phone()
+        backend = _AddOnBackend(phone, run_s, http_s)
+        old = _addon_client(phone, backend)
+        sent_more: list[BaseException] = []
+
+        async def _walk() -> dict[str, object]:
+            try:
+                await old._transport.shell("input tap 1 1")
+            except CompanionTransportError:
+                pass
+            try:
+                await old._transport.shell("input tap 2 2")
+            except CompanionTransportError as err:
+                sent_more.append(err)
+            return {}
+
+        old._channel._read_serialized = _walk
+        walk = asyncio.create_task(old._channel.read())
+        await asyncio.sleep(0.01)
+        with patch("custom_components.vag_connect.companion.client._CLOSE_WAIT_S", 0.01), \
+             patch("custom_components.vag_connect.companion.client._SETTLE_S", 0.5):
+            await old.close()
+        new, _ = _new_client(phone)
+        await new._channel.read()
+        await walk
+        await asyncio.gather(*backend.jobs)
+
+        assert sent_more, "the old walk sent a second command after the unload"
+        taps = [i for i, e in enumerate(phone.events) if e == ("old", "tap")]
+        assert len(taps) == 1
+        assert phone.events.index(("new", "dump")) > taps[0]
+
+    @pytest.mark.asyncio
+    async def test_a_clean_unload_leaves_no_settle_wait(self) -> None:
+        phone = _Phone()
+        old = _addon_client(phone, _AddOnBackend(phone, 0.0, 5.0))
+        with patch("custom_components.vag_connect.companion.client._SETTLE_S", 30.0):
+            await old.close()
+        new, _ = _new_client(phone)
+        await asyncio.wait_for(new._channel.read(), timeout=1)
+
+
+class TestCancelledClose:
+    @pytest.mark.asyncio
+    async def test_cancelling_close_still_shuts_the_transport(self) -> None:
+        phone = _Phone()
+        old_t = _PhoneTransport(phone, "old")
+        old = _client(old_t)
+        stuck = asyncio.Event()
+
+        async def _hung() -> dict[str, object]:
+            await stuck.wait()
+            return {}
+
+        old._channel._read_serialized = _hung
+        walk = asyncio.create_task(old._channel.read())
+        await asyncio.sleep(0)
+        closing = asyncio.create_task(old.close())
+        await asyncio.sleep(0.01)
+        closing.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await closing
+        assert old_t.connected is False
+        from custom_components.vag_connect.companion import channel
+
+        assert f"vin:{VIN}" in channel._UNSETTLED  # the walk may still be acting
+        stuck.set()
+        await walk
 
 
 # ── background tasks are tied to the entry ──────────────────────────────────

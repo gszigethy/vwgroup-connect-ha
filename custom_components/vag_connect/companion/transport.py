@@ -113,14 +113,16 @@ class NetworkAdbTransport:
                 pass
             self._device = None
 
-    async def shutdown(self) -> None:
+    async def shutdown(self) -> bool:
         """Close for good, on entry unload/reload: ``connect`` refuses after this.
 
         ``close`` alone is also the reconnect-on-next-read path after a shell
-        error, so it must not be final.
+        error, so it must not be final. Returns whether every command sent got
+        its answer (here: always, as nothing is tracked in flight).
         """
         self._shut_down = True
         await self.close()
+        return True
 
     def _refuse_if_shut_down(self) -> None:
         if self._shut_down:
