@@ -31,6 +31,10 @@ STRATEGY_COMPANION_ADB        = "companion_adb"
 # bare "{vin}_{key}" the entry set up second lost every shared entity (battery
 # level, ranges, doors locked, currently charging, …) to HA's duplicate check.
 COMPANION_UNIQUE_ID_INFIX     = "companion"
+# Set in a companion entry's data once its registered ids were moved to that
+# namespace. A flag, not a prefix test: some legacy keys already start with
+# "companion_" (e.g. "{vin}_companion_reset_button").
+CONF_COMPANION_UID_NAMESPACE  = "companion_uid_namespace"
 CONF_ADB_HOST                 = "adb_host"
 CONF_ADB_PORT                 = "adb_port"
 CONF_VIN                      = "vin"

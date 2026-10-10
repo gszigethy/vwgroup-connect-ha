@@ -85,7 +85,8 @@ def test_setup_moves_registered_ids_in_place() -> None:
     entries = [
         _reg("sensor.tiguan_adb_charging_speed", f"{VIN}_charging_rate_kmh"),
         _reg("switch.tiguan_adb_charging", f"{VIN}_charging_switch"),
-        _reg("sensor.tiguan_charge_target", f"{VIN}_companion_target_soc"),
+        # a legacy key that itself starts with "companion_"
+        _reg("button.tiguan_reset", f"{VIN}_companion_reset_button"),
         _reg("number.settings_poll", "01ENTRY_scan_interval"),
         _reg("switch.settings_read", "01ENTRY_companion_read_charge_detail"),
     ]
@@ -99,8 +100,10 @@ def test_setup_moves_registered_ids_in_place() -> None:
     by_id = {e.entity_id: e.unique_id for e in entries}
     assert by_id["sensor.tiguan_adb_charging_speed"] == f"{VIN}_companion_charging_rate_kmh"
     assert by_id["switch.tiguan_adb_charging"] == f"{VIN}_companion_charging_switch"
-    # already moved, and entry-scoped ids, are left alone
-    assert by_id["sensor.tiguan_charge_target"] == f"{VIN}_companion_target_soc"
+    # legacy "companion_…" keys move too (the entity now builds
+    # vehicle_unique_id(vin, "companion_reset_button", companion=True))
+    assert by_id["button.tiguan_reset"] == f"{VIN}_companion_companion_reset_button"
+    # entry-scoped ids are left alone
     assert by_id["number.settings_poll"] == "01ENTRY_scan_interval"
     assert by_id["switch.settings_read"] == "01ENTRY_companion_read_charge_detail"
 
@@ -126,3 +129,16 @@ def test_utility_meter_probe_follows_the_namespace() -> None:
     with patch.object(utility_meter.er, "async_get", return_value=registry):
         assert utility_meter.any_source_sensor_present(MagicMock(), [VIN], companion=True)
         assert not utility_meter.any_source_sensor_present(MagicMock(), [VIN])
+
+
+def test_migration_runs_once_per_entry() -> None:
+    """The flag, not an id prefix, says the move is done."""
+    import custom_components.vag_connect as integ
+    from custom_components.vag_connect.const import CONF_COMPANION_UID_NAMESPACE
+
+    companion = {CONF_STRATEGY: STRATEGY_COMPANION_ADB}
+    assert integ._companion_uid_migration_due(companion)
+    assert not integ._companion_uid_migration_due(
+        {**companion, CONF_COMPANION_UID_NAMESPACE: 1}
+    )
+    assert not integ._companion_uid_migration_due({CONF_STRATEGY: "cloud"})
