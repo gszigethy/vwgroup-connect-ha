@@ -512,8 +512,9 @@ RECOMMENDED_SCAN_INTERVAL: dict[str, int] = {
 }
 
 
-# Prefix of every companion entity name, so "Tiguan ADB Battery Level" can't be
-# mistaken for the cloud entry's "Tiguan Battery Level" of the same car.
+# Tag in the entity ids of new companion entities, so sensor.tiguan_adb_battery_level
+# can't be mistaken for the cloud entry's sensor.tiguan_battery_level of the same
+# car. Entity names stay as they are ("Tiguan Battery Level").
 COMPANION_NAME_TAG = "ADB"
 
 

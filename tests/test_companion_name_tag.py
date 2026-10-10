@@ -1,9 +1,11 @@
 # Copyright 2026 Prash Balan (@its-me-prash) — GNU AGPL v3.0-or-later
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Companion: entity names carry the ADB tag, cloud entries' names do not.
+"""Companion: new entity ids carry the ADB tag, entity names do not.
 
 Live, the EU Data Act entry and the companion entry of one car each had a
-device the user named "Tiguan", so both showed "Tiguan Battery Level".
+device the user named "Tiguan", so both derived sensor.tiguan_battery_level
+(the second as ..._2). The companion's ids now read sensor.tiguan_adb_…, while
+its names stay "Tiguan Battery Level".
 """
 from __future__ import annotations
 
@@ -38,10 +40,12 @@ def _sensor(companion: bool) -> VagConnectSensor:
     return sensor
 
 
-@pytest.mark.parametrize(("companion", "name"), [
+@pytest.mark.parametrize(("companion", "object_id"), [
     (True, "ADB Battery Level"), (False, "Battery Level"),
 ])
-def test_the_name_and_the_derived_entity_id(companion, name):
+def test_only_the_derived_entity_id_is_tagged(companion, object_id):
     sensor = _sensor(companion)
-    assert sensor.name == name
-    assert sensor.suggested_object_id == name  # HA slugs it: tiguan_adb_battery_level
+    assert sensor.name == "Battery Level"
+    # HA prefixes the device name and slugs it: sensor.tiguan_adb_battery_level.
+    assert sensor.suggested_object_id == object_id
+
