@@ -166,6 +166,9 @@ class TestMapsCoordinates:
         assert coerce("maps_lon", url) == pytest.approx(-151.20929)
 
 
+_UP_RIDS = {"vehicleHealthBack", "vwd_navigation_button"}
+
+
 class _WalkTransport:
     """A phone that changes screen when something is tapped or swiped.
 
@@ -202,6 +205,13 @@ class _WalkTransport:
 
     async def tap(self, x: int, y: int) -> None:
         self.taps.append((x, y))
+        # The app's own up control steps back like BACK does.
+        for node in parse_ui_dump(await self.dump_ui()):
+            if node.resource_id in _UP_RIDS and node.bounds is not None:
+                left, top, right, bottom = node.bounds
+                if left <= x <= right and top <= y <= bottom:
+                    self._at = max(0, self._at - 1)
+                    return
         self._at += 1
 
     async def swipe(
@@ -455,7 +465,7 @@ class TestNavWalk:
 
     @pytest.mark.asyncio
     async def test_a_missing_first_step_taps_nothing_at_all(self) -> None:
-        transport = _WalkTransport([_dump(_node("Charging status. 50 per cent."))])
+        transport = _WalkTransport([_overview()])
         await _channel(transport, {"vehicle_health", "parking_position"}).read()
         assert transport.taps == []
         assert transport.backs == 0
@@ -508,7 +518,7 @@ class TestNavWalk:
         assert transport.taps == []
 
     @pytest.mark.asyncio
-    async def test_nav_values_are_cached_between_the_15_minute_walks(self) -> None:
+    async def test_each_poll_walks_again_from_the_overview(self) -> None:
         transport = _WalkTransport(
             [_overview(), _overview(scrolled=True), HEALTH_SCREEN]
         )
@@ -518,9 +528,12 @@ class TestNavWalk:
         taps_after_first = len(transport.taps)
         second = await channel.read()
         assert second is not None
-        # Second poll is inside the cadence window: no new taps, value retained.
+        # Each poll walks its due paths (#1552); the second starts from the
+        # overview again and keeps the value. (This used to pass with no taps
+        # only because the poll read the overview selectors off the Health
+        # screen it was left on.)
         assert second["odometer_km"] == 27886
-        assert len(transport.taps) == taps_after_first
+        assert len(transport.taps) == 2 * taps_after_first
 
 
 class TestPresetShape:

@@ -11,7 +11,12 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .cariad.api.graphql import VehicleImageFetcher
-from .const import DOMAIN, COMPANION_NAV_MAX_AGE_S
+from .const import (
+    COMPANION_NAV_MAX_AGE_S,
+    DOMAIN,
+    is_companion_entry_data,
+    vehicle_unique_id,
+)
 from .coordinator import VagConnectCoordinator
 
 
@@ -92,7 +97,10 @@ class VagConnectEntity(CoordinatorEntity[VagConnectCoordinator]):
         self._vin = vin
         self._key = key
 
-        self._attr_unique_id = f"{vin}_{key}"
+        entry = getattr(coordinator, "entry", None)
+        self._attr_unique_id = vehicle_unique_id(
+            vin, key, companion=is_companion_entry_data(getattr(entry, "data", None))
+        )
 
     @property
     def _vehicle(self) -> dict[str, Any]:
