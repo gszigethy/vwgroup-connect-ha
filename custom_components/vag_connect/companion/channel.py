@@ -148,6 +148,33 @@ REQUESTS_AVAILABLE = "available"
 REQUESTS_RESTRICTED = "restricted"
 
 
+class _ScreenLock(asyncio.Lock):
+    """The channel's screen lock, which turns new walks away once closing.
+
+    On entry unload the client takes the lock with ``acquire_to_close``: the
+    walk holding it finishes, cleanup included, and every read or command that
+    queued behind it is refused when its turn comes instead of driving the
+    phone under the reloaded entry's new client.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.closing = False
+
+    async def acquire(self) -> bool:
+        await super().acquire()
+        if self.closing:
+            self.release()
+            raise CompanionTransportError(
+                "the companion connection was closed when the entry unloaded"
+            )
+        return True
+
+    async def acquire_to_close(self) -> None:
+        self.closing = True
+        await super().acquire()
+
+
 class CompanionChannel:
     """One brand's read/write flow over one phone."""
 
@@ -211,7 +238,7 @@ class CompanionChannel:
         # the readback poll that follows it; every other poll walks all of the
         # opted-in paths.
         self._nav_only: set[str] = set()
-        self._screen_lock = asyncio.Lock()
+        self._screen_lock = _ScreenLock()
         self._app_strings: dict[str, set[str]] = {}
         self._strings_version: str | None = None
         self._strings_at: float | None = None

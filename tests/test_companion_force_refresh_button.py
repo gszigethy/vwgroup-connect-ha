@@ -70,7 +70,8 @@ class TestPress:
         coord = _coord()
         coord.async_companion_sync_vehicle = AsyncMock(return_value=True)
         tasks: list = []
-        coord.hass.async_create_background_task = lambda c, _n: tasks.append(c)
+        # entry-scoped, so HA cancels the read-back if the entry unloads first
+        coord.entry.async_create_background_task = lambda _h, c, _n: tasks.append(c)
         await coord.async_companion_force_refresh()
         coord.async_request_refresh.assert_not_awaited()
         assert len(tasks) == 1

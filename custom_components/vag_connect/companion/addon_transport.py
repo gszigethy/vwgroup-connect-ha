@@ -53,6 +53,8 @@ class AddOnAdbTransport(NetworkAdbTransport):
         self._token = token or ""
         self._session = session
         self._serial: str | None = None
+        # The /shell requests in flight, so ``shutdown`` can abandon them.
+        self._inflight: set[asyncio.Future[str]] = set()
 
     # -- helpers --------------------------------------------------------------
 
@@ -83,6 +85,7 @@ class AddOnAdbTransport(NetworkAdbTransport):
         """
         from aiohttp import ClientError, ClientTimeout  # noqa: PLC0415
 
+        self._refuse_if_shut_down()
         session = await self._get_session()
         try:
             async with session.get(  # type: ignore[attr-defined]
@@ -131,6 +134,18 @@ class AddOnAdbTransport(NetworkAdbTransport):
             self._session = None
             self._owns_session = False
 
+    async def shutdown(self) -> None:
+        """Close for good, and stop waiting on any /shell still in flight.
+
+        The add-on may still finish a command it already received, but the walk
+        that sent it gets an error now instead of its answer, so it sends no
+        further command.
+        """
+        self._shut_down = True
+        for req in list(self._inflight):
+            req.cancel()
+        await super().shutdown()
+
     @property
     def connected(self) -> bool:
         return self._device is not None
@@ -147,7 +162,24 @@ class AddOnAdbTransport(NetworkAdbTransport):
         """
         if self._device is None:
             raise CompanionTransportError("not connected")
+        req = asyncio.ensure_future(self._post_shell(cmd, timeout_s))
+        self._inflight.add(req)
+        req.add_done_callback(self._inflight.discard)
+        try:
+            return await req
+        except asyncio.CancelledError:
+            # Abandoned by ``shutdown``, not a cancellation of the caller.
+            task = asyncio.current_task()
+            if req.cancelled() and self._shut_down and not (
+                task is not None and task.cancelling()
+            ):
+                raise CompanionTransportError(
+                    "the companion connection was closed when the entry unloaded"
+                ) from None
+            raise
 
+    async def _post_shell(self, cmd: str, timeout_s: float) -> str:
+        """One POST /shell; see ``shell``."""
         from aiohttp import ClientError, ClientTimeout  # noqa: PLC0415
 
         session = await self._get_session()

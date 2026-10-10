@@ -39,6 +39,7 @@ class AgentRelayTransport(NetworkAdbTransport):
 
     async def connect(self, timeout_s: float = 10.0) -> None:
         """"Connected" means an agent is calling in, so wait for its poll."""
+        self._refuse_if_shut_down()
         await self._broker.wait_online(timeout_s)
         self._device = True
 

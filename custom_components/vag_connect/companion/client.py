@@ -29,6 +29,10 @@ from .transport import NetworkAdbTransport
 
 _LOGGER = logging.getLogger(__name__)
 
+# How long an unload waits for a running screen walk before closing under it.
+# The same bound the coordinator gives a command waiting for the poll.
+_CLOSE_WAIT_S = 60.0
+
 
 @dataclass
 class ClimateTargets:
@@ -495,7 +499,31 @@ class CompanionClient:
         self._channel.reset_cooldown()
 
     async def close(self) -> None:
-        await self._transport.close()
+        """Entry unload/reload: let a running walk finish, then close for good.
+
+        A read or command that holds the screen lock gets up to
+        ``_CLOSE_WAIT_S`` to finish, its cleanup included, so the reloaded
+        entry's first read never interleaves with it. Anything queued behind it
+        is refused (see ``_ScreenLock``), and the transport never reconnects.
+        """
+        lock = getattr(self._channel, "_screen_lock", None)
+        held = False
+        if isinstance(lock, asyncio.Lock):
+            take = getattr(lock, "acquire_to_close", lock.acquire)
+            try:
+                await asyncio.wait_for(take(), _CLOSE_WAIT_S)
+                held = True
+            except TimeoutError:
+                _LOGGER.warning(
+                    "companion: a screen walk was still running %.0fs into the "
+                    "unload; closing the connection under it", _CLOSE_WAIT_S,
+                )
+        try:
+            shutdown = getattr(self._transport, "shutdown", None)
+            await (shutdown() if callable(shutdown) else self._transport.close())
+        finally:
+            if held and lock is not None:
+                lock.release()
 
 
 def _one_off_weekday(raw: str, today: "date | None" = None) -> str | None:
