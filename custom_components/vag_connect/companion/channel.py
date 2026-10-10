@@ -882,7 +882,11 @@ class CompanionChannel:
                 and overlay.tap_opt_in == agree_opt_in
                 and agree_opt_in in self._nav_opt_ins
             )
-            node = find_node_for(nodes, overlay.tap) if agree else None
+            node = (
+                find_node_for(nodes, overlay.tap)
+                if agree and overlay.tap is not None
+                else None
+            )
             point = node.tap_point if node is not None else None
             if point is not None:
                 _LOGGER.debug(
