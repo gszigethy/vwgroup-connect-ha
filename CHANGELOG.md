@@ -42,6 +42,67 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.11.0-12] - 2026-10-10 — Companion safety review: car request budget, battery and climate
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.11.0** plus fork release **12**, on top of 4.11.0-11.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a regular release. Select `v4.11.0-12`, download, and restart Home Assistant.
+
+A full review of the ADB companion channel. Every change protects the car's remote request budget, prevents a wrong tap, or stops a value from being lost.
+
+### Fixed
+- **Battery level, ranges, charging state and lock status now appear for companion entries next to an EU Data Act entry.** The two entries
+  claimed the same entity ids, so Home Assistant silently dropped the companion's copies. Companion entities now use their own ids. Existing
+  companion entity ids and history are kept; the previously missing entities appear as new ones, which you can rename. (#47)
+- **Commands for a car that is also in a read-only entry go to the entry that can send them.** (#48)
+- **A request-limit alert always pauses commands for 12 h**, even when it appears after the command or during the walk back. The pause and the
+  60 s gap between commands survive a restart. (#50)
+- **Every command and every read starts from the overview.** A setting left changed but unsaved by an interrupted walk is discarded, not sent with
+  the next command. (#53)
+- **Charge limit:** Save is pressed only when the screen shows exactly the requested value. Starting or stopping charging from the open charge
+  sheet closes it. (#49)
+- **Climate:**
+  - A temperature change costs at most one car request. The app sends one per dial step; the dial taps now go in one fast burst.
+  - The dial is walked only when its labels show °C. (#61)
+  - Errors no longer quote screen text, such as the town shown next to the outside temperature.
+  - An unrecognised mode refuses Start. `set_temperature` with an unsupported `hvac_mode` no longer sends Stop.
+  - The desired temperature shows the dial reading instead of `unknown`. (#52)
+- **Departure timers:** an edit matches the timer by content, not by row position; two timers with the same time are refused. An interrupted edit is
+  cancelled. `enabled` is optional in `set_departure_timer`. (#55)
+- **A reload waits for a running walk to finish**, so two walks never tap at once. (#60)
+- Health, parking and driving values become unavailable after 24 h without a successful read, instead of showing as current. Wake/sleep and
+  close-app option changes apply without a reload. (#59)
+
+### Changed
+- **"Synchronise now" (vehicle sync interval) is off by default, and never inherited on upgrade.** An interval you set yourself is kept.
+  - The minimum is now 60 min, and the setting says that each sync wakes the car.
+  - Sync never probes through a backend "too many requests" pause.
+  - The Force refresh button and the sync loop share one timer. (#54)
+- **Commands run only on app versions verified for them** (currently 4.6.4). A newer app keeps updating data but sends no commands until it has
+  been verified. (#51)
+- The Google Maps consent is accepted only during the opted-in parking read. (#56)
+- The app's string table is fetched only when the app version changes. Without it, commands and sync are refused unless the UI language can be
+  confirmed. (#58)
+
+### Security
+- Safer add-on and relay tokens, hardened XML parsing, and the companion host redacted in diagnostics. (#57)
+
+## [4.11.0-11] - 2026-10-09 — EU Data Act login works again
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.11.0** plus fork release **11**, on top of 4.11.0-10.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a regular release — select `v4.11.0-11`, download, and restart Home Assistant.
+
+### Fixed
+- **EU Data Act: login no longer fails with "email address or password incorrect".** The portal's CDN began refusing
+  the single browser identity the connector always sent (HTTP 406), and the login reported that as a wrong password.
+  Each session now uses one current browser identity from a broad pool, keeps it for the whole session, and switches
+  to another if the portal refuses it. (#45, upstream issue #1771)
+
 ## [4.11.0-10] - 2026-10-08 — Companion climate, settings and departure timers on VW app 4.6.4
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream

@@ -46,6 +46,9 @@ def _dump(nodes_xml: str) -> str:
 
 
 VW_SCREEN = _dump(
+    # The overview's identity anchor: commands and reads start only here.
+    '<node resource-id="rangeTile" content-desc="" text="" '
+    'class="android.view.View" clickable="false" bounds="[0,0][1080,180]" />'
     '<node resource-id="" content-desc="Ladezustand 74 %" text="" '
     'class="android.widget.TextView" clickable="false" bounds="[0,0][100,50]" />'
     '<node resource-id="" content-desc="Reichweite 312 km" text="" '
@@ -68,6 +71,20 @@ class TestScreenParsing:
         btn = next(n for n in nodes if n.clazz.endswith("Button"))
         assert btn.bounds == (0, 200, 200, 260)
         assert btn.tap_point == (100, 230)
+
+    def test_zero_area_bounds_are_never_tapped(self) -> None:
+        # A node clipped off screen comes back as [0,0][0,0]; its "centre" is
+        # the top-left corner, which is some other control.
+        from custom_components.vag_connect.companion.screen import tap_point_for
+
+        nodes = parse_ui_dump(_dump(
+            '<node resource-id="" content-desc="Klimatisierung starten" text="" '
+            'class="android.widget.Button" clickable="true" bounds="[0,0][0,0]" />'
+            '<node resource-id="" content-desc="Flat" text="" '
+            'class="android.widget.Button" clickable="true" bounds="[10,50][300,50]" />'
+        ))
+        assert [n.tap_point for n in nodes] == [None, None]
+        assert [tap_point_for(n, (0.5, 0.5)) for n in nodes] == [None, None]
 
     def test_vw_read_pulls_soc_range_and_state(self) -> None:
         fields = read_fields(parse_ui_dump(VW_SCREEN), PRESETS["volkswagen"])

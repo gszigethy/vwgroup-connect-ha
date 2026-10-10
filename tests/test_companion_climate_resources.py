@@ -117,7 +117,7 @@ async def test_a_dial_outside_the_celsius_range_is_never_tapped():
 
 
 @pytest.mark.asyncio
-async def test_a_step_the_wrong_way_stops_the_walk():
+async def test_a_dial_moving_the_wrong_way_is_reported_not_corrected():
     phone = FakePhone(temp=22.0)
 
     def backwards(_name):
@@ -125,6 +125,58 @@ async def test_a_step_the_wrong_way_stops_the_walk():
 
     phone._on_dial = backwards
     _ch, ctrl = _controller(phone)
-    with pytest.raises(CompanionWriteBlocked, match="away from"):
+    with pytest.raises(CompanionWriteBlocked, match="landed at 20 °C, not 24 °C"):
         await ctrl.start(temp_c=24.0)
-    assert [t for t in phone.taps if t.startswith("dial")] == ["dial:22.5"]
+    # One batch, one readback; no correcting taps and no Start.
+    assert phone.bursts == [4] and "start" not in phone.taps
+
+
+@pytest.mark.asyncio
+async def test_a_dial_at_lo_with_an_out_of_range_neighbour_is_never_tapped():
+    # LO/HI map to 15.5/30 before any range check; a neighbour outside the °C
+    # grid still marks the dial as unknown (maintainer rule 3).
+    phone = FakePhone()
+    channel, ctrl = _controller(phone)
+    phone._render_sheet = lambda: (
+        _node(rid="clima_compose_view", bounds="[0,1001][1080,1322]")
+        + _node(text="LO", bounds="[418,1027][616,1180]")
+        + phone._t("dial:61", 859, 1027, 1080, 1180, text="61")
+        + phone._t("start", 105, 2004, 975, 2130, rid="cta_start", text="Start", clickable=True)
+    )
+    with pytest.raises(CompanionWriteBlocked, match="outside the 15.5-30 °C dial"):
+        await ctrl.start(temp_c=22.0)
+    assert not any(t.startswith(("dial", "start")) for t in phone.taps)
+    assert channel._last_write_at is None
+
+
+@pytest.mark.parametrize(("centre", "neighbour", "expected"), [
+    ("LO", "16", 15.5), ("HI", "29.5", 30.0), ("22", "22.5", 22.0), ("BAS", "16", 15.5),
+])
+def test_target_temperature_reads_the_dial_ends(centre, neighbour, expected):
+    from custom_components.vag_connect.companion.channel import CompanionChannel
+    from tests.test_companion_climate_tile import DETAIL, VW
+
+    xml = (
+        dump("tiguan_climate_idle")
+        .replace('text="21.5"', 'text="X"').replace('text="22"', f'text="{centre}"')
+        .replace('text="22.5"', f'text="{neighbour}"').replace('text="X"', 'text=""')
+    )
+    channel = CompanionChannel(FakePhone(), VW, time_fn=lambda: 0.0, nav_opt_ins={"climate_detail"})
+    channel._app_strings = {**STRINGS, "clima_temperature_low": {"LO", "BAS"}}
+    fields: dict = {}
+    channel._apply_nav_values(DETAIL, parse_ui_dump(xml), fields)
+    assert fields["target_temperature"] == expected
+
+
+def test_no_target_temperature_from_a_dial_outside_the_celsius_grid():
+    from custom_components.vag_connect.companion.channel import CompanionChannel
+    from tests.test_companion_climate_tile import DETAIL, VW
+
+    xml = (
+        dump("tiguan_climate_idle").replace('text="21.5"', 'text="71"')
+        .replace('text="22"', 'text="72"').replace('text="22.5"', 'text="73"')
+    )
+    channel = CompanionChannel(FakePhone(), VW, time_fn=lambda: 0.0, nav_opt_ins={"climate_detail"})
+    fields: dict = {}
+    channel._apply_nav_values(DETAIL, parse_ui_dump(xml), fields)
+    assert "target_temperature" not in fields

@@ -3,7 +3,7 @@
 """Vehicle Settings → "Synchronise now" on a timer; see fixtures/sources.json.
 
 The poll interval only re-reads the app screen. This sync makes the car send
-fresh data, on its own slider (5 … 240 min, default 60) on the settings device.
+fresh data, on its own slider (60 … 240 min, off by default) on the settings device.
 """
 from __future__ import annotations
 
@@ -121,8 +121,10 @@ class SyncPhone:
     async def current_app_version(self, package):
         return self.version
 
+    strings = STRINGS
+
     async def battery_strings(self, package):
-        return STRINGS
+        return self.strings
 
     async def dump_ui(self):
         if self.where == "overview":
@@ -290,20 +292,20 @@ def _coord(data=None, options=None, *, read_only=False, client=None):
     return coord
 
 
-def test_interval_defaults_to_three_hours():
-    assert _coord().companion_app_sync_interval_s() == 10800
+def test_interval_is_off_by_default():
+    assert _coord().companion_app_sync_interval_s() == 0
 
 
 @pytest.mark.parametrize(("stored", "seconds"), [
-    (5, 300), (120, 7200), (1, 300), (999, 14400), ("x", 10800), (0, 0), (-5, 0),
+    (5, 3600), (60, 3600), (120, 7200), (1, 3600), (999, 14400), ("x", 0), (0, 0), (-5, 0),
 ])
 def test_interval_is_read_live_and_clamped(stored, seconds):
     assert _coord(options={CONF_COMPANION_APP_SYNC_INTERVAL: stored}).companion_app_sync_interval_s() == seconds
 
 
 def test_interval_ignores_the_poll_interval():
-    coord = _coord(data={CONF_SCAN_INTERVAL: 5})
-    assert coord.companion_app_sync_interval_s() == 10800
+    coord = _coord(data={CONF_SCAN_INTERVAL: 5, CONF_COMPANION_APP_SYNC_INTERVAL: 120})
+    assert coord.companion_app_sync_interval_s() == 7200
 
 
 def _fake_client(result=True):
@@ -355,7 +357,7 @@ async def test_loop_waits_a_full_interval_then_syncs_and_reads_back(monkeypatch)
     sleeps: list[float] = []
     monkeypatch.setattr(time, "monotonic", lambda: clock[0])
 
-    coord = _coord(options={CONF_COMPANION_APP_SYNC_INTERVAL: 5}, client=_fake_client())
+    coord = _coord(options={CONF_COMPANION_APP_SYNC_INTERVAL: 60}, client=_fake_client())
     coord._started = True
     coord.async_request_refresh = AsyncMock(side_effect=lambda: setattr(coord, "_started", False))
 
@@ -365,9 +367,9 @@ async def test_loop_waits_a_full_interval_then_syncs_and_reads_back(monkeypatch)
 
     monkeypatch.setattr(mod.asyncio, "sleep", fake_sleep)
     await coord._companion_app_sync_loop()
-    # Wakes every minute (so a slider change applies), syncs only after 5 min,
+    # Wakes every minute (so a slider change applies), syncs only after 60 min,
     # then waits for the car before reading the app again.
-    assert sleeps == [60.0] * 5 + [mod._APP_SYNC_READBACK_S]
+    assert sleeps == [60.0] * 60 + [mod._APP_SYNC_READBACK_S]
     coord._cariad_client.command_sync_vehicle.assert_awaited_once()
     coord.async_request_refresh.assert_awaited_once()
 
@@ -396,7 +398,7 @@ def _number(entry=None):
 def test_slider_range_step_and_default():
     num = _number()
     assert (num.native_min_value, num.native_max_value, num.native_step) == (0, 240, 5)
-    assert num.native_value == 180
+    assert num.native_value == 0
     assert num.native_unit_of_measurement == "min"
 
 
@@ -425,12 +427,13 @@ def test_slider_and_poll_interval_are_independent():
 def test_slider_carries_the_battery_protection_note():
     note = _number().extra_state_attributes["note"]
     assert "battery protection" in note and "failsafe" in note and "next started" in note
+    assert "Each sync wakes the car" in note and "Off by default" in note
     assert "0 to turn the sync off" in note
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("asked", "stored"), [
-    (60, 60), (62, 60), (63, 65), (0, 0), (2, 0), (3, 5), (500, 240), (-10, 0),
+    (60, 60), (62, 60), (63, 65), (0, 0), (2, 0), (3, 60), (5, 60), (55, 60), (500, 240), (-10, 0),
 ])
 async def test_slider_writes_a_snapped_clamped_value(asked, stored):
     num = _number(_entry(options={CONF_SCAN_INTERVAL: 15}))
@@ -494,29 +497,104 @@ async def test_a_restricted_sync_closes_both_alerts_and_marks_restricted():
     assert phone.alerts == [] and phone.backs == 2 and phone.where == "overview"
 
 
+# The 4.6.4 English tables: the app's local power-budget alert and the
+# backend's 4295 "too many requests" dialog read exactly the same.
+EN_464_LIMIT = {
+    **STRINGS,
+    "alert_daily_power_budget_footer": {"Please restart the engine and try again."},
+    "dialog_maxrequests_text": {"Please restart the engine and try again."},
+}
+# Synthetic: a language in which the two differ, so the local alert is provable.
+DISTINCT_LIMIT = {**EN_464_LIMIT, "dialog_maxrequests_text": {"Synthetic backend limit text"}}
+
+
+def budget_channel(strings, phone=None):
+    phone = phone or BudgetPhone()
+    phone.strings = strings
+    clock = [1_700_000_000.0]
+    channel = CompanionChannel(
+        phone, VW, time_fn=lambda: clock[0], wall_clock_fn=lambda: clock[0]
+    )
+    return phone, channel, clock
+
+
 @pytest.mark.asyncio
-async def test_the_next_sync_probes_through_the_pause_and_lifts_it():
-    phone = BudgetPhone()
-    clock = [1000.0]
-    channel = CompanionChannel(phone, VW, time_fn=lambda: clock[0])
-    with pytest.raises(CompanionWriteBlocked):
+async def test_a_power_budget_pause_lets_one_probe_through_per_window_and_lifts():
+    phone, channel, clock = budget_channel(DISTINCT_LIMIT)
+    with pytest.raises(CompanionWriteBlocked, match="daily request budget"):
         await channel.sync_vehicle()
-    clock[0] += 3 * 3600  # next interval; the car has been started meanwhile
+    assert channel._limit_kind == "power_budget"
+    clock[0] += 3 * 3600  # the next 3 h interval: still inside the probe window
+    with pytest.raises(CompanionWriteBlocked, match="backed off"):
+        await channel.sync_vehicle()
+    assert phone.taps.count("sync") == 1
+    clock[0] += 3600  # 4 h after the trip; the car has been started meanwhile
     phone.budget_used_up = False
     assert await channel.sync_vehicle() is True
     assert channel.request_state == "available" and not channel._is_rate_limited()
+    assert phone.taps.count("sync") == 2
 
 
 @pytest.mark.asyncio
-async def test_a_still_restricted_probe_keeps_the_pause():
-    phone = BudgetPhone()
-    clock = [1000.0]
-    channel = CompanionChannel(phone, VW, time_fn=lambda: clock[0])
+async def test_a_still_restricted_probe_keeps_the_pause_and_restarts_the_window():
+    phone, channel, clock = budget_channel(DISTINCT_LIMIT)
     for _ in range(2):
         with pytest.raises(CompanionWriteBlocked, match="daily request budget"):
             await channel.sync_vehicle()
-        clock[0] += 3 * 3600
+        clock[0] += 4 * 3600
+    clock[0] -= 3600  # 3 h after the second trip
+    with pytest.raises(CompanionWriteBlocked, match="backed off"):
+        await channel.sync_vehicle()
     assert channel.request_state == "restricted" and phone.taps.count("sync") == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("strings", [EN_464_LIMIT, STRINGS])
+async def test_a_limit_the_screen_cannot_prove_local_is_never_probed(strings):
+    # 4.6.4 in English (and the 4.3.2 fixture tables, which lack the footer):
+    # the alert may be the backend's, where a tap is a request. No probe.
+    phone, channel, clock = budget_channel(strings)
+    with pytest.raises(CompanionWriteBlocked, match="daily request budget"):
+        await channel.sync_vehicle()
+    assert channel._limit_kind == "backend"
+    clock[0] += 11 * 3600
+    with pytest.raises(CompanionWriteBlocked, match="backed off"):
+        await channel.sync_vehicle()
+    assert phone.taps.count("sync") == 1
+
+
+@pytest.mark.asyncio
+async def test_an_http_429_pause_is_never_probed():
+    phone, channel, clock = budget_channel(
+        DISTINCT_LIMIT, SyncPhone(limit_alert="Request limit reached")
+    )
+    with pytest.raises(CompanionWriteBlocked):
+        await channel.sync_vehicle()
+    assert channel._is_rate_limited() and channel._limit_kind == "backend"
+    phone.limit_alert = None
+    for _ in range(2):  # at 5 h and 10 h into the 12 h pause
+        clock[0] += 5 * 3600
+        taps = list(phone.taps)
+        with pytest.raises(CompanionWriteBlocked, match="backed off"):
+            await channel.sync_vehicle()
+        assert phone.taps == taps  # refused before any tap
+
+
+@pytest.mark.asyncio
+async def test_a_backend_limit_during_a_power_budget_pause_ends_the_probes():
+    phone, channel, clock = budget_channel(DISTINCT_LIMIT)
+    with pytest.raises(CompanionWriteBlocked):
+        await channel.sync_vehicle()
+    assert channel._limit_kind == "power_budget"
+    assert channel._limit_on_screen(parse_ui_dump(
+        dump("tiguan_settings_lower").replace("Delete vehicle", "Request limit reached")
+    ))
+    channel._trip_rate_limit()
+    assert channel._limit_kind == "backend"
+    clock[0] += 5 * 3600
+    with pytest.raises(CompanionWriteBlocked, match="backed off"):
+        await channel.sync_vehicle()
+    assert phone.taps.count("sync") == 1
 
 
 @pytest.mark.asyncio
@@ -548,7 +626,7 @@ async def test_loop_reads_right_after_a_refused_sync(monkeypatch):
     monkeypatch.setattr(time, "monotonic", lambda: clock[0])
     client = _fake_client()
     client.command_sync_vehicle.side_effect = VehicleCommandError("command_sync_vehicle", "limit")
-    coord = _coord(options={CONF_COMPANION_APP_SYNC_INTERVAL: 5}, client=client)
+    coord = _coord(options={CONF_COMPANION_APP_SYNC_INTERVAL: 60}, client=client)
     coord._started = True
     coord.async_request_refresh = AsyncMock(side_effect=lambda: setattr(coord, "_started", False))
     sleeps: list[float] = []
@@ -559,7 +637,7 @@ async def test_loop_reads_right_after_a_refused_sync(monkeypatch):
 
     monkeypatch.setattr(mod.asyncio, "sleep", fake_sleep)
     await coord._companion_app_sync_loop()
-    assert sleeps == [60.0] * 5  # no readback wait after a refusal
+    assert sleeps == [60.0] * 60  # no readback wait after a refusal
     coord.async_request_refresh.assert_awaited_once()
 
 
@@ -577,18 +655,18 @@ async def test_loop_does_nothing_while_off_and_restarts_the_count(monkeypatch):
         sleeps.append(seconds)
         clock[0] += seconds
         if len(sleeps) == 10:  # turned back on after ten minutes off
-            coord.entry.options = {CONF_COMPANION_APP_SYNC_INTERVAL: 5}
-        if len(sleeps) >= 30:
+            coord.entry.options = {CONF_COMPANION_APP_SYNC_INTERVAL: 60}
+        if len(sleeps) >= 90:
             coord._started = False
 
     coord.async_request_refresh = AsyncMock()
     monkeypatch.setattr(mod.asyncio, "sleep", fake_sleep)
     await coord._companion_app_sync_loop()
     coord._cariad_client.command_sync_vehicle.assert_awaited()
-    # Off for ten minutes, then a fresh 5 min interval counted from the last
+    # Off for ten minutes, then a fresh 60 min interval counted from the last
     # "off" check (so within one wake-up of switching it back on).
     first_sync_sleeps = sleeps.index(mod._APP_SYNC_READBACK_S)
-    assert 10 + 4 <= first_sync_sleeps <= 10 + 5
+    assert 10 + 59 <= first_sync_sleeps <= 10 + 60
 
 
 # ── b5: the two sensors ───────────────────────────────────────────────────────
@@ -657,11 +735,47 @@ def test_a_restored_pause_reads_as_restricted_until_the_first_sync():
 
 
 @pytest.mark.asyncio
-async def test_the_first_sync_overrides_a_restored_pause():
-    channel = channel_for(SyncPhone())
+async def test_a_restored_pause_is_never_probed():
+    # Its kind is not persisted, so it could be an HTTP 429: wait it out.
+    phone = SyncPhone()
+    channel = channel_for(phone)
     channel.restore_rate_limit(time.time() + 3600)
-    assert await channel.sync_vehicle() is True
-    assert channel.request_state == "available" and not channel._is_rate_limited()
+    with pytest.raises(CompanionWriteBlocked, match="backed off"):
+        await channel.sync_vehicle()
+    assert phone.taps == [] and channel.request_state == "restricted"
+
+
+# ── the sync counts only on positive evidence ────────────────────────────────
+
+class LateAlertPhone(SyncPhone):
+    """Takes the tap, then the limit alert draws on the third dump after it."""
+
+    def __init__(self):
+        super().__init__()
+        self.dumps_after_tap: int | None = None
+
+    async def dump_ui(self):
+        if self.dumps_after_tap is not None and self.where == "lower":
+            self.dumps_after_tap += 1
+            if self.dumps_after_tap >= 3:
+                self.where = "alert"
+        return await super().dump_ui()
+
+    async def tap(self, x, y):
+        await super().tap(x, y)
+        if self.taps[-1] == "sync":
+            self.dumps_after_tap = 0
+            self.limit_alert = "Too many requests sent to the vehicle"
+
+
+@pytest.mark.asyncio
+async def test_an_alert_on_the_third_dump_keeps_the_pause():
+    phone = LateAlertPhone()
+    channel = channel_for(phone)
+    with pytest.raises(CompanionWriteBlocked, match="daily request budget"):
+        await channel.sync_vehicle()
+    assert channel._is_rate_limited() and channel.request_state == "restricted"
+    assert phone.taps.count("sync") == 1 and phone.where == "overview"
 
 
 # ── b7: the battery level during the pause ────────────────────────────────────
@@ -723,3 +837,138 @@ async def test_the_charge_sheet_is_still_read_during_the_request_limit_pause():
     assert phone.screen == dump("tiguan_overview_synchronised")  # and back again
     # The pause itself is untouched: commands still wait.
     assert channel._is_rate_limited() and not channel.writes_enabled
+
+
+# ── opt-in: off by default, and a stored choice survives the upgrade ─────────
+
+def _setup_entry(data=None, options=None, strategy=STRATEGY_COMPANION_ADB):
+    entry = SimpleNamespace(data={CONF_STRATEGY: strategy, **(data or {})}, options=options or {})
+    hass = MagicMock()
+    hass.config_entries.async_update_entry = MagicMock(
+        side_effect=lambda e, data: setattr(e, "data", data)
+    )
+    return hass, entry
+
+
+def test_setup_pins_the_sync_off_for_a_companion_entry_without_a_value():
+    from custom_components.vag_connect import _pin_companion_app_sync_off
+
+    hass, entry = _setup_entry()
+    _pin_companion_app_sync_off(hass, entry)
+    assert entry.data[CONF_COMPANION_APP_SYNC_INTERVAL] == 0
+    hass.config_entries.async_update_entry.reset_mock()
+    _pin_companion_app_sync_off(hass, entry)  # once only
+    hass.config_entries.async_update_entry.assert_not_called()
+
+
+@pytest.mark.parametrize(("data", "options"), [
+    ({}, {CONF_COMPANION_APP_SYNC_INTERVAL: 240}),
+    ({CONF_COMPANION_APP_SYNC_INTERVAL: 240}, {}),
+    ({CONF_COMPANION_APP_SYNC_INTERVAL: 180}, {CONF_COMPANION_APP_SYNC_INTERVAL: 240}),
+])
+def test_setup_keeps_a_value_the_user_set(data, options):
+    from custom_components.vag_connect import _pin_companion_app_sync_off
+
+    hass, entry = _setup_entry(data, options)
+    _pin_companion_app_sync_off(hass, entry)
+    hass.config_entries.async_update_entry.assert_not_called()
+    assert _coord(data=entry.data, options=entry.options).companion_app_sync_interval_s() == 14400
+
+
+def test_setup_leaves_other_channels_alone():
+    from custom_components.vag_connect import _pin_companion_app_sync_off
+
+    hass, entry = _setup_entry(strategy="hybrid_full")
+    _pin_companion_app_sync_off(hass, entry)
+    hass.config_entries.async_update_entry.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_loop_never_syncs_with_the_default_config(monkeypatch):
+    import custom_components.vag_connect.coordinator as mod
+
+    clock = [1000.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    coord = _coord(client=_fake_client())
+    coord._started = True
+    coord.async_request_refresh = AsyncMock()
+
+    async def fake_sleep(seconds):
+        clock[0] += seconds
+        if clock[0] > 1000.0 + 24 * 3600:
+            coord._started = False
+
+    monkeypatch.setattr(mod.asyncio, "sleep", fake_sleep)
+    await coord._companion_app_sync_loop()
+    coord._cariad_client.command_sync_vehicle.assert_not_awaited()
+
+
+# ── one clock for the loop and the Force vehicle refresh button ──────────────
+
+@pytest.mark.asyncio
+async def test_a_button_press_restarts_the_loops_interval(monkeypatch):
+    import custom_components.vag_connect.coordinator as mod
+
+    clock = [1000.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    client = _fake_client()
+    synced_at: list[float] = []
+    client.command_sync_vehicle = AsyncMock(side_effect=lambda vin: synced_at.append(clock[0]) or True)
+    coord = _coord(options={CONF_COMPANION_APP_SYNC_INTERVAL: 60}, client=client)
+    coord._started = True
+    coord.async_request_refresh = AsyncMock(side_effect=lambda: setattr(coord, "_started", False))
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+        clock[0] += seconds
+        if len(sleeps) == 58:  # the user presses Force vehicle refresh at minute 58
+            await coord.async_companion_sync_vehicle()
+
+    monkeypatch.setattr(mod.asyncio, "sleep", fake_sleep)
+    await coord._companion_app_sync_loop()
+    assert len(synced_at) == 2
+    assert synced_at[1] - synced_at[0] >= 3600  # a full interval after the press
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("skip", ["read_only", "unsupported"])
+async def test_a_skipped_sync_still_waits_a_full_interval(monkeypatch, skip):
+    # The loop must yield and sleep when no attempt is made, never spin.
+    import custom_components.vag_connect.coordinator as mod
+
+    clock = [1000.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    client = _fake_client()
+    if skip == "unsupported":
+        client.supports_command = lambda name: False
+    coord = _coord(
+        options={CONF_COMPANION_APP_SYNC_INTERVAL: 60},
+        read_only=skip == "read_only", client=client,
+    )
+    attempts = [0]
+    inner = coord.async_companion_sync_vehicle
+
+    async def counted():
+        attempts[0] += 1
+        if attempts[0] > 10:  # a spinning loop would get here without sleeping
+            coord._started = False
+        return await inner()
+
+    coord.async_companion_sync_vehicle = counted
+    coord._started = True
+    coord.async_request_refresh = AsyncMock()
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+        clock[0] += seconds
+        if clock[0] >= 1000.0 + 3 * 3600:
+            coord._started = False
+
+    monkeypatch.setattr(mod.asyncio, "sleep", fake_sleep)
+    await coord._companion_app_sync_loop()
+    assert attempts[0] == 2  # one skipped attempt per hour, 3 h -> at 60 and 120 min
+    assert len(sleeps) == 180 and set(sleeps) == {60.0}
+    client.command_sync_vehicle.assert_not_awaited()
+    coord.async_request_refresh.assert_not_awaited()

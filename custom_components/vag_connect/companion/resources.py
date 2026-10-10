@@ -25,6 +25,18 @@ _LIMIT_KEYS = (
     "dialog_maxrequests_headline",
     "dialog_maxrequest_bff_error_headline",
 )
+# The power-budget alert is the app's own (CapabilityStatusAlertDelegate, car
+# capability status 1010): it is shown instead of sending the request. Its
+# English title reads the same as the backend's 4295 headline, so only its
+# footer tells the two apart. The backend dialogs' texts mean a request did go
+# out (4295 / TooManyRequests, and the HTTP 429 lockout).
+POWER_BUDGET_TITLE = "alert_daily_power_budget_title"
+POWER_BUDGET_FOOTER = "alert_daily_power_budget_footer"
+_BACKEND_LIMIT_TEXTS = (
+    "dialog_maxrequests_text",
+    "dialog_maxrequest_bff_error_headline",
+    "dialog_maxrequest_bff_error_text",
+)
 # The overview toolbar's "Synchronised %s ago" line and its parts (#968): the
 # frame, its "just now" and "too old" forms, and the duration plurals that fill
 # the %s. Plurals are stored per quantity as ``name#one`` / ``name#other`` ...
@@ -43,6 +55,9 @@ SYNC_PLURALS = (
 # 4.3.2 APK builds them (ClimaViewModel, ClimaItemsMapper, ModeSelection).
 CLIMA_LOW = "clima_temperature_low"  # the dial's "LO" (15.5)
 CLIMA_HIGH = "clima_temperature_high"  # the dial's "HI" (30.0)
+# The "°" drawn after every other dial number. The app has no Fahrenheit key:
+# the dial is 15.5-30.0 °C only (GetAllTemperaturesUseCase, 4.6.4).
+CLIMA_DEGREE = "unit_degree_sign"
 CLIMA_ACTIVE = ("air_conditioning_screen_active", "common_activated")
 CLIMA_OFF = "vehiclescreen_airconditioning_deactivated"
 CLIMA_AUTOMATIC = "common_automatic_abbreviation"
@@ -61,7 +76,7 @@ CLIMA_ZONE_KEYS = {
     "vehiclesettingsscreen_airconditionedzones_options_rightrearseatzone": "climate_zone_rear_right",
 }
 _CLIMA_KEYS = (
-    CLIMA_LOW, CLIMA_HIGH, *CLIMA_ACTIVE, CLIMA_OFF, CLIMA_AUTOMATIC, CLIMA_MINUTES,
+    CLIMA_LOW, CLIMA_HIGH, CLIMA_DEGREE, *CLIMA_ACTIVE, CLIMA_OFF, CLIMA_AUTOMATIC, CLIMA_MINUTES,
     CLIMA_MODE_AC, CLIMA_MODE_WINDOW_HEATING, CLIMA_ZONES, CLIMA_ZONES_SEVERAL,
     *CLIMA_ZONE_KEYS,
 )
@@ -127,6 +142,7 @@ _TRIP_KEYS = (
 DEPARTURE_TILE = "acc_vehicle_tab_label_departure_times"
 _SINGLE_KEYS = frozenset({
     "acc_common_hint_details", "acc_vehicle_tab_label_settings", *_LIMIT_KEYS,
+    POWER_BUDGET_FOOTER, *_BACKEND_LIMIT_TEXTS,
     DEPARTURE_TILE, TIMER_SAVE, TIMER_CANCEL, *_TRIP_KEYS,
     SYNC_LAST_UPDATE, SYNC_JUST_NOW, SYNC_TOO_OLD, DATA_UNAVAILABLE, *_CLIMA_KEYS,
     *HEALTH_ROWS, HEALTH_NO_ISSUES, HEALTH_ISSUES, *SETTINGS_SWITCHES,
@@ -577,6 +593,32 @@ def find_request_limit(nodes: list[UiNode], resources: StringResources) -> bool:
     )
 
 
+def power_budget_labels(resources: StringResources) -> set[str]:
+    """The local power-budget alert's title and footer, minus any wording a
+    backend limit dialog shares (a shared wording proves nothing)."""
+    return _labels(resources, POWER_BUDGET_TITLE, POWER_BUDGET_FOOTER) - _labels(
+        resources, *_BACKEND_LIMIT_TEXTS
+    )
+
+
+def is_power_budget_alert(nodes: list[UiNode], resources: StringResources) -> bool:
+    """True only for the app's local power-budget alert: its title AND its
+    footer on screen, and no text of a backend limit dialog.
+
+    Anything else, including unreadable tables, counts as a backend limit.
+    """
+    shown = {
+        text.strip().casefold()
+        for node in nodes for text in (node.text, node.content_desc) if text
+    }
+    footer = _labels(resources, POWER_BUDGET_FOOTER) - _labels(resources, *_BACKEND_LIMIT_TEXTS)
+    return (
+        bool(shown & _labels(resources, POWER_BUDGET_TITLE))
+        and bool(shown & footer)
+        and not shown & _labels(resources, *_BACKEND_LIMIT_TEXTS)
+    )
+
+
 def find_app_alert(nodes: list[UiNode], resources: StringResources) -> bool:
     """A known app alert dialog: the request limit or "Vehicle data unavailable".
 
@@ -621,12 +663,19 @@ def climate_function_state(text: str, resources: StringResources) -> bool | None
     return None
 
 
+_AC_TITLE_FALLBACK = re.compile(r"\s*(?:Air\s*conditioning|Klimatisierung)\s*", re.I)
+
+
 def climate_mode_is_window_heating(title: str, resources: StringResources) -> bool | None:
     """The mode row's title: True for window heating alone, False for AC."""
     value = title.strip().casefold()
     if not resources.get(CLIMA_MODE_WINDOW_HEATING):
         fallback = coerce("clima_mode_window_heating", title)
-        return fallback if isinstance(fallback, bool) else None
+        if isinstance(fallback, bool):
+            return fallback
+        # The English/German air conditioning title, so a climate Start can
+        # still tell the modes apart without the tables (a migration target).
+        return False if _AC_TITLE_FALLBACK.fullmatch(title) else None
     if value in _labels(resources, CLIMA_MODE_WINDOW_HEATING):
         return True
     if value in _labels(resources, CLIMA_MODE_AC):

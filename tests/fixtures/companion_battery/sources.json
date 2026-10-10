@@ -103,5 +103,13 @@
     "contributor": "gszigethy",
     "source": "Local ADB capture, 2026-10-06, Tiguan Life 1.5 l eHybrid, VW app 4.3.2 (English)",
     "note": "Vehicle Settings, top of the list: Reduced AC charging current off, Automatically release AC connector on. Read-only navigation."
+  },
+  {
+    "fixture": "vw_432_resources.json",
+    "contributor": "gszigethy",
+    "original_file": "resources.arsc from the installed Volkswagen 4.3.2 APK (original APK filenames not recorded)",
+    "source": "https://github.com/gszigethy/vwgroup-connect-ha/blob/481a07b7fbe7fd457cb5e0774ca3815f55140308/docs/COMPANION_BATTERY.md",
+    "related_issue": "https://github.com/its-me-prash/vwgroup-connect-ha/issues/968",
+    "note": "Extraction on 2026-10-04 and APK/English split hashes documented in commit 481a07b7. English resource labels only, expanded by later commits for tested companion readers; full string tables and APK code omitted. No personal/place data. No original extraction filename or #968 comment for this JSON is recorded in git history."
   }
 ]

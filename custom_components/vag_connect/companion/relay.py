@@ -42,6 +42,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import logging
+import re
 import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -254,10 +255,24 @@ class CompanionRelayBroker:
             fut.set_result(result.get("value"))
         else:
             fut.set_exception(
-                CompanionTransportError(
-                    str(result.get("error") or "the companion agent reported a failure")
-                )
+                CompanionTransportError(_agent_error(result.get("error")))
             )
+
+
+_AGENT_ERROR_CODE = re.compile(r"[a-z][a-z0-9 _.-]{0,39}")
+
+
+def _agent_error(error: Any) -> str:
+    """The agent's failure, as a bounded code only.
+
+    The agent is a separate app, so free text from it may carry screen content
+    (places, notifications): only a short lower-case ASCII code or phrase,
+    such as "no such node", is passed on.
+    """
+    reason = "the companion agent reported a failure"
+    if isinstance(error, str) and _AGENT_ERROR_CODE.fullmatch(error):
+        return f"{reason} ({error})"
+    return reason
 
 
 # ── registry ────────────────────────────────────────────────────────────────
@@ -358,6 +373,12 @@ def ensure_relay_view(hass: "HomeAssistant") -> None:
         )
     from homeassistant.components.http import HomeAssistantView  # noqa: PLC0415
 
+    try:
+        from homeassistant.components.http.const import KEY_HASS  # noqa: PLC0415
+    except ImportError:
+        # Older HA releases stored the instance under a plain string key.
+        KEY_HASS = "hass"  # type: ignore[assignment]
+
     class CompanionAgentView(HomeAssistantView):  # type: ignore[misc]
         """The agent's long-poll endpoint. Open by necessity, token-gated in fact."""
 
@@ -366,7 +387,7 @@ def ensure_relay_view(hass: "HomeAssistant") -> None:
         requires_auth = False
 
         async def post(self, request: Any) -> Any:
-            status, body = await handle_agent_request(request.app["hass"], request)
+            status, body = await handle_agent_request(request.app[KEY_HASS], request)
             return self.json(body, status_code=status)
 
     hass.http.register_view(CompanionAgentView)
