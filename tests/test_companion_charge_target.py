@@ -319,6 +319,30 @@ async def test_unknown_language_reaches_settings_through_resources():
 
 
 @pytest.mark.asyncio
+async def test_slider_left_at_the_target_by_an_aborted_walk_is_not_success():
+    # An earlier walk moved the slider to 60 and was cut off before Save; its
+    # Cancel never reached the phone. 60 on screen is not 60 saved.
+    phone = SettingsPhone(saved=80)
+    phone.where, phone.shown, phone.edit = "settings", 60, True
+    channel = channel_for(phone)
+    assert await channel.set_charge_target(60) == 60
+    # Cancel, back home, then the real walk and Save.
+    assert kinds(phone) == ["toolbar", "toolbar", "settings", "slider", "save", "toolbar"]
+    assert phone.saved == 60
+    assert channel._last_write_at is not None
+
+
+@pytest.mark.asyncio
+async def test_a_poll_left_on_settings_goes_home_before_reading():
+    phone = SettingsPhone(saved=80)
+    phone.where, phone.shown, phone.edit = "settings", 60, True
+    fields = await channel_for(phone).read()
+    assert kinds(phone)[:2] == ["toolbar", "toolbar"]
+    assert phone.where == "overview" and phone.saved == 80
+    assert fields["electric_range_km"] == 95  # read off the overview
+
+
+@pytest.mark.asyncio
 async def test_plain_action_path_refuses_the_valueless_command():
     with pytest.raises(CompanionWriteBlocked, match="target value"):
         await channel_for(SettingsPhone()).do_action("set_charge_target")

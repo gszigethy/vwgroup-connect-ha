@@ -137,7 +137,10 @@ class _NavTransport:
 
 
 _VW_OVERVIEW = _dump(
-    _cd("Battery charge level: 74 %")
+    # The overview's identity anchor: reads start only here.
+    '<node resource-id="rangeTile" content-desc="" text="" class="android.view.View" '
+    'clickable="false" bounds="[0,300][1080,480]" />'
+    + _cd("Battery charge level: 74 %")
     + _cd("Battery range 300 km", bounds="[0,60][200,110]", clickable="true")
 )
 _VW_DETAIL = _dump(_cd("Target charge level: 80 %"))
