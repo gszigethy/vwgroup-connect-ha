@@ -8294,6 +8294,10 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             if remaining > 0:
                 await asyncio.sleep(min(remaining, 60.0))
                 continue
+            # Stamp here too: a skipped attempt (Read-only Mode, no sync
+            # command) returns before the sync stamps the clock, and must
+            # still wait a full interval instead of spinning the event loop.
+            self._companion_last_sync_mono = time.monotonic()
             outcome = await self.async_companion_sync_vehicle()
             if outcome is None:
                 continue

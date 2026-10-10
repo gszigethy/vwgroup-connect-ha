@@ -929,3 +929,46 @@ async def test_a_button_press_restarts_the_loops_interval(monkeypatch):
     await coord._companion_app_sync_loop()
     assert len(synced_at) == 2
     assert synced_at[1] - synced_at[0] >= 3600  # a full interval after the press
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("skip", ["read_only", "unsupported"])
+async def test_a_skipped_sync_still_waits_a_full_interval(monkeypatch, skip):
+    # The loop must yield and sleep when no attempt is made, never spin.
+    import custom_components.vag_connect.coordinator as mod
+
+    clock = [1000.0]
+    monkeypatch.setattr(time, "monotonic", lambda: clock[0])
+    client = _fake_client()
+    if skip == "unsupported":
+        client.supports_command = lambda name: False
+    coord = _coord(
+        options={CONF_COMPANION_APP_SYNC_INTERVAL: 60},
+        read_only=skip == "read_only", client=client,
+    )
+    attempts = [0]
+    inner = coord.async_companion_sync_vehicle
+
+    async def counted():
+        attempts[0] += 1
+        if attempts[0] > 10:  # a spinning loop would get here without sleeping
+            coord._started = False
+        return await inner()
+
+    coord.async_companion_sync_vehicle = counted
+    coord._started = True
+    coord.async_request_refresh = AsyncMock()
+    sleeps: list[float] = []
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+        clock[0] += seconds
+        if clock[0] >= 1000.0 + 3 * 3600:
+            coord._started = False
+
+    monkeypatch.setattr(mod.asyncio, "sleep", fake_sleep)
+    await coord._companion_app_sync_loop()
+    assert attempts[0] == 2  # one skipped attempt per hour, 3 h -> at 60 and 120 min
+    assert len(sleeps) == 180 and set(sleeps) == {60.0}
+    client.command_sync_vehicle.assert_not_awaited()
+    coord.async_request_refresh.assert_not_awaited()
