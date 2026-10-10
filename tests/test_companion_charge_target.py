@@ -400,14 +400,14 @@ class LaggingPhone(SettingsPhone):
         self.lag = [list(values) for values in lag]
         self.pending: list[int] = []
         self.jump = jump
-        self.since_slider = 0
+        self.since_slider: int | None = None  # dumps since the last slider tap
         self.cancel_ignored = cancel_ignored
         self.dumped: int | None = None
         self.saved_from: list[int | None] = []  # the value each Save was pressed on
 
     async def dump_ui(self):
         real = self.shown
-        if self.where == "settings":
+        if self.where == "settings" and self.since_slider is not None:
             self.since_slider += 1
             if self.pending:
                 self.shown = self.pending.pop(0)
@@ -473,8 +473,9 @@ async def test_slider_that_never_redraws_is_discarded_unsaved():
 async def test_pre_save_dump_off_target_refuses_save_and_discards():
     phone = LaggingPhone(saved=50, jump=(2, 70))
     channel = channel_for(phone)
-    with pytest.raises(CompanionWriteBlocked, match="shows 70 %.*nothing was saved"):
+    with pytest.raises(CompanionWriteBlocked, match="shows 70 %.*nothing was saved") as err:
         await channel.set_charge_target(80)
+    assert "did not confirm" not in str(err.value)  # the discard was verified
     assert "save" not in kinds(phone) and phone.saved == 50
     # The toolbar's X discards in place, then its arrow leaves Settings.
     assert kinds(phone) == ["settings", "slider", "toolbar", "toolbar"]
@@ -488,3 +489,6 @@ async def test_discard_that_does_not_take_is_reported():
     with pytest.raises(CompanionWriteBlocked, match="did not confirm discarding.*check it in the app"):
         await channel.set_charge_target(80)
     assert "save" not in kinds(phone) and phone.saved == 50
+    # One Cancel only: an unconfirmed discard is not retried or walked past.
+    assert kinds(phone) == ["settings", "slider", "toolbar"]
+    assert phone.edit and phone.where == "settings"

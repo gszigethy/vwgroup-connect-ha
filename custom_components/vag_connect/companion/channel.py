@@ -1052,6 +1052,7 @@ class CompanionChannel:
         # The saved value while a slider position may be pending; None once
         # there is nothing to discard (not moved yet, or Save was pressed).
         unsaved_from: int | None = None
+        leave = True
         try:
             row = find_charge_target_row(nodes)
             if row is None:
@@ -1090,6 +1091,9 @@ class CompanionChannel:
             return target
         except (CompanionWriteBlocked, CompanionTransportError) as err:
             if unsaved_from is not None and not await self._discard_charge_target(unsaved_from):
+                # Cancel did not take: another press of the same control
+                # proves nothing more, so tap nothing else.
+                leave = False
                 raise CompanionWriteBlocked(
                     f"{err}; the app did not confirm discarding the change, check it in the app"
                 ) from err
@@ -1099,7 +1103,8 @@ class CompanionChannel:
         finally:
             # The app's own toolbar button: Back after a save, and Cancel (which
             # discards the unsaved position) if anything stopped us before it.
-            await self._return_to_overview(2)
+            if leave:
+                await self._return_to_overview(2)
 
     async def _move_charge_slider(self, row: ChargeTargetRow, target: int) -> None:
         """Tap the track until the row reads ``target``; a tap sends nothing.
