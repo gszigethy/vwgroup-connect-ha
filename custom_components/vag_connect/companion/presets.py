@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, replace
+from typing import Literal
 
 # The app's plural resources spell small counts out ("One hour and. 40 minutes
 # of charging time left", "Zero hours and", VW 4.6.4 / 4.3.2). Words map to
@@ -198,6 +199,10 @@ class NavReadSelector:
     # Values a resource reader supplies from this screen besides ``values``;
     # counted when deciding whether the screen still has something to give.
     resource_targets: tuple[str, ...] = ()
+    # When the walk runs: "poll" on every poll; "trip" when a trip has ended;
+    # "car_data" when the car has sent new data. The last two also run every
+    # 12 hours and after a manual refresh (``CompanionChannel._walk_reason``).
+    cadence: Literal["poll", "trip", "car_data"] = "poll"
 
     @property
     def path(self) -> tuple[ActionSelector, ...]:
@@ -690,6 +695,10 @@ _VW = BrandPreset(
             ),
             back_presses=1,
             opt_in="vehicle_health",
+            # Odometer and service move only with a trip, and a warning reaches
+            # the app only with car data, so a parked car's report is not
+            # re-read every poll.
+            cadence="car_data",
         ),
         NavReadSelector(
             name="vehicle_settings",
@@ -911,6 +920,7 @@ _VW = BrandPreset(
             values=(),
             back_presses=1,
             opt_in="driving_data",
+            cadence="trip",  # the trip cards change only when a trip ends
             resource_targets=(
                 "last_trip_distance_km", "last_trip_duration_min", "last_trip_avg_speed_kmh",
                 "refuel_trip_distance_km", "refuel_trip_duration_min", "refuel_trip_avg_speed_kmh",
@@ -990,6 +1000,7 @@ _VW = BrandPreset(
             ),
             back_presses=4,
             opt_in="parking_position",
+            cadence="trip",  # the car parks somewhere new only after a trip
         ),
     ),
     # v2.26.0 (ckomma #13, #8) — confirmed VW nag screens. BACK dismisses both.

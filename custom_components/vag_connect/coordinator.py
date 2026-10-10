@@ -8528,10 +8528,25 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             )
 
     async def _companion_sync_readback(self) -> None:
-        """Re-read the app once the car has had time to answer a sync."""
+        """Re-read the app once the car has had time to answer a sync.
+
+        The press asked for fresh data, so every detail screen is read, also
+        those that otherwise wait for a trip or new car data.
+        """
         await asyncio.sleep(_APP_SYNC_READBACK_S)
         if self._started:
+            self.companion_walk_details_next()
             await self.async_request_refresh()
+
+    def companion_walk_details_next(self) -> None:
+        """#968 — have the next companion read walk every detail it reads.
+
+        Driving data, the parking position and Vehicle Health are otherwise
+        read only after a trip or new car data. No-op for a cloud client.
+        """
+        walk = getattr(self._cariad_client, "walk_details_next_read", None)
+        if walk is not None:
+            walk()
 
     def _companion_background_task(self, coro: Any, name: str) -> None:
         """Start a companion background task tied to this config entry, so HA

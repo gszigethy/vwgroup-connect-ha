@@ -518,22 +518,29 @@ class TestNavWalk:
         assert transport.taps == []
 
     @pytest.mark.asyncio
-    async def test_each_poll_walks_again_from_the_overview(self) -> None:
+    async def test_a_due_walk_starts_from_the_overview_again(self) -> None:
         transport = _WalkTransport(
             [_overview(), _overview(scrolled=True), HEALTH_SCREEN]
         )
         channel = _channel(transport, {"vehicle_health"})
         first = await channel.read()
         assert first is not None and first["odometer_km"] == 27886
-        taps_after_first = len(transport.taps)
+        health_tile = transport.taps[0]
+        first_taps = list(transport.taps)
+        # Nothing new from the car: the report is not walked again, and the
+        # value stays from the last walk. Vehicle Settings, under the same
+        # switch, is still read every poll.
         second = await channel.read()
-        assert second is not None
-        # Each poll walks its due paths (#1552); the second starts from the
-        # overview again and keeps the value. (This used to pass with no taps
-        # only because the poll read the overview selectors off the Health
-        # screen it was left on.)
-        assert second["odometer_km"] == 27886
-        assert len(transport.taps) == 2 * taps_after_first
+        assert second is not None and second["odometer_km"] == 27886
+        assert health_tile not in transport.taps[len(first_taps):]
+        # A requested refresh walks it again, starting from the overview
+        # (#1552; this once passed with no taps only because the poll read
+        # the overview selectors off the Health screen it was left on).
+        before = len(transport.taps)
+        channel.walk_details_next_read()
+        third = await channel.read()
+        assert third is not None and third["odometer_km"] == 27886
+        assert transport.taps[before:] == first_taps
 
 
 class TestPresetShape:

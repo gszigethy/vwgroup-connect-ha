@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Literal
 
@@ -57,6 +58,7 @@ from .transport import CompanionTransportError, NetworkAdbTransport
 from .resources import (
     DEPARTURE_TILE,
     DRIVING_TILE,
+    driving_tile_text,
     find_app_alert,
     find_battery_control,
     find_battery_tile,
@@ -144,6 +146,14 @@ _DAY_TAPS = 16                     # weekday/Repeat taps, each read back, before
                                    # giving up on a timer page without saving
 _CLOCK_TAPS = 40                   # one-step time wheel taps, each read back
                                    # (24 h: up to 12 hour + 6 minute steps)
+# Walks whose values change only after a trip or with new car data (driving
+# data, parking position, Vehicle Health) skip polls that cannot have changed
+# them (``_walk_reason``).
+_WALK_REFRESH_S = 12 * 3600        # re-read anyway, well inside the 24 h expiry
+_WALK_NO_TILE_S = 6 * 3600         # re-read a trip walk this often while the
+                                   # Driving data tile is not on the overview
+_WALK_SETTLE_S = 10 * 60           # new car data counts once the sync time has
+                                   # stood still this long: the car is parked
 
 
 _LIMIT_REASON = (
@@ -184,6 +194,17 @@ LIMIT_BACKEND = "backend"
 # Phones an unloaded client may have left mid-command, by phone key: the
 # monotonic time until which the next client waits before its first walk.
 _UNSETTLED: dict[str, float] = {}
+
+
+@dataclass(frozen=True)
+class _WalkBasis:
+    """What a gated walk's last read saw (``CompanionChannel._walk_reason``)."""
+
+    at: float                       # wall clock of the walk
+    trip: str | None                # the Driving data tile then
+    synced_at: datetime | None      # the car's sync time then
+    synced_precision_s: int         # that time's rounding
+    ranges: tuple[object, object]   # electric and petrol range then
 
 
 def mark_unsettled(keys: "tuple[str, ...]", settle_s: float) -> None:
@@ -288,6 +309,13 @@ class CompanionChannel:
         # #968 — when the car last sent the app data, from the same line read
         # through the app's own translation tables. Newest estimate wins.
         self._seen_at: datetime | None = None
+        self._seen_precision_s: int | None = None  # the last line's rounding
+        # Gated walks (``_walk_reason``): what each last saw, the Driving data
+        # tile now and as last seen, and a manual refresh waiting to run.
+        self._walk_basis: dict[str, _WalkBasis] = {}
+        self._trip_tile_now: str | None = None
+        self._trip_tile: str | None = None
+        self._walk_all_next = False
         # #968 — what the vehicle sync flow last found; None until it has run.
         self._request_state: str | None = None
         self._live_app_version: str | None = None
@@ -397,6 +425,9 @@ class CompanionChannel:
                 self._nav_cache.pop(key, None)
                 self._nav_cache_from.pop(key, None)
                 self._nav_read_at.pop(key, None)
+            for nav in self._preset.nav_reads:
+                if nav.opt_in == opt_in:
+                    self._walk_basis.pop(nav.name, None)
         self._nav_opt_ins = frozenset(opt_ins)
         self._read_charge_detail = "charge_detail" in self._nav_opt_ins
 
@@ -612,6 +643,9 @@ class CompanionChannel:
             fields.update(read_battery_resources(nodes, self._app_strings))
             fields.update(read_overview_resources(nodes, self._app_strings))
             self._note_sync_line(nodes)
+            self._trip_tile_now = driving_tile_text(nodes, self._app_strings)
+            if self._trip_tile_now is not None:
+                self._trip_tile = self._trip_tile_now
         if self._seen_at is not None:
             fields["companion_app_synced_at"] = self._seen_at
         # v2.26.0 (C9) — values behind a detail screen (charge target/power/time
@@ -694,6 +728,7 @@ class CompanionChannel:
             return
         now = datetime.fromtimestamp(self._wall(), tz=timezone.utc).replace(microsecond=0)
         seen = now - timedelta(seconds=line.age_s + line.precision_s)
+        self._seen_precision_s = line.precision_s
         if self._seen_at is None or seen > self._seen_at:
             self._seen_at = seen
 
@@ -706,11 +741,15 @@ class CompanionChannel:
         Successful values are cached and re-applied on later polls.
         """
         only, self._nav_only = self._nav_only, set()
+        walk_all, self._walk_all_next = self._walk_all_next, False
         def wanted(nav: NavReadSelector) -> bool:
             if not self._nav_allowed(nav):
                 return False  # this path's own opt-in is off
-            if only and nav.name not in only:
-                return False  # a command's readback re-reads its own path only
+            if only:
+                if nav.name not in only:
+                    return False  # a command's readback re-reads its own path only
+            elif not walk_all and not self._walk_due(nav, fields):
+                return False  # nothing it shows can have changed since its last walk
             # Nothing to fetch from this detail when every value is known.
             targets = [v.target for v in nav.values] + list(nav.resource_targets)
             return not all(fields.get(t) is not None for t in targets)
@@ -765,6 +804,15 @@ class CompanionChannel:
                 if self._preset.brand == "volkswagen" and nav.name == "departure_times":
                     extra = await self._read_departure_pages(detail)
                 self._apply_nav_values(nav, detail, fields, extra)
+                targets = [v.target for v in nav.values] + list(nav.resource_targets)
+                if any(fields.get(t) is not None for t in targets):
+                    self._walk_basis[nav.name] = _WalkBasis(
+                        at=self._wall(),
+                        trip=self._trip_tile,
+                        synced_at=self._seen_at,
+                        synced_precision_s=self._seen_precision_s or 60,
+                        ranges=(fields.get("electric_range_km"), fields.get("combustion_range_km")),
+                    )
                 here, done = detail, len(nav.path)
         except CompanionTransportError:
             _LOGGER.debug(
@@ -777,6 +825,79 @@ class CompanionChannel:
             # taps it never made, or it would leave the app somewhere behind
             # the overview for the next poll.
             await self._return_to_overview(min(walked, reached.back_presses))
+
+    def walk_details_next_read(self) -> None:
+        """Have the next read walk every opted-in detail, gated or not."""
+        self._walk_all_next = True
+
+    def _walk_due(self, nav: NavReadSelector, fields: dict[str, object]) -> bool:
+        if nav.cadence == "poll":
+            return True
+        reason = self._walk_reason(nav, fields)
+        if reason is not None:
+            _LOGGER.debug(
+                "companion %s: reading %s: %s", self._preset.brand, nav.name, reason
+            )
+        return reason is not None
+
+    def _walk_reason(self, nav: NavReadSelector, fields: dict[str, object]) -> str | None:
+        """Why a gated walk is due on this poll, or None to skip it.
+
+        Driving data and the parking position change only when a trip ends,
+        which the overview's Driving data tile shows (its last-trip text
+        changes). Vehicle Health changes with any data the car sends: the
+        odometer after a trip, a warning even while parked. New car data counts
+        once the sync time has stood still for ``_WALK_SETTLE_S``, so a car on
+        the move, sending data every few minutes, is read once it has parked.
+        Two trips with the same distance and consumption leave the tile as it
+        was; a range drop since the last walk, with settled car data, catches
+        that. Every gated walk also runs every 12 hours, and every 6 hours
+        while the tile is off the overview.
+        """
+        basis = self._walk_basis.get(nav.name)
+        if basis is None:
+            return "no earlier read"
+        now = self._wall()
+        if now - basis.at >= _WALK_REFRESH_S:
+            return "12 h refresh"
+        if self._trip_tile is not None and self._trip_tile != basis.trip:
+            return "trip ended"
+        if (
+            nav.cadence == "trip"
+            and self._trip_tile_now is None
+            and now - basis.at >= _WALK_NO_TILE_S
+        ):
+            return "Driving data tile not on the overview"
+        if not self._new_car_data(basis, now):
+            return None
+        if nav.cadence == "car_data":
+            return "new car data"
+        if self._range_dropped(basis, fields):
+            return "range dropped with new car data"
+        return None
+
+    def _new_car_data(self, basis: "_WalkBasis", now: float) -> bool:
+        """The car has sent data since the walk, and then stopped sending.
+
+        The recorded time only narrows within its rounding without a sync, so
+        only a move past that rounding is new data.
+        """
+        seen = self._seen_at
+        if seen is None or now - seen.timestamp() < _WALK_SETTLE_S:
+            return False
+        if basis.synced_at is None:
+            return True
+        return (seen - basis.synced_at).total_seconds() > basis.synced_precision_s
+
+    @staticmethod
+    def _range_dropped(basis: "_WalkBasis", fields: dict[str, object]) -> bool:
+        if fields.get("is_charging"):
+            return False
+        for key, was in zip(("electric_range_km", "combustion_range_km"), basis.ranges):
+            now = fields.get(key)
+            if isinstance(now, (int, float)) and isinstance(was, (int, float)) and now < was:
+                return True
+        return False
 
     def _apply_nav_values(
         self, nav: NavReadSelector, detail: list[UiNode], fields: dict[str, object],

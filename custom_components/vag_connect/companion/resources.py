@@ -439,6 +439,26 @@ def find_tile_entry(nodes: list[UiNode], resources: StringResources, key: str) -
     ), None)
 
 
+def driving_tile_text(nodes: list[UiNode], resources: StringResources) -> str | None:
+    """The overview's Driving data tile as read out, or None when it is not on screen.
+
+    The tile carries the last trip ("Last driven: 3.0 kilometres. Average
+    consumption: …"), so its text changes when a trip ends. It is compared,
+    never parsed. Without the app's tables the English and German labels find
+    it.
+    """
+    node = find_tile_entry(nodes, resources, DRIVING_TILE)
+    if node is None:
+        node = next((
+            n for n in nodes
+            if n.enabled and n.tap_point and _DRIVING_TILE_FALLBACK.match(n.content_desc)
+        ), None)
+    return node.content_desc if node is not None else None
+
+
+_DRIVING_TILE_FALLBACK = re.compile(r"^(?:Driving\s*data|Fahrdaten)\.\s")
+
+
 def read_departure_timers(nodes: list[UiNode]) -> dict[str, object]:
     """The Departure times screen's timer rows, top to bottom, at most three.
 
