@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_app_version_unverified": {
+      "message": "Komennot ovat pois päältä: puhelimen sovellus on versio {version}, jota ei ole vielä varmennettu komennoille. Komennot, tallennukset ja synkronoinnit pysyvät pois päältä, kunnes tämä versio on varmennettu. Ajoneuvon tiedot päivittyvät edelleen."
+    },
     "vehicle_not_found": {
       "message": "Ajoneuvoa, jonka VIN on {vin}, ei löytynyt. Tarkista, että integraatio on käynnistetty."
     },

@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_app_version_unverified": {
+      "message": "Kommandoer er slått av: appen på telefonen er versjon {version}, som ennå ikke er verifisert for kommandoer. Kommandoer, lagring og synkronisering forblir av til denne versjonen er verifisert. Kjøretøydata oppdateres fortsatt."
+    },
     "vehicle_not_found": {
       "message": "Kjøretøy med VIN {vin} ble ikke funnet. Sjekk at integrasjonen er startet."
     },

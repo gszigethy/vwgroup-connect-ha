@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_app_version_unverified": {
+      "message": "Příkazy jsou vypnuté: aplikace v telefonu má verzi {version}, která zatím nebyla ověřena pro příkazy. Příkazy, ukládání a synchronizace zůstanou vypnuté, dokud nebude tato verze ověřena. Data vozidla se dál aktualizují."
+    },
     "vehicle_not_found": {
       "message": "Vozidlo s VIN {vin} nebylo nalezeno."
     },

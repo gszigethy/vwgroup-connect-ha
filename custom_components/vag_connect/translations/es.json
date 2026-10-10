@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_app_version_unverified": {
+      "message": "Los comandos están desactivados: la aplicación del teléfono es la versión {version}, que aún no se ha verificado para comandos. Los comandos, guardados y sincronizaciones seguirán desactivados hasta que se verifique esta versión. Los datos del vehículo se siguen actualizando."
+    },
     "vehicle_not_found": {
       "message": "Vehículo con VIN {vin} no encontrado."
     },

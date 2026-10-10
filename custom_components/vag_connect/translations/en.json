@@ -2532,6 +2532,9 @@
     }
   },
   "exceptions": {
+    "companion_app_version_unverified": {
+      "message": "Commands are off: the app on the phone is version {version}, which has not been verified for commands yet. Commands, saves and syncs stay off until this version is verified. Vehicle data still updates."
+    },
     "vehicle_not_found": {
       "message": "Vehicle with VIN {vin} not found. Check that the integration is started."
     },

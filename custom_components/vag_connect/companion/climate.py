@@ -39,7 +39,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, AsyncIterator, Awaitable, Callable
 
-from .presets import app_version_covered
+from .presets import app_version_covered, app_version_listed
 from .resources import (
     DATA_UNAVAILABLE,
     StringResources,
@@ -291,6 +291,7 @@ class ClimateController:
             raise self._blocked("the climate sheet path is not mapped")
         self._home = False
         walked = 0
+        trips = self._ch._limit_trips
         try:
             nodes, cleared = await self._ch._dump_and_clear_overlays()
             if not cleared:
@@ -311,6 +312,10 @@ class ClimateController:
             if not self._home:
                 # The picker adds a level; the app's own close control is used.
                 await self._ch._return_to_overview(max(walked, 1) + 1)
+        if self._ch._limit_trips != trips:
+            # The limit alert arrived late and the walk back closed it: the
+            # car refused the request after all.
+            raise self._blocked(_LIMIT_REASON)
 
     async def _screen(self, done: Callable[[list[UiNode]], bool]) -> list[UiNode]:
         """Dump until the screen a tap should produce is there (bounded)."""
@@ -341,10 +346,15 @@ class ClimateController:
             ch._live_app_version, CLIMATE_APP_VERSIONS
         ):
             raise self._blocked(
-                f"climate commands are mapped for app {'/'.join(CLIMATE_APP_VERSIONS)} "
-                f"and newer; the phone has {ch._live_app_version or 'an unknown version'}. "
+                f"climate commands are mapped for app {'/'.join(CLIMATE_APP_VERSIONS)}; "
+                f"the phone has {ch._live_app_version or 'an unknown version'}. "
                 "Reads still work."
             )
+        # Rule 9: the dial is walked with geometry from the listed builds.
+        if not app_version_listed(ch._live_app_version, CLIMATE_APP_VERSIONS):
+            from .channel import CompanionAppVersionUnverified  # noqa: PLC0415
+
+            raise CompanionAppVersionUnverified(ch._live_app_version)
         if ch._is_rate_limited():
             raise self._blocked("the channel is backed off after a rate limit; commands are paused")
         if ch._last_write_at is not None:
@@ -616,7 +626,8 @@ class ClimateController:
         return self._blocked(f"the app did not show {instead_of}")
 
     def _mark_write(self) -> None:
-        self._ch._last_write_at = self._ch._now()
+        # Through the channel, so the wall-clock time is persisted too.
+        self._ch._stamp_write()
 
     @staticmethod
     def _blocked(reason: str) -> Exception:
