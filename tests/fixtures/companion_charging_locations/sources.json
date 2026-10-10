@@ -22,5 +22,11 @@
     "contributor": "gszigethy",
     "original_file": "phone-ui-capture-4.6.4/charging-locations/13-loc-timer1.xml",
     "note": "Set time page of Otthon's timer 1 (07:00 AM, Mo-Fr): same fragment as the climate timers (time_picker, cta_monday..cta_sunday) but no Repeat switch; location timers always repeat. Left with BACK, nothing saved."
+  },
+  {
+    "fixture": "list_empty_464.xml",
+    "contributor": "gszigethy",
+    "original_file": "phone-ui-capture-4.6.4/charging-locations/32-dep-later.xml",
+    "note": "Departure times list, 2026-10-10 ~21:30, same phone and car, while the companion reported a request-limit pause (App request status: restricted since 20:57). No climate timers and no charging locations: only the section headers, the climate footer and the 'First, create your charging locations' text, although 'Otthon' still exists in the car (it also vanished on the user's second phone). Read-only capture."
   }
 ]

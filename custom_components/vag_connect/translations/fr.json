@@ -1624,6 +1624,135 @@
           "immediate_discharging": "Décharger maintenant",
           "timer_charging_climatization": "Charge programmée avec climatisation"
         }
+      },
+      "charging_location_count": {
+        "name": "Nombre de lieux de recharge"
+      },
+      "charging_location_current": {
+        "name": "Lieu de recharge actuel",
+        "state": {
+          "none": "Aucun"
+        }
+      },
+      "charging_location_1_name": {
+        "name": "Lieu de recharge 1"
+      },
+      "charging_location_1_active_timers": {
+        "name": "Lieu de recharge 1 minuteries actives"
+      },
+      "charging_location_1_timer_1_time": {
+        "name": "Lieu de recharge 1 minuterie 1 heure"
+      },
+      "charging_location_1_timer_1_weekdays": {
+        "name": "Lieu de recharge 1 minuterie 1 jours de la semaine"
+      },
+      "charging_location_1_timer_2_time": {
+        "name": "Lieu de recharge 1 minuterie 2 heure"
+      },
+      "charging_location_1_timer_2_weekdays": {
+        "name": "Lieu de recharge 1 minuterie 2 jours de la semaine"
+      },
+      "charging_location_1_timer_3_time": {
+        "name": "Lieu de recharge 1 minuterie 3 heure"
+      },
+      "charging_location_1_timer_3_weekdays": {
+        "name": "Lieu de recharge 1 minuterie 3 jours de la semaine"
+      },
+      "charging_location_2_name": {
+        "name": "Lieu de recharge 2"
+      },
+      "charging_location_2_active_timers": {
+        "name": "Lieu de recharge 2 minuteries actives"
+      },
+      "charging_location_2_timer_1_time": {
+        "name": "Lieu de recharge 2 minuterie 1 heure"
+      },
+      "charging_location_2_timer_1_weekdays": {
+        "name": "Lieu de recharge 2 minuterie 1 jours de la semaine"
+      },
+      "charging_location_2_timer_2_time": {
+        "name": "Lieu de recharge 2 minuterie 2 heure"
+      },
+      "charging_location_2_timer_2_weekdays": {
+        "name": "Lieu de recharge 2 minuterie 2 jours de la semaine"
+      },
+      "charging_location_2_timer_3_time": {
+        "name": "Lieu de recharge 2 minuterie 3 heure"
+      },
+      "charging_location_2_timer_3_weekdays": {
+        "name": "Lieu de recharge 2 minuterie 3 jours de la semaine"
+      },
+      "charging_location_3_name": {
+        "name": "Lieu de recharge 3"
+      },
+      "charging_location_3_active_timers": {
+        "name": "Lieu de recharge 3 minuteries actives"
+      },
+      "charging_location_3_timer_1_time": {
+        "name": "Lieu de recharge 3 minuterie 1 heure"
+      },
+      "charging_location_3_timer_1_weekdays": {
+        "name": "Lieu de recharge 3 minuterie 1 jours de la semaine"
+      },
+      "charging_location_3_timer_2_time": {
+        "name": "Lieu de recharge 3 minuterie 2 heure"
+      },
+      "charging_location_3_timer_2_weekdays": {
+        "name": "Lieu de recharge 3 minuterie 2 jours de la semaine"
+      },
+      "charging_location_3_timer_3_time": {
+        "name": "Lieu de recharge 3 minuterie 3 heure"
+      },
+      "charging_location_3_timer_3_weekdays": {
+        "name": "Lieu de recharge 3 minuterie 3 jours de la semaine"
+      },
+      "charging_location_4_name": {
+        "name": "Lieu de recharge 4"
+      },
+      "charging_location_4_active_timers": {
+        "name": "Lieu de recharge 4 minuteries actives"
+      },
+      "charging_location_4_timer_1_time": {
+        "name": "Lieu de recharge 4 minuterie 1 heure"
+      },
+      "charging_location_4_timer_1_weekdays": {
+        "name": "Lieu de recharge 4 minuterie 1 jours de la semaine"
+      },
+      "charging_location_4_timer_2_time": {
+        "name": "Lieu de recharge 4 minuterie 2 heure"
+      },
+      "charging_location_4_timer_2_weekdays": {
+        "name": "Lieu de recharge 4 minuterie 2 jours de la semaine"
+      },
+      "charging_location_4_timer_3_time": {
+        "name": "Lieu de recharge 4 minuterie 3 heure"
+      },
+      "charging_location_4_timer_3_weekdays": {
+        "name": "Lieu de recharge 4 minuterie 3 jours de la semaine"
+      },
+      "charging_location_5_name": {
+        "name": "Lieu de recharge 5"
+      },
+      "charging_location_5_active_timers": {
+        "name": "Lieu de recharge 5 minuteries actives"
+      },
+      "charging_location_5_timer_1_time": {
+        "name": "Lieu de recharge 5 minuterie 1 heure"
+      },
+      "charging_location_5_timer_1_weekdays": {
+        "name": "Lieu de recharge 5 minuterie 1 jours de la semaine"
+      },
+      "charging_location_5_timer_2_time": {
+        "name": "Lieu de recharge 5 minuterie 2 heure"
+      },
+      "charging_location_5_timer_2_weekdays": {
+        "name": "Lieu de recharge 5 minuterie 2 jours de la semaine"
+      },
+      "charging_location_5_timer_3_time": {
+        "name": "Lieu de recharge 5 minuterie 3 heure"
+      },
+      "charging_location_5_timer_3_weekdays": {
+        "name": "Lieu de recharge 5 minuterie 3 jours de la semaine"
       }
     },
     "binary_sensor": {
@@ -1956,6 +2085,96 @@
       },
       "connect_contract_active": {
         "name": "Contrat Connect actif"
+      },
+      "charging_location_1_active": {
+        "name": "Lieu de recharge 1 actif"
+      },
+      "charging_location_1_reduced_ac_current": {
+        "name": "Lieu de recharge 1 courant de recharge CA réduit"
+      },
+      "charging_location_1_auto_release_connector": {
+        "name": "Lieu de recharge 1 déverrouillage automatique du connecteur CA"
+      },
+      "charging_location_1_timer_1_enabled": {
+        "name": "Lieu de recharge 1 minuterie 1 activée"
+      },
+      "charging_location_1_timer_2_enabled": {
+        "name": "Lieu de recharge 1 minuterie 2 activée"
+      },
+      "charging_location_1_timer_3_enabled": {
+        "name": "Lieu de recharge 1 minuterie 3 activée"
+      },
+      "charging_location_2_active": {
+        "name": "Lieu de recharge 2 actif"
+      },
+      "charging_location_2_reduced_ac_current": {
+        "name": "Lieu de recharge 2 courant de recharge CA réduit"
+      },
+      "charging_location_2_auto_release_connector": {
+        "name": "Lieu de recharge 2 déverrouillage automatique du connecteur CA"
+      },
+      "charging_location_2_timer_1_enabled": {
+        "name": "Lieu de recharge 2 minuterie 1 activée"
+      },
+      "charging_location_2_timer_2_enabled": {
+        "name": "Lieu de recharge 2 minuterie 2 activée"
+      },
+      "charging_location_2_timer_3_enabled": {
+        "name": "Lieu de recharge 2 minuterie 3 activée"
+      },
+      "charging_location_3_active": {
+        "name": "Lieu de recharge 3 actif"
+      },
+      "charging_location_3_reduced_ac_current": {
+        "name": "Lieu de recharge 3 courant de recharge CA réduit"
+      },
+      "charging_location_3_auto_release_connector": {
+        "name": "Lieu de recharge 3 déverrouillage automatique du connecteur CA"
+      },
+      "charging_location_3_timer_1_enabled": {
+        "name": "Lieu de recharge 3 minuterie 1 activée"
+      },
+      "charging_location_3_timer_2_enabled": {
+        "name": "Lieu de recharge 3 minuterie 2 activée"
+      },
+      "charging_location_3_timer_3_enabled": {
+        "name": "Lieu de recharge 3 minuterie 3 activée"
+      },
+      "charging_location_4_active": {
+        "name": "Lieu de recharge 4 actif"
+      },
+      "charging_location_4_reduced_ac_current": {
+        "name": "Lieu de recharge 4 courant de recharge CA réduit"
+      },
+      "charging_location_4_auto_release_connector": {
+        "name": "Lieu de recharge 4 déverrouillage automatique du connecteur CA"
+      },
+      "charging_location_4_timer_1_enabled": {
+        "name": "Lieu de recharge 4 minuterie 1 activée"
+      },
+      "charging_location_4_timer_2_enabled": {
+        "name": "Lieu de recharge 4 minuterie 2 activée"
+      },
+      "charging_location_4_timer_3_enabled": {
+        "name": "Lieu de recharge 4 minuterie 3 activée"
+      },
+      "charging_location_5_active": {
+        "name": "Lieu de recharge 5 actif"
+      },
+      "charging_location_5_reduced_ac_current": {
+        "name": "Lieu de recharge 5 courant de recharge CA réduit"
+      },
+      "charging_location_5_auto_release_connector": {
+        "name": "Lieu de recharge 5 déverrouillage automatique du connecteur CA"
+      },
+      "charging_location_5_timer_1_enabled": {
+        "name": "Lieu de recharge 5 minuterie 1 activée"
+      },
+      "charging_location_5_timer_2_enabled": {
+        "name": "Lieu de recharge 5 minuterie 2 activée"
+      },
+      "charging_location_5_timer_3_enabled": {
+        "name": "Lieu de recharge 5 minuterie 3 activée"
       }
     },
     "switch": {
@@ -2030,6 +2249,9 @@
       },
       "companion_read_parking_position": {
         "name": "Lire la position de stationnement"
+      },
+      "companion_read_charging_locations": {
+        "name": "Lire les lieux de recharge"
       }
     },
     "number": {

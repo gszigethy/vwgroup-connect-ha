@@ -133,7 +133,8 @@ Nav read `departure_times` (opt-in, #15). Three timers. Each has a time
 temperature of 22.0°C`). Without timer data the app shows only the section
 headers and `departure_timer_subscreen_climadeactivated_footer`. The charging
 section needs charging locations set in the car; its preferred charging times
-go with the charge mode *Charge at preferred times*.
+go with the charge mode *Charge at preferred times*. The optional
+`charging_locations` read covers that section (see Charging locations).
 
 | Value | Field → entity | Status |
 |---|---|---|
@@ -158,6 +159,85 @@ Writes (VW, app 4.6.4; the switch also on 4.3.2), all through
   to differ from the other two (the page shows no timer number), and the
   opened page's time must match its row. Anything unexpected before Save
   cancels the page; nothing is sent.
+
+## Charging locations
+
+Nav read `charging_locations`, controlled by **Read charging locations**
+(`companion_read_charging_locations`, off by default). Verified from the VW
+app 4.6.4 captures in `tests/fixtures/companion_charging_locations/`; 4.3.2
+has not been verified. It shares the Departure times tile with
+`departure_times`, so both opt-ins use one trip into that screen. It refreshes
+when a trip ends, every 12 hours, and on Refresh data / Force vehicle refresh.
+
+Up to five locations are created in the car's infotainment. Slots `N = 1..5`
+follow the list's top-to-bottom order; timers `M = 1..3` follow their page's
+order. The reader swipes to reach lower rows and deduplicates by name. Two
+visible rows with the same name stop the read, preserving the values already
+read. Count, current location and clearing of removed slots require a full
+list read with at least one location; partial walks preserve what they read.
+
+An empty Charging section is not read as "no locations". Live 2026-10-10,
+during a request-limit pause (App request status *restricted*), the app showed
+no climate timers and no locations, only the section headers and the "First,
+create your charging locations" text, on two phones, while the location was
+still saved in the car. The app shows that same text when the car has none
+(APK `DepartureTimerViewModel`: an empty profile list without a capability
+status), so a walk that finds no rows leaves the last values as they are. A
+car whose last location was deleted keeps the old values until a location
+exists again.
+
+| Value | Companion-only field → entity |
+|---|---|
+| Locations read | `charging_location_count` → sensor |
+| Location the car is parked in (Active badge) | `charging_location_current` → sensor; `none` after a full read with no active location |
+| Name | `charging_location_N_name` → Charging location N sensor |
+| Car parked there | `charging_location_N_active` → binary sensor |
+| Active departure times (app plural text) | `charging_location_N_active_timers` → sensor |
+| Timer on/off | `charging_location_N_timer_M_enabled` → binary sensor |
+| Timer time | `charging_location_N_timer_M_time` → sensor, 24-hour `HH:MM` |
+| Timer recurrence | `charging_location_N_timer_M_weekdays` → sensor, HA codes such as `mon,tue,wed,thu,fri`; unknown labels leave it unset |
+| Reduced AC charging current | `charging_location_N_reduced_ac_current` → binary sensor |
+| Automatically release AC connector | `charging_location_N_auto_release_connector` → binary sensor |
+
+All these entities are diagnostic and require an electric vehicle. Unread
+fields stay `None`, so unread slots create no entities. A full read clears all
+fields in slots beyond the locations found (never on an empty list, see above). The fixed `none` state has a
+translation; location names are user text. These values never populate cloud
+charging profiles, charge targets or vehicle-wide settings.
+
+The walk taps only location **name text** and the structural settings icon to
+the right of its toolbar title, then uses BACK. It verifies both the location
+page title and the settings chip's name. It never taps the Active badge,
+settings chip, switches, sliders or Save, and it never opens charging timer
+pages: those timers always repeat and their labels contain the weekdays.
+Labels come from the installed app's string and plural resources.
+
+**Slider limitation:** Direct charging up to (0–50%) and Charging up to
+(50–100%) are the VW design-system slider (`com.volkswagen.ui.selection.slider`),
+which draws its notch labels with a `TextMeasurer` and sets no semantics, so
+neither value is in the dump; FLAG_SECURE blocks screenshots. Other paths
+checked on 4.6.4, none of which carries the values: the slider card's
+`valueText` is never rendered, the info sheet is static text, the settings
+fragment's arguments hold only the location id, the home-screen widget shows
+range and fuel only, release builds log no HTTP bodies, and the app's external
+files hold only a map cache. The EU Data Act catalogue defines
+`profile_state_report.profiles[*].minimum_soc` / `target_soc`, but the Tiguan's
+portal feed does not deliver them. Neither slider is mapped.
+
+One indirect source: the charge sheet's *Target charge level* comes from
+`GetVehicleTargetStateOfChargeUseCase`, which shows the active location's
+`targetSOC_pct` when the app's remote flag `DisplayTargetSocEnabled` is on and
+the car reports `supportsVehiclePositionedInProfileID`, and the vehicle-wide
+value otherwise. On 2026-10-10 both were 80 %, so which one the Tiguan shows is
+not confirmed yet; the companion still writes that sheet value and the vehicle
+Settings slider into the same `target_soc`.
+
+**Precedence (APK analysis):** the active location's settings apply while the
+car is parked there; otherwise the vehicle-wide Settings apply. The app's own
+text under vehicle Settings' *Charging up to* says so: "This setting does not
+apply to charging sessions at specified charging locations." Immediate
+charging ignores departure times. These rules describe the app's behaviour;
+the reader only observes it.
 
 ## Driving data
 

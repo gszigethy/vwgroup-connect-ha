@@ -1624,6 +1624,135 @@
           "immediate_discharging": "Rozładuj teraz",
           "timer_charging_climatization": "Ładowanie z harmonogramem i klimatyzacją"
         }
+      },
+      "charging_location_count": {
+        "name": "Liczba miejsc ładowania"
+      },
+      "charging_location_current": {
+        "name": "Bieżące miejsce ładowania",
+        "state": {
+          "none": "Brak"
+        }
+      },
+      "charging_location_1_name": {
+        "name": "Miejsce ładowania 1"
+      },
+      "charging_location_1_active_timers": {
+        "name": "Miejsce ładowania 1 aktywne harmonogramy"
+      },
+      "charging_location_1_timer_1_time": {
+        "name": "Miejsce ładowania 1 harmonogram 1 godzina"
+      },
+      "charging_location_1_timer_1_weekdays": {
+        "name": "Miejsce ładowania 1 harmonogram 1 dni tygodnia"
+      },
+      "charging_location_1_timer_2_time": {
+        "name": "Miejsce ładowania 1 harmonogram 2 godzina"
+      },
+      "charging_location_1_timer_2_weekdays": {
+        "name": "Miejsce ładowania 1 harmonogram 2 dni tygodnia"
+      },
+      "charging_location_1_timer_3_time": {
+        "name": "Miejsce ładowania 1 harmonogram 3 godzina"
+      },
+      "charging_location_1_timer_3_weekdays": {
+        "name": "Miejsce ładowania 1 harmonogram 3 dni tygodnia"
+      },
+      "charging_location_2_name": {
+        "name": "Miejsce ładowania 2"
+      },
+      "charging_location_2_active_timers": {
+        "name": "Miejsce ładowania 2 aktywne harmonogramy"
+      },
+      "charging_location_2_timer_1_time": {
+        "name": "Miejsce ładowania 2 harmonogram 1 godzina"
+      },
+      "charging_location_2_timer_1_weekdays": {
+        "name": "Miejsce ładowania 2 harmonogram 1 dni tygodnia"
+      },
+      "charging_location_2_timer_2_time": {
+        "name": "Miejsce ładowania 2 harmonogram 2 godzina"
+      },
+      "charging_location_2_timer_2_weekdays": {
+        "name": "Miejsce ładowania 2 harmonogram 2 dni tygodnia"
+      },
+      "charging_location_2_timer_3_time": {
+        "name": "Miejsce ładowania 2 harmonogram 3 godzina"
+      },
+      "charging_location_2_timer_3_weekdays": {
+        "name": "Miejsce ładowania 2 harmonogram 3 dni tygodnia"
+      },
+      "charging_location_3_name": {
+        "name": "Miejsce ładowania 3"
+      },
+      "charging_location_3_active_timers": {
+        "name": "Miejsce ładowania 3 aktywne harmonogramy"
+      },
+      "charging_location_3_timer_1_time": {
+        "name": "Miejsce ładowania 3 harmonogram 1 godzina"
+      },
+      "charging_location_3_timer_1_weekdays": {
+        "name": "Miejsce ładowania 3 harmonogram 1 dni tygodnia"
+      },
+      "charging_location_3_timer_2_time": {
+        "name": "Miejsce ładowania 3 harmonogram 2 godzina"
+      },
+      "charging_location_3_timer_2_weekdays": {
+        "name": "Miejsce ładowania 3 harmonogram 2 dni tygodnia"
+      },
+      "charging_location_3_timer_3_time": {
+        "name": "Miejsce ładowania 3 harmonogram 3 godzina"
+      },
+      "charging_location_3_timer_3_weekdays": {
+        "name": "Miejsce ładowania 3 harmonogram 3 dni tygodnia"
+      },
+      "charging_location_4_name": {
+        "name": "Miejsce ładowania 4"
+      },
+      "charging_location_4_active_timers": {
+        "name": "Miejsce ładowania 4 aktywne harmonogramy"
+      },
+      "charging_location_4_timer_1_time": {
+        "name": "Miejsce ładowania 4 harmonogram 1 godzina"
+      },
+      "charging_location_4_timer_1_weekdays": {
+        "name": "Miejsce ładowania 4 harmonogram 1 dni tygodnia"
+      },
+      "charging_location_4_timer_2_time": {
+        "name": "Miejsce ładowania 4 harmonogram 2 godzina"
+      },
+      "charging_location_4_timer_2_weekdays": {
+        "name": "Miejsce ładowania 4 harmonogram 2 dni tygodnia"
+      },
+      "charging_location_4_timer_3_time": {
+        "name": "Miejsce ładowania 4 harmonogram 3 godzina"
+      },
+      "charging_location_4_timer_3_weekdays": {
+        "name": "Miejsce ładowania 4 harmonogram 3 dni tygodnia"
+      },
+      "charging_location_5_name": {
+        "name": "Miejsce ładowania 5"
+      },
+      "charging_location_5_active_timers": {
+        "name": "Miejsce ładowania 5 aktywne harmonogramy"
+      },
+      "charging_location_5_timer_1_time": {
+        "name": "Miejsce ładowania 5 harmonogram 1 godzina"
+      },
+      "charging_location_5_timer_1_weekdays": {
+        "name": "Miejsce ładowania 5 harmonogram 1 dni tygodnia"
+      },
+      "charging_location_5_timer_2_time": {
+        "name": "Miejsce ładowania 5 harmonogram 2 godzina"
+      },
+      "charging_location_5_timer_2_weekdays": {
+        "name": "Miejsce ładowania 5 harmonogram 2 dni tygodnia"
+      },
+      "charging_location_5_timer_3_time": {
+        "name": "Miejsce ładowania 5 harmonogram 3 godzina"
+      },
+      "charging_location_5_timer_3_weekdays": {
+        "name": "Miejsce ładowania 5 harmonogram 3 dni tygodnia"
       }
     },
     "binary_sensor": {
@@ -1956,6 +2085,96 @@
       },
       "connect_contract_active": {
         "name": "Umowa Connect aktywna"
+      },
+      "charging_location_1_active": {
+        "name": "Miejsce ładowania 1 aktywne"
+      },
+      "charging_location_1_reduced_ac_current": {
+        "name": "Miejsce ładowania 1 zmniejszony prąd ładowania AC"
+      },
+      "charging_location_1_auto_release_connector": {
+        "name": "Miejsce ładowania 1 automatyczne odblokowanie złącza AC"
+      },
+      "charging_location_1_timer_1_enabled": {
+        "name": "Miejsce ładowania 1 harmonogram 1 włączony"
+      },
+      "charging_location_1_timer_2_enabled": {
+        "name": "Miejsce ładowania 1 harmonogram 2 włączony"
+      },
+      "charging_location_1_timer_3_enabled": {
+        "name": "Miejsce ładowania 1 harmonogram 3 włączony"
+      },
+      "charging_location_2_active": {
+        "name": "Miejsce ładowania 2 aktywne"
+      },
+      "charging_location_2_reduced_ac_current": {
+        "name": "Miejsce ładowania 2 zmniejszony prąd ładowania AC"
+      },
+      "charging_location_2_auto_release_connector": {
+        "name": "Miejsce ładowania 2 automatyczne odblokowanie złącza AC"
+      },
+      "charging_location_2_timer_1_enabled": {
+        "name": "Miejsce ładowania 2 harmonogram 1 włączony"
+      },
+      "charging_location_2_timer_2_enabled": {
+        "name": "Miejsce ładowania 2 harmonogram 2 włączony"
+      },
+      "charging_location_2_timer_3_enabled": {
+        "name": "Miejsce ładowania 2 harmonogram 3 włączony"
+      },
+      "charging_location_3_active": {
+        "name": "Miejsce ładowania 3 aktywne"
+      },
+      "charging_location_3_reduced_ac_current": {
+        "name": "Miejsce ładowania 3 zmniejszony prąd ładowania AC"
+      },
+      "charging_location_3_auto_release_connector": {
+        "name": "Miejsce ładowania 3 automatyczne odblokowanie złącza AC"
+      },
+      "charging_location_3_timer_1_enabled": {
+        "name": "Miejsce ładowania 3 harmonogram 1 włączony"
+      },
+      "charging_location_3_timer_2_enabled": {
+        "name": "Miejsce ładowania 3 harmonogram 2 włączony"
+      },
+      "charging_location_3_timer_3_enabled": {
+        "name": "Miejsce ładowania 3 harmonogram 3 włączony"
+      },
+      "charging_location_4_active": {
+        "name": "Miejsce ładowania 4 aktywne"
+      },
+      "charging_location_4_reduced_ac_current": {
+        "name": "Miejsce ładowania 4 zmniejszony prąd ładowania AC"
+      },
+      "charging_location_4_auto_release_connector": {
+        "name": "Miejsce ładowania 4 automatyczne odblokowanie złącza AC"
+      },
+      "charging_location_4_timer_1_enabled": {
+        "name": "Miejsce ładowania 4 harmonogram 1 włączony"
+      },
+      "charging_location_4_timer_2_enabled": {
+        "name": "Miejsce ładowania 4 harmonogram 2 włączony"
+      },
+      "charging_location_4_timer_3_enabled": {
+        "name": "Miejsce ładowania 4 harmonogram 3 włączony"
+      },
+      "charging_location_5_active": {
+        "name": "Miejsce ładowania 5 aktywne"
+      },
+      "charging_location_5_reduced_ac_current": {
+        "name": "Miejsce ładowania 5 zmniejszony prąd ładowania AC"
+      },
+      "charging_location_5_auto_release_connector": {
+        "name": "Miejsce ładowania 5 automatyczne odblokowanie złącza AC"
+      },
+      "charging_location_5_timer_1_enabled": {
+        "name": "Miejsce ładowania 5 harmonogram 1 włączony"
+      },
+      "charging_location_5_timer_2_enabled": {
+        "name": "Miejsce ładowania 5 harmonogram 2 włączony"
+      },
+      "charging_location_5_timer_3_enabled": {
+        "name": "Miejsce ładowania 5 harmonogram 3 włączony"
       }
     },
     "switch": {
@@ -2030,6 +2249,9 @@
       },
       "companion_read_parking_position": {
         "name": "Odczytuj pozycję parkowania"
+      },
+      "companion_read_charging_locations": {
+        "name": "Odczyt miejsc ładowania"
       }
     },
     "number": {

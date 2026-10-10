@@ -1657,6 +1657,135 @@
           "immediate_discharging": "Discharge now",
           "timer_charging_climatization": "Timer charging with climate control"
         }
+      },
+      "charging_location_count": {
+        "name": "Charging location count"
+      },
+      "charging_location_current": {
+        "name": "Current charging location",
+        "state": {
+          "none": "None"
+        }
+      },
+      "charging_location_1_name": {
+        "name": "Charging location 1"
+      },
+      "charging_location_1_active_timers": {
+        "name": "Charging location 1 active timers"
+      },
+      "charging_location_1_timer_1_time": {
+        "name": "Charging location 1 timer 1 time"
+      },
+      "charging_location_1_timer_1_weekdays": {
+        "name": "Charging location 1 timer 1 weekdays"
+      },
+      "charging_location_1_timer_2_time": {
+        "name": "Charging location 1 timer 2 time"
+      },
+      "charging_location_1_timer_2_weekdays": {
+        "name": "Charging location 1 timer 2 weekdays"
+      },
+      "charging_location_1_timer_3_time": {
+        "name": "Charging location 1 timer 3 time"
+      },
+      "charging_location_1_timer_3_weekdays": {
+        "name": "Charging location 1 timer 3 weekdays"
+      },
+      "charging_location_2_name": {
+        "name": "Charging location 2"
+      },
+      "charging_location_2_active_timers": {
+        "name": "Charging location 2 active timers"
+      },
+      "charging_location_2_timer_1_time": {
+        "name": "Charging location 2 timer 1 time"
+      },
+      "charging_location_2_timer_1_weekdays": {
+        "name": "Charging location 2 timer 1 weekdays"
+      },
+      "charging_location_2_timer_2_time": {
+        "name": "Charging location 2 timer 2 time"
+      },
+      "charging_location_2_timer_2_weekdays": {
+        "name": "Charging location 2 timer 2 weekdays"
+      },
+      "charging_location_2_timer_3_time": {
+        "name": "Charging location 2 timer 3 time"
+      },
+      "charging_location_2_timer_3_weekdays": {
+        "name": "Charging location 2 timer 3 weekdays"
+      },
+      "charging_location_3_name": {
+        "name": "Charging location 3"
+      },
+      "charging_location_3_active_timers": {
+        "name": "Charging location 3 active timers"
+      },
+      "charging_location_3_timer_1_time": {
+        "name": "Charging location 3 timer 1 time"
+      },
+      "charging_location_3_timer_1_weekdays": {
+        "name": "Charging location 3 timer 1 weekdays"
+      },
+      "charging_location_3_timer_2_time": {
+        "name": "Charging location 3 timer 2 time"
+      },
+      "charging_location_3_timer_2_weekdays": {
+        "name": "Charging location 3 timer 2 weekdays"
+      },
+      "charging_location_3_timer_3_time": {
+        "name": "Charging location 3 timer 3 time"
+      },
+      "charging_location_3_timer_3_weekdays": {
+        "name": "Charging location 3 timer 3 weekdays"
+      },
+      "charging_location_4_name": {
+        "name": "Charging location 4"
+      },
+      "charging_location_4_active_timers": {
+        "name": "Charging location 4 active timers"
+      },
+      "charging_location_4_timer_1_time": {
+        "name": "Charging location 4 timer 1 time"
+      },
+      "charging_location_4_timer_1_weekdays": {
+        "name": "Charging location 4 timer 1 weekdays"
+      },
+      "charging_location_4_timer_2_time": {
+        "name": "Charging location 4 timer 2 time"
+      },
+      "charging_location_4_timer_2_weekdays": {
+        "name": "Charging location 4 timer 2 weekdays"
+      },
+      "charging_location_4_timer_3_time": {
+        "name": "Charging location 4 timer 3 time"
+      },
+      "charging_location_4_timer_3_weekdays": {
+        "name": "Charging location 4 timer 3 weekdays"
+      },
+      "charging_location_5_name": {
+        "name": "Charging location 5"
+      },
+      "charging_location_5_active_timers": {
+        "name": "Charging location 5 active timers"
+      },
+      "charging_location_5_timer_1_time": {
+        "name": "Charging location 5 timer 1 time"
+      },
+      "charging_location_5_timer_1_weekdays": {
+        "name": "Charging location 5 timer 1 weekdays"
+      },
+      "charging_location_5_timer_2_time": {
+        "name": "Charging location 5 timer 2 time"
+      },
+      "charging_location_5_timer_2_weekdays": {
+        "name": "Charging location 5 timer 2 weekdays"
+      },
+      "charging_location_5_timer_3_time": {
+        "name": "Charging location 5 timer 3 time"
+      },
+      "charging_location_5_timer_3_weekdays": {
+        "name": "Charging location 5 timer 3 weekdays"
       }
     },
     "binary_sensor": {
@@ -1989,6 +2118,96 @@
       },
       "connect_contract_active": {
         "name": "Connect Contract Active"
+      },
+      "charging_location_1_active": {
+        "name": "Charging location 1 active"
+      },
+      "charging_location_1_reduced_ac_current": {
+        "name": "Charging location 1 reduced AC charging current"
+      },
+      "charging_location_1_auto_release_connector": {
+        "name": "Charging location 1 automatically release AC connector"
+      },
+      "charging_location_1_timer_1_enabled": {
+        "name": "Charging location 1 timer 1 enabled"
+      },
+      "charging_location_1_timer_2_enabled": {
+        "name": "Charging location 1 timer 2 enabled"
+      },
+      "charging_location_1_timer_3_enabled": {
+        "name": "Charging location 1 timer 3 enabled"
+      },
+      "charging_location_2_active": {
+        "name": "Charging location 2 active"
+      },
+      "charging_location_2_reduced_ac_current": {
+        "name": "Charging location 2 reduced AC charging current"
+      },
+      "charging_location_2_auto_release_connector": {
+        "name": "Charging location 2 automatically release AC connector"
+      },
+      "charging_location_2_timer_1_enabled": {
+        "name": "Charging location 2 timer 1 enabled"
+      },
+      "charging_location_2_timer_2_enabled": {
+        "name": "Charging location 2 timer 2 enabled"
+      },
+      "charging_location_2_timer_3_enabled": {
+        "name": "Charging location 2 timer 3 enabled"
+      },
+      "charging_location_3_active": {
+        "name": "Charging location 3 active"
+      },
+      "charging_location_3_reduced_ac_current": {
+        "name": "Charging location 3 reduced AC charging current"
+      },
+      "charging_location_3_auto_release_connector": {
+        "name": "Charging location 3 automatically release AC connector"
+      },
+      "charging_location_3_timer_1_enabled": {
+        "name": "Charging location 3 timer 1 enabled"
+      },
+      "charging_location_3_timer_2_enabled": {
+        "name": "Charging location 3 timer 2 enabled"
+      },
+      "charging_location_3_timer_3_enabled": {
+        "name": "Charging location 3 timer 3 enabled"
+      },
+      "charging_location_4_active": {
+        "name": "Charging location 4 active"
+      },
+      "charging_location_4_reduced_ac_current": {
+        "name": "Charging location 4 reduced AC charging current"
+      },
+      "charging_location_4_auto_release_connector": {
+        "name": "Charging location 4 automatically release AC connector"
+      },
+      "charging_location_4_timer_1_enabled": {
+        "name": "Charging location 4 timer 1 enabled"
+      },
+      "charging_location_4_timer_2_enabled": {
+        "name": "Charging location 4 timer 2 enabled"
+      },
+      "charging_location_4_timer_3_enabled": {
+        "name": "Charging location 4 timer 3 enabled"
+      },
+      "charging_location_5_active": {
+        "name": "Charging location 5 active"
+      },
+      "charging_location_5_reduced_ac_current": {
+        "name": "Charging location 5 reduced AC charging current"
+      },
+      "charging_location_5_auto_release_connector": {
+        "name": "Charging location 5 automatically release AC connector"
+      },
+      "charging_location_5_timer_1_enabled": {
+        "name": "Charging location 5 timer 1 enabled"
+      },
+      "charging_location_5_timer_2_enabled": {
+        "name": "Charging location 5 timer 2 enabled"
+      },
+      "charging_location_5_timer_3_enabled": {
+        "name": "Charging location 5 timer 3 enabled"
       }
     },
     "switch": {
@@ -2063,6 +2282,9 @@
       },
       "companion_read_parking_position": {
         "name": "Read parking position"
+      },
+      "companion_read_charging_locations": {
+        "name": "Read charging locations"
       }
     },
     "number": {

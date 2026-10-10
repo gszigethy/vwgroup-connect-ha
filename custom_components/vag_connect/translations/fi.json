@@ -1624,6 +1624,135 @@
           "immediate_discharging": "Pura nyt",
           "timer_charging_climatization": "Ajastettu lataus ilmastoinnilla"
         }
+      },
+      "charging_location_count": {
+        "name": "Latauspaikkojen määrä"
+      },
+      "charging_location_current": {
+        "name": "Nykyinen latauspaikka",
+        "state": {
+          "none": "Ei mitään"
+        }
+      },
+      "charging_location_1_name": {
+        "name": "Latauspaikka 1"
+      },
+      "charging_location_1_active_timers": {
+        "name": "Latauspaikka 1 aktiiviset ajastimet"
+      },
+      "charging_location_1_timer_1_time": {
+        "name": "Latauspaikka 1 ajastin 1 aika"
+      },
+      "charging_location_1_timer_1_weekdays": {
+        "name": "Latauspaikka 1 ajastin 1 viikonpäivät"
+      },
+      "charging_location_1_timer_2_time": {
+        "name": "Latauspaikka 1 ajastin 2 aika"
+      },
+      "charging_location_1_timer_2_weekdays": {
+        "name": "Latauspaikka 1 ajastin 2 viikonpäivät"
+      },
+      "charging_location_1_timer_3_time": {
+        "name": "Latauspaikka 1 ajastin 3 aika"
+      },
+      "charging_location_1_timer_3_weekdays": {
+        "name": "Latauspaikka 1 ajastin 3 viikonpäivät"
+      },
+      "charging_location_2_name": {
+        "name": "Latauspaikka 2"
+      },
+      "charging_location_2_active_timers": {
+        "name": "Latauspaikka 2 aktiiviset ajastimet"
+      },
+      "charging_location_2_timer_1_time": {
+        "name": "Latauspaikka 2 ajastin 1 aika"
+      },
+      "charging_location_2_timer_1_weekdays": {
+        "name": "Latauspaikka 2 ajastin 1 viikonpäivät"
+      },
+      "charging_location_2_timer_2_time": {
+        "name": "Latauspaikka 2 ajastin 2 aika"
+      },
+      "charging_location_2_timer_2_weekdays": {
+        "name": "Latauspaikka 2 ajastin 2 viikonpäivät"
+      },
+      "charging_location_2_timer_3_time": {
+        "name": "Latauspaikka 2 ajastin 3 aika"
+      },
+      "charging_location_2_timer_3_weekdays": {
+        "name": "Latauspaikka 2 ajastin 3 viikonpäivät"
+      },
+      "charging_location_3_name": {
+        "name": "Latauspaikka 3"
+      },
+      "charging_location_3_active_timers": {
+        "name": "Latauspaikka 3 aktiiviset ajastimet"
+      },
+      "charging_location_3_timer_1_time": {
+        "name": "Latauspaikka 3 ajastin 1 aika"
+      },
+      "charging_location_3_timer_1_weekdays": {
+        "name": "Latauspaikka 3 ajastin 1 viikonpäivät"
+      },
+      "charging_location_3_timer_2_time": {
+        "name": "Latauspaikka 3 ajastin 2 aika"
+      },
+      "charging_location_3_timer_2_weekdays": {
+        "name": "Latauspaikka 3 ajastin 2 viikonpäivät"
+      },
+      "charging_location_3_timer_3_time": {
+        "name": "Latauspaikka 3 ajastin 3 aika"
+      },
+      "charging_location_3_timer_3_weekdays": {
+        "name": "Latauspaikka 3 ajastin 3 viikonpäivät"
+      },
+      "charging_location_4_name": {
+        "name": "Latauspaikka 4"
+      },
+      "charging_location_4_active_timers": {
+        "name": "Latauspaikka 4 aktiiviset ajastimet"
+      },
+      "charging_location_4_timer_1_time": {
+        "name": "Latauspaikka 4 ajastin 1 aika"
+      },
+      "charging_location_4_timer_1_weekdays": {
+        "name": "Latauspaikka 4 ajastin 1 viikonpäivät"
+      },
+      "charging_location_4_timer_2_time": {
+        "name": "Latauspaikka 4 ajastin 2 aika"
+      },
+      "charging_location_4_timer_2_weekdays": {
+        "name": "Latauspaikka 4 ajastin 2 viikonpäivät"
+      },
+      "charging_location_4_timer_3_time": {
+        "name": "Latauspaikka 4 ajastin 3 aika"
+      },
+      "charging_location_4_timer_3_weekdays": {
+        "name": "Latauspaikka 4 ajastin 3 viikonpäivät"
+      },
+      "charging_location_5_name": {
+        "name": "Latauspaikka 5"
+      },
+      "charging_location_5_active_timers": {
+        "name": "Latauspaikka 5 aktiiviset ajastimet"
+      },
+      "charging_location_5_timer_1_time": {
+        "name": "Latauspaikka 5 ajastin 1 aika"
+      },
+      "charging_location_5_timer_1_weekdays": {
+        "name": "Latauspaikka 5 ajastin 1 viikonpäivät"
+      },
+      "charging_location_5_timer_2_time": {
+        "name": "Latauspaikka 5 ajastin 2 aika"
+      },
+      "charging_location_5_timer_2_weekdays": {
+        "name": "Latauspaikka 5 ajastin 2 viikonpäivät"
+      },
+      "charging_location_5_timer_3_time": {
+        "name": "Latauspaikka 5 ajastin 3 aika"
+      },
+      "charging_location_5_timer_3_weekdays": {
+        "name": "Latauspaikka 5 ajastin 3 viikonpäivät"
       }
     },
     "binary_sensor": {
@@ -1956,6 +2085,96 @@
       },
       "connect_contract_active": {
         "name": "Connect-sopimus aktiivinen"
+      },
+      "charging_location_1_active": {
+        "name": "Latauspaikka 1 aktiivinen"
+      },
+      "charging_location_1_reduced_ac_current": {
+        "name": "Latauspaikka 1 alennettu AC-latausvirta"
+      },
+      "charging_location_1_auto_release_connector": {
+        "name": "Latauspaikka 1 AC-liittimen automaattinen vapautus"
+      },
+      "charging_location_1_timer_1_enabled": {
+        "name": "Latauspaikka 1 ajastin 1 käytössä"
+      },
+      "charging_location_1_timer_2_enabled": {
+        "name": "Latauspaikka 1 ajastin 2 käytössä"
+      },
+      "charging_location_1_timer_3_enabled": {
+        "name": "Latauspaikka 1 ajastin 3 käytössä"
+      },
+      "charging_location_2_active": {
+        "name": "Latauspaikka 2 aktiivinen"
+      },
+      "charging_location_2_reduced_ac_current": {
+        "name": "Latauspaikka 2 alennettu AC-latausvirta"
+      },
+      "charging_location_2_auto_release_connector": {
+        "name": "Latauspaikka 2 AC-liittimen automaattinen vapautus"
+      },
+      "charging_location_2_timer_1_enabled": {
+        "name": "Latauspaikka 2 ajastin 1 käytössä"
+      },
+      "charging_location_2_timer_2_enabled": {
+        "name": "Latauspaikka 2 ajastin 2 käytössä"
+      },
+      "charging_location_2_timer_3_enabled": {
+        "name": "Latauspaikka 2 ajastin 3 käytössä"
+      },
+      "charging_location_3_active": {
+        "name": "Latauspaikka 3 aktiivinen"
+      },
+      "charging_location_3_reduced_ac_current": {
+        "name": "Latauspaikka 3 alennettu AC-latausvirta"
+      },
+      "charging_location_3_auto_release_connector": {
+        "name": "Latauspaikka 3 AC-liittimen automaattinen vapautus"
+      },
+      "charging_location_3_timer_1_enabled": {
+        "name": "Latauspaikka 3 ajastin 1 käytössä"
+      },
+      "charging_location_3_timer_2_enabled": {
+        "name": "Latauspaikka 3 ajastin 2 käytössä"
+      },
+      "charging_location_3_timer_3_enabled": {
+        "name": "Latauspaikka 3 ajastin 3 käytössä"
+      },
+      "charging_location_4_active": {
+        "name": "Latauspaikka 4 aktiivinen"
+      },
+      "charging_location_4_reduced_ac_current": {
+        "name": "Latauspaikka 4 alennettu AC-latausvirta"
+      },
+      "charging_location_4_auto_release_connector": {
+        "name": "Latauspaikka 4 AC-liittimen automaattinen vapautus"
+      },
+      "charging_location_4_timer_1_enabled": {
+        "name": "Latauspaikka 4 ajastin 1 käytössä"
+      },
+      "charging_location_4_timer_2_enabled": {
+        "name": "Latauspaikka 4 ajastin 2 käytössä"
+      },
+      "charging_location_4_timer_3_enabled": {
+        "name": "Latauspaikka 4 ajastin 3 käytössä"
+      },
+      "charging_location_5_active": {
+        "name": "Latauspaikka 5 aktiivinen"
+      },
+      "charging_location_5_reduced_ac_current": {
+        "name": "Latauspaikka 5 alennettu AC-latausvirta"
+      },
+      "charging_location_5_auto_release_connector": {
+        "name": "Latauspaikka 5 AC-liittimen automaattinen vapautus"
+      },
+      "charging_location_5_timer_1_enabled": {
+        "name": "Latauspaikka 5 ajastin 1 käytössä"
+      },
+      "charging_location_5_timer_2_enabled": {
+        "name": "Latauspaikka 5 ajastin 2 käytössä"
+      },
+      "charging_location_5_timer_3_enabled": {
+        "name": "Latauspaikka 5 ajastin 3 käytössä"
       }
     },
     "switch": {
@@ -2030,6 +2249,9 @@
       },
       "companion_read_parking_position": {
         "name": "Lue pysäköintipaikka"
+      },
+      "companion_read_charging_locations": {
+        "name": "Lue latauspaikat"
       }
     },
     "number": {

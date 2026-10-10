@@ -951,6 +951,28 @@ _VW = BrandPreset(
             ),
         ),
         NavReadSelector(
+            name="charging_locations",
+            steps=(
+                ActionSelector(
+                    action="open_departure_times",
+                    content_desc_re=r"^(?:Departure\s*times|Abfahrtszeiten)\b",
+                    scroll_first=True,
+                ),
+            ),
+            values=(),
+            back_presses=1,
+            opt_in="charging_locations",
+            cadence="trip",
+            resource_targets=(
+                "charging_location_count", "charging_location_current",
+                *(f"charging_location_{slot}_{part}" for slot in range(1, 6) for part in (
+                    "name", "active", "active_timers", "reduced_ac_current", "auto_release_connector",
+                    *(f"timer_{timer}_{part}" for timer in range(1, 4)
+                      for part in ("enabled", "time", "weekdays")),
+                )),
+            ),
+        ),
+        NavReadSelector(
             name="parking_position",
             # #923 / #968 — a VW EU car read through the EU Data Act portal has
             # NO position data point, and the app draws the parked car as a map

@@ -1624,6 +1624,135 @@
           "immediate_discharging": "Scarica ora",
           "timer_charging_climatization": "Ricarica a timer con climatizzazione"
         }
+      },
+      "charging_location_count": {
+        "name": "Numero di luoghi di ricarica"
+      },
+      "charging_location_current": {
+        "name": "Luogo di ricarica attuale",
+        "state": {
+          "none": "Nessuno"
+        }
+      },
+      "charging_location_1_name": {
+        "name": "Luogo di ricarica 1"
+      },
+      "charging_location_1_active_timers": {
+        "name": "Luogo di ricarica 1 timer attivi"
+      },
+      "charging_location_1_timer_1_time": {
+        "name": "Luogo di ricarica 1 timer 1 ora"
+      },
+      "charging_location_1_timer_1_weekdays": {
+        "name": "Luogo di ricarica 1 timer 1 giorni della settimana"
+      },
+      "charging_location_1_timer_2_time": {
+        "name": "Luogo di ricarica 1 timer 2 ora"
+      },
+      "charging_location_1_timer_2_weekdays": {
+        "name": "Luogo di ricarica 1 timer 2 giorni della settimana"
+      },
+      "charging_location_1_timer_3_time": {
+        "name": "Luogo di ricarica 1 timer 3 ora"
+      },
+      "charging_location_1_timer_3_weekdays": {
+        "name": "Luogo di ricarica 1 timer 3 giorni della settimana"
+      },
+      "charging_location_2_name": {
+        "name": "Luogo di ricarica 2"
+      },
+      "charging_location_2_active_timers": {
+        "name": "Luogo di ricarica 2 timer attivi"
+      },
+      "charging_location_2_timer_1_time": {
+        "name": "Luogo di ricarica 2 timer 1 ora"
+      },
+      "charging_location_2_timer_1_weekdays": {
+        "name": "Luogo di ricarica 2 timer 1 giorni della settimana"
+      },
+      "charging_location_2_timer_2_time": {
+        "name": "Luogo di ricarica 2 timer 2 ora"
+      },
+      "charging_location_2_timer_2_weekdays": {
+        "name": "Luogo di ricarica 2 timer 2 giorni della settimana"
+      },
+      "charging_location_2_timer_3_time": {
+        "name": "Luogo di ricarica 2 timer 3 ora"
+      },
+      "charging_location_2_timer_3_weekdays": {
+        "name": "Luogo di ricarica 2 timer 3 giorni della settimana"
+      },
+      "charging_location_3_name": {
+        "name": "Luogo di ricarica 3"
+      },
+      "charging_location_3_active_timers": {
+        "name": "Luogo di ricarica 3 timer attivi"
+      },
+      "charging_location_3_timer_1_time": {
+        "name": "Luogo di ricarica 3 timer 1 ora"
+      },
+      "charging_location_3_timer_1_weekdays": {
+        "name": "Luogo di ricarica 3 timer 1 giorni della settimana"
+      },
+      "charging_location_3_timer_2_time": {
+        "name": "Luogo di ricarica 3 timer 2 ora"
+      },
+      "charging_location_3_timer_2_weekdays": {
+        "name": "Luogo di ricarica 3 timer 2 giorni della settimana"
+      },
+      "charging_location_3_timer_3_time": {
+        "name": "Luogo di ricarica 3 timer 3 ora"
+      },
+      "charging_location_3_timer_3_weekdays": {
+        "name": "Luogo di ricarica 3 timer 3 giorni della settimana"
+      },
+      "charging_location_4_name": {
+        "name": "Luogo di ricarica 4"
+      },
+      "charging_location_4_active_timers": {
+        "name": "Luogo di ricarica 4 timer attivi"
+      },
+      "charging_location_4_timer_1_time": {
+        "name": "Luogo di ricarica 4 timer 1 ora"
+      },
+      "charging_location_4_timer_1_weekdays": {
+        "name": "Luogo di ricarica 4 timer 1 giorni della settimana"
+      },
+      "charging_location_4_timer_2_time": {
+        "name": "Luogo di ricarica 4 timer 2 ora"
+      },
+      "charging_location_4_timer_2_weekdays": {
+        "name": "Luogo di ricarica 4 timer 2 giorni della settimana"
+      },
+      "charging_location_4_timer_3_time": {
+        "name": "Luogo di ricarica 4 timer 3 ora"
+      },
+      "charging_location_4_timer_3_weekdays": {
+        "name": "Luogo di ricarica 4 timer 3 giorni della settimana"
+      },
+      "charging_location_5_name": {
+        "name": "Luogo di ricarica 5"
+      },
+      "charging_location_5_active_timers": {
+        "name": "Luogo di ricarica 5 timer attivi"
+      },
+      "charging_location_5_timer_1_time": {
+        "name": "Luogo di ricarica 5 timer 1 ora"
+      },
+      "charging_location_5_timer_1_weekdays": {
+        "name": "Luogo di ricarica 5 timer 1 giorni della settimana"
+      },
+      "charging_location_5_timer_2_time": {
+        "name": "Luogo di ricarica 5 timer 2 ora"
+      },
+      "charging_location_5_timer_2_weekdays": {
+        "name": "Luogo di ricarica 5 timer 2 giorni della settimana"
+      },
+      "charging_location_5_timer_3_time": {
+        "name": "Luogo di ricarica 5 timer 3 ora"
+      },
+      "charging_location_5_timer_3_weekdays": {
+        "name": "Luogo di ricarica 5 timer 3 giorni della settimana"
       }
     },
     "binary_sensor": {
@@ -1956,6 +2085,96 @@
       },
       "connect_contract_active": {
         "name": "Contratto Connect attivo"
+      },
+      "charging_location_1_active": {
+        "name": "Luogo di ricarica 1 attivo"
+      },
+      "charging_location_1_reduced_ac_current": {
+        "name": "Luogo di ricarica 1 corrente di ricarica CA ridotta"
+      },
+      "charging_location_1_auto_release_connector": {
+        "name": "Luogo di ricarica 1 sblocco automatico del connettore CA"
+      },
+      "charging_location_1_timer_1_enabled": {
+        "name": "Luogo di ricarica 1 timer 1 abilitato"
+      },
+      "charging_location_1_timer_2_enabled": {
+        "name": "Luogo di ricarica 1 timer 2 abilitato"
+      },
+      "charging_location_1_timer_3_enabled": {
+        "name": "Luogo di ricarica 1 timer 3 abilitato"
+      },
+      "charging_location_2_active": {
+        "name": "Luogo di ricarica 2 attivo"
+      },
+      "charging_location_2_reduced_ac_current": {
+        "name": "Luogo di ricarica 2 corrente di ricarica CA ridotta"
+      },
+      "charging_location_2_auto_release_connector": {
+        "name": "Luogo di ricarica 2 sblocco automatico del connettore CA"
+      },
+      "charging_location_2_timer_1_enabled": {
+        "name": "Luogo di ricarica 2 timer 1 abilitato"
+      },
+      "charging_location_2_timer_2_enabled": {
+        "name": "Luogo di ricarica 2 timer 2 abilitato"
+      },
+      "charging_location_2_timer_3_enabled": {
+        "name": "Luogo di ricarica 2 timer 3 abilitato"
+      },
+      "charging_location_3_active": {
+        "name": "Luogo di ricarica 3 attivo"
+      },
+      "charging_location_3_reduced_ac_current": {
+        "name": "Luogo di ricarica 3 corrente di ricarica CA ridotta"
+      },
+      "charging_location_3_auto_release_connector": {
+        "name": "Luogo di ricarica 3 sblocco automatico del connettore CA"
+      },
+      "charging_location_3_timer_1_enabled": {
+        "name": "Luogo di ricarica 3 timer 1 abilitato"
+      },
+      "charging_location_3_timer_2_enabled": {
+        "name": "Luogo di ricarica 3 timer 2 abilitato"
+      },
+      "charging_location_3_timer_3_enabled": {
+        "name": "Luogo di ricarica 3 timer 3 abilitato"
+      },
+      "charging_location_4_active": {
+        "name": "Luogo di ricarica 4 attivo"
+      },
+      "charging_location_4_reduced_ac_current": {
+        "name": "Luogo di ricarica 4 corrente di ricarica CA ridotta"
+      },
+      "charging_location_4_auto_release_connector": {
+        "name": "Luogo di ricarica 4 sblocco automatico del connettore CA"
+      },
+      "charging_location_4_timer_1_enabled": {
+        "name": "Luogo di ricarica 4 timer 1 abilitato"
+      },
+      "charging_location_4_timer_2_enabled": {
+        "name": "Luogo di ricarica 4 timer 2 abilitato"
+      },
+      "charging_location_4_timer_3_enabled": {
+        "name": "Luogo di ricarica 4 timer 3 abilitato"
+      },
+      "charging_location_5_active": {
+        "name": "Luogo di ricarica 5 attivo"
+      },
+      "charging_location_5_reduced_ac_current": {
+        "name": "Luogo di ricarica 5 corrente di ricarica CA ridotta"
+      },
+      "charging_location_5_auto_release_connector": {
+        "name": "Luogo di ricarica 5 sblocco automatico del connettore CA"
+      },
+      "charging_location_5_timer_1_enabled": {
+        "name": "Luogo di ricarica 5 timer 1 abilitato"
+      },
+      "charging_location_5_timer_2_enabled": {
+        "name": "Luogo di ricarica 5 timer 2 abilitato"
+      },
+      "charging_location_5_timer_3_enabled": {
+        "name": "Luogo di ricarica 5 timer 3 abilitato"
       }
     },
     "switch": {
@@ -2030,6 +2249,9 @@
       },
       "companion_read_parking_position": {
         "name": "Leggi posizione di parcheggio"
+      },
+      "companion_read_charging_locations": {
+        "name": "Leggi luoghi di ricarica"
       }
     },
     "number": {

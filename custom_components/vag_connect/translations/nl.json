@@ -1624,6 +1624,135 @@
           "immediate_discharging": "Nu ontladen",
           "timer_charging_climatization": "Getimed laden met klimaatregeling"
         }
+      },
+      "charging_location_count": {
+        "name": "Aantal laadlocaties"
+      },
+      "charging_location_current": {
+        "name": "Huidige laadlocatie",
+        "state": {
+          "none": "Geen"
+        }
+      },
+      "charging_location_1_name": {
+        "name": "Laadlocatie 1"
+      },
+      "charging_location_1_active_timers": {
+        "name": "Laadlocatie 1 actieve timers"
+      },
+      "charging_location_1_timer_1_time": {
+        "name": "Laadlocatie 1 timer 1 tijd"
+      },
+      "charging_location_1_timer_1_weekdays": {
+        "name": "Laadlocatie 1 timer 1 weekdagen"
+      },
+      "charging_location_1_timer_2_time": {
+        "name": "Laadlocatie 1 timer 2 tijd"
+      },
+      "charging_location_1_timer_2_weekdays": {
+        "name": "Laadlocatie 1 timer 2 weekdagen"
+      },
+      "charging_location_1_timer_3_time": {
+        "name": "Laadlocatie 1 timer 3 tijd"
+      },
+      "charging_location_1_timer_3_weekdays": {
+        "name": "Laadlocatie 1 timer 3 weekdagen"
+      },
+      "charging_location_2_name": {
+        "name": "Laadlocatie 2"
+      },
+      "charging_location_2_active_timers": {
+        "name": "Laadlocatie 2 actieve timers"
+      },
+      "charging_location_2_timer_1_time": {
+        "name": "Laadlocatie 2 timer 1 tijd"
+      },
+      "charging_location_2_timer_1_weekdays": {
+        "name": "Laadlocatie 2 timer 1 weekdagen"
+      },
+      "charging_location_2_timer_2_time": {
+        "name": "Laadlocatie 2 timer 2 tijd"
+      },
+      "charging_location_2_timer_2_weekdays": {
+        "name": "Laadlocatie 2 timer 2 weekdagen"
+      },
+      "charging_location_2_timer_3_time": {
+        "name": "Laadlocatie 2 timer 3 tijd"
+      },
+      "charging_location_2_timer_3_weekdays": {
+        "name": "Laadlocatie 2 timer 3 weekdagen"
+      },
+      "charging_location_3_name": {
+        "name": "Laadlocatie 3"
+      },
+      "charging_location_3_active_timers": {
+        "name": "Laadlocatie 3 actieve timers"
+      },
+      "charging_location_3_timer_1_time": {
+        "name": "Laadlocatie 3 timer 1 tijd"
+      },
+      "charging_location_3_timer_1_weekdays": {
+        "name": "Laadlocatie 3 timer 1 weekdagen"
+      },
+      "charging_location_3_timer_2_time": {
+        "name": "Laadlocatie 3 timer 2 tijd"
+      },
+      "charging_location_3_timer_2_weekdays": {
+        "name": "Laadlocatie 3 timer 2 weekdagen"
+      },
+      "charging_location_3_timer_3_time": {
+        "name": "Laadlocatie 3 timer 3 tijd"
+      },
+      "charging_location_3_timer_3_weekdays": {
+        "name": "Laadlocatie 3 timer 3 weekdagen"
+      },
+      "charging_location_4_name": {
+        "name": "Laadlocatie 4"
+      },
+      "charging_location_4_active_timers": {
+        "name": "Laadlocatie 4 actieve timers"
+      },
+      "charging_location_4_timer_1_time": {
+        "name": "Laadlocatie 4 timer 1 tijd"
+      },
+      "charging_location_4_timer_1_weekdays": {
+        "name": "Laadlocatie 4 timer 1 weekdagen"
+      },
+      "charging_location_4_timer_2_time": {
+        "name": "Laadlocatie 4 timer 2 tijd"
+      },
+      "charging_location_4_timer_2_weekdays": {
+        "name": "Laadlocatie 4 timer 2 weekdagen"
+      },
+      "charging_location_4_timer_3_time": {
+        "name": "Laadlocatie 4 timer 3 tijd"
+      },
+      "charging_location_4_timer_3_weekdays": {
+        "name": "Laadlocatie 4 timer 3 weekdagen"
+      },
+      "charging_location_5_name": {
+        "name": "Laadlocatie 5"
+      },
+      "charging_location_5_active_timers": {
+        "name": "Laadlocatie 5 actieve timers"
+      },
+      "charging_location_5_timer_1_time": {
+        "name": "Laadlocatie 5 timer 1 tijd"
+      },
+      "charging_location_5_timer_1_weekdays": {
+        "name": "Laadlocatie 5 timer 1 weekdagen"
+      },
+      "charging_location_5_timer_2_time": {
+        "name": "Laadlocatie 5 timer 2 tijd"
+      },
+      "charging_location_5_timer_2_weekdays": {
+        "name": "Laadlocatie 5 timer 2 weekdagen"
+      },
+      "charging_location_5_timer_3_time": {
+        "name": "Laadlocatie 5 timer 3 tijd"
+      },
+      "charging_location_5_timer_3_weekdays": {
+        "name": "Laadlocatie 5 timer 3 weekdagen"
       }
     },
     "binary_sensor": {
@@ -1956,6 +2085,96 @@
       },
       "connect_contract_active": {
         "name": "Connect-contract actief"
+      },
+      "charging_location_1_active": {
+        "name": "Laadlocatie 1 actief"
+      },
+      "charging_location_1_reduced_ac_current": {
+        "name": "Laadlocatie 1 verminderde AC-laadstroom"
+      },
+      "charging_location_1_auto_release_connector": {
+        "name": "Laadlocatie 1 AC-stekker automatisch ontgrendelen"
+      },
+      "charging_location_1_timer_1_enabled": {
+        "name": "Laadlocatie 1 timer 1 ingeschakeld"
+      },
+      "charging_location_1_timer_2_enabled": {
+        "name": "Laadlocatie 1 timer 2 ingeschakeld"
+      },
+      "charging_location_1_timer_3_enabled": {
+        "name": "Laadlocatie 1 timer 3 ingeschakeld"
+      },
+      "charging_location_2_active": {
+        "name": "Laadlocatie 2 actief"
+      },
+      "charging_location_2_reduced_ac_current": {
+        "name": "Laadlocatie 2 verminderde AC-laadstroom"
+      },
+      "charging_location_2_auto_release_connector": {
+        "name": "Laadlocatie 2 AC-stekker automatisch ontgrendelen"
+      },
+      "charging_location_2_timer_1_enabled": {
+        "name": "Laadlocatie 2 timer 1 ingeschakeld"
+      },
+      "charging_location_2_timer_2_enabled": {
+        "name": "Laadlocatie 2 timer 2 ingeschakeld"
+      },
+      "charging_location_2_timer_3_enabled": {
+        "name": "Laadlocatie 2 timer 3 ingeschakeld"
+      },
+      "charging_location_3_active": {
+        "name": "Laadlocatie 3 actief"
+      },
+      "charging_location_3_reduced_ac_current": {
+        "name": "Laadlocatie 3 verminderde AC-laadstroom"
+      },
+      "charging_location_3_auto_release_connector": {
+        "name": "Laadlocatie 3 AC-stekker automatisch ontgrendelen"
+      },
+      "charging_location_3_timer_1_enabled": {
+        "name": "Laadlocatie 3 timer 1 ingeschakeld"
+      },
+      "charging_location_3_timer_2_enabled": {
+        "name": "Laadlocatie 3 timer 2 ingeschakeld"
+      },
+      "charging_location_3_timer_3_enabled": {
+        "name": "Laadlocatie 3 timer 3 ingeschakeld"
+      },
+      "charging_location_4_active": {
+        "name": "Laadlocatie 4 actief"
+      },
+      "charging_location_4_reduced_ac_current": {
+        "name": "Laadlocatie 4 verminderde AC-laadstroom"
+      },
+      "charging_location_4_auto_release_connector": {
+        "name": "Laadlocatie 4 AC-stekker automatisch ontgrendelen"
+      },
+      "charging_location_4_timer_1_enabled": {
+        "name": "Laadlocatie 4 timer 1 ingeschakeld"
+      },
+      "charging_location_4_timer_2_enabled": {
+        "name": "Laadlocatie 4 timer 2 ingeschakeld"
+      },
+      "charging_location_4_timer_3_enabled": {
+        "name": "Laadlocatie 4 timer 3 ingeschakeld"
+      },
+      "charging_location_5_active": {
+        "name": "Laadlocatie 5 actief"
+      },
+      "charging_location_5_reduced_ac_current": {
+        "name": "Laadlocatie 5 verminderde AC-laadstroom"
+      },
+      "charging_location_5_auto_release_connector": {
+        "name": "Laadlocatie 5 AC-stekker automatisch ontgrendelen"
+      },
+      "charging_location_5_timer_1_enabled": {
+        "name": "Laadlocatie 5 timer 1 ingeschakeld"
+      },
+      "charging_location_5_timer_2_enabled": {
+        "name": "Laadlocatie 5 timer 2 ingeschakeld"
+      },
+      "charging_location_5_timer_3_enabled": {
+        "name": "Laadlocatie 5 timer 3 ingeschakeld"
       }
     },
     "switch": {
@@ -2030,6 +2249,9 @@
       },
       "companion_read_parking_position": {
         "name": "Parkeerpositie lezen"
+      },
+      "companion_read_charging_locations": {
+        "name": "Laadlocaties lezen"
       }
     },
     "number": {

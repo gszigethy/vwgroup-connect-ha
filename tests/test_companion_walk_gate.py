@@ -30,7 +30,8 @@ H = 3600
 
 def test_the_gated_walks():
     cadence = {name: nav.cadence for name, nav in NAVS.items() if nav.cadence != "poll"}
-    assert cadence == {"driving_data": "trip", "parking_position": "trip", "vehicle_health": "car_data"}
+    assert cadence == {"driving_data": "trip", "parking_position": "trip", "vehicle_health": "car_data",
+                       "charging_locations": "trip"}
 
 
 # ── the Driving data tile ─────────────────────────────────────────────────────
@@ -69,7 +70,7 @@ def _walked(channel, name, clock, *, trip=TILE, synced=T0 - timedelta(minutes=30
 FIELDS = {"electric_range_km": 80, "combustion_range_km": 400}
 
 
-@pytest.mark.parametrize("name", ["driving_data", "parking_position", "vehicle_health"])
+@pytest.mark.parametrize("name", ["driving_data", "parking_position", "vehicle_health", "charging_locations"])
 def test_first_read_then_nothing_while_nothing_changes(name):
     clock = Clock()
     channel = _channel(clock)
@@ -81,7 +82,7 @@ def test_first_read_then_nothing_while_nothing_changes(name):
     assert channel._walk_reason(NAVS[name], FIELDS) == "12 h refresh"
 
 
-@pytest.mark.parametrize("name", ["driving_data", "parking_position", "vehicle_health"])
+@pytest.mark.parametrize("name", ["driving_data", "parking_position", "vehicle_health", "charging_locations"])
 def test_a_trip_end_changes_the_tile(name):
     clock = Clock()
     channel = _channel(clock)
@@ -131,7 +132,7 @@ def test_a_narrowed_sync_time_is_not_new_data():
     assert channel._walk_reason(NAVS["vehicle_health"], FIELDS) is None
 
 
-@pytest.mark.parametrize("name", ["driving_data", "parking_position"])
+@pytest.mark.parametrize("name", ["driving_data", "parking_position", "charging_locations"])
 def test_a_trip_walk_needs_a_range_drop_with_the_new_data(name):
     clock = Clock()
     channel = _channel(clock)
