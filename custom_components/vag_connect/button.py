@@ -128,6 +128,9 @@ class VagRefreshButton(VagConnectEntity, ButtonEntity):
         super().__init__(coordinator, vin, "refresh_button")
 
     async def async_press(self) -> None:
+        # A requested refresh also reads the companion detail screens that
+        # otherwise wait for a trip or new car data.
+        self.coordinator.companion_walk_details_next()
         await self.coordinator.async_request_refresh()
 
 

@@ -34,6 +34,35 @@ Affected entities expose `companion_read_at` (UTC), the time the app screen was
 read, not when the car last sent data. Expiry adds no navigation, retry or car
 request.
 
+### When the driving data, parking position and Vehicle Health are read
+
+These three opt-in reads are not walked on every poll. Their values can change
+only when the car sends new data, so a poll that cannot have changed them keeps
+the last reading. Their switches work as for every other read: on reads them on
+the next poll, off drops their values.
+
+| Read | Walked when |
+|---|---|
+| Driving data, parking position | a trip has ended: the overview's Driving data tile (`Last driven: … Average consumption: …`) changed; or the car sent new data and the electric or petrol range dropped since the last read, while not charging (two identical trips leave the tile as it was) |
+| Vehicle Health (odometer, service, warnings) | the car sent new data (a trip end included) |
+
+"The car sent new data" means the overview's *Synchronised … ago* time moved
+past its rounding and then stood still for 10 minutes, so a car still sending
+data on the move is read once it has parked. With the vehicle sync interval
+on, each sync is new data.
+
+All three are also read:
+
+- on the first poll after a start or reload, and when their switch is turned on;
+- every 12 hours, well before the 24-hour expiry above;
+- driving data and the parking position, every 6 hours while the Driving data
+  tile is not on the overview;
+- on **Refresh data**, and on the read that follows **Force vehicle refresh**.
+
+Vehicle Settings shares the health switch but holds the charge limit, which can
+change in the app at any time, so it is still read on every poll. Whether a
+health warning can reach the app without a vehicle sync is open (#78).
+
 ## Overview (Vehicle tab)
 
 The overview is read on every poll; no tap is needed. Each tile narrates

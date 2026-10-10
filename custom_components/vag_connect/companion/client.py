@@ -602,6 +602,10 @@ class CompanionClient:
         """Re-apply the last known car sync time at setup."""
         self._channel.restore_synced_at(seen)
 
+    def walk_details_next_read(self) -> None:
+        """Have the next read walk every opted-in detail screen."""
+        self._channel.walk_details_next_read()
+
     def reset_cooldown(self) -> None:
         """Clear a stuck failure/rate-limit backoff (user-initiated retry)."""
         self._channel.reset_cooldown()
