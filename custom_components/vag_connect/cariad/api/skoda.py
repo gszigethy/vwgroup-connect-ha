@@ -392,6 +392,11 @@ def parse_skoda_warning_lights(lights: Any) -> dict[str, Any]:
     return result
 
 
+# How many requests of the 20/hour/key budget must still be free before a
+# command may borrow one. Crude on purpose: one integer compare, no pacing model.
+_OFFICIAL_COMMAND_RESERVE = 4
+
+
 class SkodaClient(CariadBaseClient):
     """Škoda API client."""
 
@@ -452,6 +457,29 @@ class SkodaClient(CariadBaseClient):
             self._session, email="", password=api_key, spin=self._spin,
             keys_by_vin=keys_by_vin,
         )
+
+    def official_command_connector(self, vin: str) -> Any:
+        """The official client to retry a COMMAND on for this VIN, or None.
+
+        Mirrors ``mbb_fallback_connector`` on the VW EU client. Non-None only
+        when the official channel is armed, this VIN has a key, and the server
+        has not told us we are out of budget — the official command path has no
+        rate guard of its own, and the 20/hour/key bucket is shared with the
+        reads, so spending it here must not take the data down.
+        """
+        off = self._supplementary_official
+        if off is None:
+            return None
+        if getattr(off, "over_rate_limit", False) is True:
+            return None
+        if not callable(getattr(off, "has_key_for", None)) or not off.has_key_for(vin):
+            return None
+        # Leave headroom for the reads. ``None`` means the server has not told us
+        # anything yet, which is not a reason to refuse.
+        remaining = getattr(off, "rate_limit_remaining", None)
+        if isinstance(remaining, int) and remaining < _OFFICIAL_COMMAND_RESERVE:
+            return None
+        return off
 
     async def _official_read_rate_safe(self, vin: str) -> "VehicleData | None":
         """Shared body for the official public-API reads (failover + active
