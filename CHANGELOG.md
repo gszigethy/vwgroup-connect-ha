@@ -42,6 +42,24 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.12.0-2] - 2026-10-10 — Companion: a temperature change reaches a running climate
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.12.0** plus fork release **2**, on top of 4.12.0-1.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a regular release. Select `v4.12.0-2`, download, and restart Home Assistant.
+
+### Changed
+- **Companion: a temperature change moves the dial of a running air conditioning.**
+  - Before, *Desired Temperature* and the climate entity's target were only held for the next Start, so a running climate kept the old temperature.
+  - While the air conditioning runs, a change now opens the Air Conditioning sheet, moves the dial in one batch and reads it back. The app sends the new temperature to the car itself, at the cost of one car request.
+  - The usual command checks apply: verified app version, °C dial, request-limit pause, 60 s between commands.
+  - With the climate off, or running window heating alone (the app disables the dial), a change is still only stored for the next Start. (#73)
+
+### Not yet confirmed on a live car (app 4.6.4)
+- Moving the dial of a running air conditioning.
+
 ## [4.12.0-1] - 2026-10-10 — Volkswagen Companion (ADB) on upstream 4.12.0
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
