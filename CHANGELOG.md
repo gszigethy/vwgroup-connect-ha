@@ -42,6 +42,17 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.12.0-5] - 2026-10-10 — Companion: no stuck charging values after a reload
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.12.0** plus fork release **5**. It also contains the changes of the 4.12.0-1 to 4.12.0-4 pre-releases below.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** select `v4.12.0-5`, download, and restart Home Assistant.
+
+### Fixed
+- **Companion: charging power, charging speed, remaining charging time and vehicle status no longer stay stuck after a reload.** A screen read still running while the entry unloaded could create these sensors on the unloading entry. They kept their last value, such as the charging power after a charge had ended, and the reloaded entry's own sensors were rejected as duplicates. A read that finishes during an unload now creates nothing; its values are restored by the reloaded entry. (#83)
+
 ## [4.12.0-4] - 2026-10-10 — Companion: detail screens read when they can have changed
 
 > Fork pre-release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
