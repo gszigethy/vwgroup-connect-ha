@@ -147,12 +147,31 @@ class SkodaOfficialClient:
         # Self-block when the server says we're out of budget. Prefer the explicit
         # Retry-After (429/503); else block for the reset window once remaining==0.
         wait = 0
-        if self.retry_after_s and str(resp.status).startswith(("4", "5")):
-            wait = self.retry_after_s
+        # Decide the self-block from THIS response's Retry-After, never from the
+        # attribute. ``self.retry_after_s`` is set on a 429/503 and never cleared,
+        # so reading it here re-armed the block on any later 4xx — a routine
+        # command 403 could park the READ channel for the old 429's window
+        # (``over_rate_limit`` is what skoda.py's read path skips on). The public
+        # attribute keeps its last-seen value for diagnostics.
+        _ra_now = int(ra) if (ra is not None and str(ra).isdigit()) else 0
+        if _ra_now and str(resp.status).startswith(("4", "5")):
+            wait = _ra_now
         elif self.rate_limit_remaining == 0 and self.rate_limit_reset_s:
             wait = self.rate_limit_reset_s
         if wait > 0:
             self._blocked_until = time.monotonic() + wait
+
+    def has_key_for(self, vin: str) -> bool:
+        """True when this VIN resolves to a non-empty API key.
+
+        Lets a caller skip a request that ``_headers`` would refuse anyway
+        (:meth:`_headers` raises before the session call when the key is empty),
+        without reaching into ``_key_for``.
+        """
+        try:
+            return bool(self._key_for(vin))
+        except Exception:  # noqa: BLE001
+            return False
 
     @property
     def over_rate_limit(self) -> bool:
