@@ -25,7 +25,9 @@ A temperature change costs one car request of its own: the app sends the dial
 1 s after it stops moving (and when the sheet closes), whether or not Start is
 pressed. So the integration checks the mode, the Start button, the request limit,
 the app build and the dial's °C labels before the first dial tap, sends every
-step inside that 1 s, and reads the dial back once. A wrong reading is reported
+step inside that 1 s, and reads the dial back once. The phone times the batch
+itself and stops after a tap that came more than 700 ms after the previous one,
+so a slow phone costs at most two requests (and no Start), never one per step. A wrong reading is reported
 and Start is not pressed; it is never corrected, as that would be another
 request. The relay agent sends one request per tap, so over the relay only a
 0.5 °C change is made; a larger one is refused.

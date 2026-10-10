@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
@@ -30,6 +31,44 @@ _ADBKEY_BASENAME = "vag_connect_adbkey"
 
 class CompanionTransportError(RuntimeError):
     """A device-side / connection failure. Carries a human-readable reason."""
+
+
+# The longest gap between two burst taps, in 1/100 s (/proc/uptime's unit).
+_BURST_MAX_GAP_CS = 70
+_BURST_DONE = re.compile(r"^taps=(\d+)$", re.M)
+
+
+def tap_burst_script(x: int, y: int, count: int) -> str:
+    """The shell script behind ``tap_burst`` (POSIX sh, so mksh and toybox).
+
+    Each ``input tap`` is its own process (about 315 ms on a live phone), so
+    the gap between taps is whatever that process takes. After every tap the
+    script reads /proc/uptime (a builtin ``read``: no extra process) and stops
+    when the tap ended more than 700 ms after the previous one. A slow tap can
+    still exceed 1 s once, so an aborted burst costs at most two debounced
+    sends; it never runs on. The seconds are cut to six digits so the sum
+    stays inside mksh's 32-bit arithmetic. A phone whose uptime does not read
+    as "<s>.<cc>" gets no taps at all.
+    """
+    tap = (
+        f"input tap {int(x)} {int(y)}; n=$((n+1)); echo t; "
+        "read u r </proc/uptime; s=000000${u%.*}; s=${s#\"${s%??????}\"}; "
+        "c=$((1$s${u#*.}-100000000)); "
+        "if [ -n \"$l\" ]; then d=$((c-l)); "
+        "if [ $d -lt 0 ]; then d=$((d+100000000)); fi; "
+        f"if [ $d -gt {_BURST_MAX_GAP_CS} ]; then break; fi; fi; l=$c"
+    )
+    steps = " ".join(str(i) for i in range(int(count)))
+    return (
+        "n=0; l=; read u r </proc/uptime; "
+        "case \"$u\" in *[0-9].[0-9][0-9]) "
+        f"for i in {steps}; do {tap}; done;; esac; echo taps=$n"
+    )
+
+
+def parse_tap_burst(out: str) -> int | None:
+    match = _BURST_DONE.search(out or "")
+    return int(match.group(1)) if match else None
 
 
 class NetworkAdbTransport:
@@ -236,16 +275,17 @@ class NetworkAdbTransport:
     # back; the relay agent has no shell and taps one command at a time.
     can_tap_burst = True
 
-    async def tap_burst(self, x: int, y: int, count: int) -> None:
-        """Tap one point ``count`` times in ONE shell call, with no dump between.
+    async def tap_burst(self, x: int, y: int, count: int) -> int | None:
+        """Tap one point up to ``count`` times in ONE shell call; return how many.
 
-        Each ``input tap`` starts its own process (a few hundred ms), so the
-        taps land well inside an app's 1 s debounce. An ``echo`` after each
-        keeps output flowing, so a long burst never reads as a silent socket.
+        The phone times the taps itself (see ``tap_burst_script``) and stops
+        once one tap ended more than 700 ms after the previous, so a slow phone
+        cannot leave a gap past an app's 1 s debounce for the remaining taps.
+        None when the phone did not report a count, 0 when it has no clock.
         """
-        tap = f"input tap {int(x)} {int(y)}; echo"
-        await self.shell("; ".join([tap] * int(count)), 10.0 + count)
+        out = await self.shell(tap_burst_script(x, y, count), 10.0 + 2 * count)
         await asyncio.sleep(0.25)
+        return parse_tap_burst(out)
 
     # v2.26.0 — reliability primitives adapted from the prior-art ADB projects.
 

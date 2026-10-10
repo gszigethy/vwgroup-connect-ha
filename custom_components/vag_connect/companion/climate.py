@@ -382,6 +382,13 @@ class ClimateController:
                     f"a command was sent {int(since)}s ago; the companion channel "
                     f"keeps at least {int(_WRITE_MIN_INTERVAL_S)}s between commands"
                 )
+        if ch._live_app_version not in CLIMATE_APP_VERSIONS:
+            # Rule 9: the mode picker and the dial are walked with geometry from
+            # the listed builds, so a newer one is refused before any tap.
+            raise self._blocked(
+                f"climate commands are mapped for app {'/'.join(CLIMATE_APP_VERSIONS)} "
+                f"only; the phone has {ch._live_app_version}. Reads still work."
+            )
 
     async def _select(self, nodes: list[UiNode], window_heating_only: bool) -> list[UiNode]:
         """Make Start start the requested function. Local choice only; nothing is sent."""
@@ -469,8 +476,10 @@ class ClimateController:
         The app sends every dial change to the car once the dial has rested
         for 1 s, and again when the sheet closes, so a change costs one car
         request even if Start is never pressed. Everything that could stop
-        Start is therefore checked before the first tap, all the steps are
-        tapped back to back inside that 1 s, and the dial is read back once,
+        Start is therefore checked before the first tap (the app build already
+        in ``_gate``), all the steps are tapped back to back inside that 1 s
+        (the phone stops the batch when a tap comes late; at most two sends
+        then reach the car), and the dial is read back once,
         past the debounce. A wrong reading is reported, never corrected: a
         correction would be another request, and Start would send a wrong value.
         """
@@ -502,10 +511,11 @@ class ClimateController:
                 "requests; not changing it"
             )
         self._mark_write()
+        made: int | None = steps
         if steps == 1:
             await t.tap(*neighbour.tap_point)
         else:
-            await t.tap_burst(*neighbour.tap_point, steps)
+            made = await t.tap_burst(*neighbour.tap_point, steps)
         # Keep the sheet open past the app's 1 s debounce, then read it once.
         await self._sleep(_DIAL_FLUSH_S)
         nodes, _cleared = await self._ch._dump_and_clear_overlays()
@@ -513,6 +523,21 @@ class ClimateController:
             self._ch._trip_rate_limit()
             raise self._blocked(_LIMIT_REASON)
         landed = read_dial(nodes, strings)[0]
+        if made == 0:
+            raise self._blocked(
+                "the phone gave no clock to time the dial taps, so none was "
+                "made; Start was not pressed"
+            )
+        if made is not None and made < steps:
+            # The phone stopped the batch: a tap came more than 700 ms after
+            # the one before, so the app may already have sent a step between.
+            raise self._blocked(
+                f"the phone was too slow between dial taps and stopped after "
+                f"{made} of {steps}; the dial shows "
+                f"{'an unreadable value' if landed is None else f'{landed:g} °C'}, "
+                f"not {target:g} °C, and Start was not pressed. At most two "
+                "temperature changes reached the car; none was corrected"
+            )
         if landed != target:
             raise self._blocked(
                 f"the temperature dial landed at "
@@ -528,7 +553,7 @@ class ClimateController:
 
         A dial change reaches the car whether or not Start is pressed, so
         every reason Start could be refused is checked first: the mode, the
-        Start button, a request limit, and the app build the dial is mapped on.
+        Start button and a request limit (the app build is pinned by ``_gate``).
         """
         ch = self._ch
         sheet = read_sheet(nodes)
@@ -556,12 +581,6 @@ class ClimateController:
         if ch._limit_on_screen(nodes):
             ch._trip_rate_limit()
             raise self._blocked(_LIMIT_REASON)
-        if not ch._version_ok or ch._live_app_version not in CLIMATE_APP_VERSIONS:
-            raise self._blocked(
-                f"the temperature dial is mapped for app {'/'.join(CLIMATE_APP_VERSIONS)} "
-                f"only; the phone has {ch._live_app_version or 'an unknown version'}. "
-                "The temperature was not changed"
-            )
 
     def _check_ready(
         self,

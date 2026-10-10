@@ -5,6 +5,8 @@ and command walks against a fake phone that renders the same layouts."""
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -167,6 +169,14 @@ class FakePhone:
         self.connected = True
         self.taps: list[str] = []
         self.bursts: list[int] = []  # one entry per tap_burst shell call
+        # The app's 1000 ms dial debounce, on a fake clock: a dump takes 1 s,
+        # a tap 0.3 s. A change that rests for 1 s, or is pending when the
+        # sheet closes or Start is pressed, is one settings request.
+        self.clock = 0.0
+        self.pending = False
+        self.changed_at = 0.0
+        self.settings_requests = 0
+        self.burst_gaps: list[float] | None = None
         self._targets: list[tuple[tuple[int, int, int, int], str]] = []
 
     # transport surface
@@ -179,16 +189,35 @@ class FakePhone:
     async def current_app_version(self, package):
         return self._version
 
+    def advance(self, seconds: float) -> None:
+        self.clock += seconds
+        if self.pending and self.clock - self.changed_at >= 1.0:
+            self._flush()
+
+    def _flush(self) -> None:
+        if self.pending:
+            self.settings_requests += 1
+            self.pending = False
+
     async def key_back(self):
+        self._flush()
         self.taps.append("BACK")
         self.screen = "sheet" if self.screen == "picker" else "overview"
 
     async def dump_ui(self) -> str:
+        self.advance(1.0)
+        return self._render()
+
+    def _render(self) -> str:
         self._targets = []
         body = getattr(self, "_render_" + self.screen)()
         return f'<?xml version="1.0"?><hierarchy rotation="0">{body}</hierarchy>'
 
     async def tap(self, x, y):
+        self.advance(0.3)
+        self._hit(x, y)
+
+    def _hit(self, x, y):
         hit = [
             (box, name) for box, name in self._targets
             if box[0] <= x <= box[2] and box[1] <= y <= box[3]
@@ -204,11 +233,19 @@ class FakePhone:
 
     async def tap_burst(self, x, y, count):
         # One shell call: the dial's slots stay where they are while the
-        # numbers scroll through them, so each tap hits the next step.
+        # numbers scroll through them, so each tap hits the next step. Like
+        # tap_burst_script, it stops after a tap that came over 700 ms late.
         self.bursts.append(count)
-        for _ in range(count):
-            await self.dump_ui()
-            await self.tap(x, y)
+        gaps = self.burst_gaps or [0.315] * count
+        made = 0
+        for i, gap in enumerate(gaps[:count]):
+            self.advance(gap)
+            self._render()
+            self._hit(x, y)
+            made += 1
+            if i and gap > 0.7:
+                break
+        return made
 
     # rendering
     def _t(self, name, left, top, right, bottom, **kw) -> str:
@@ -300,6 +337,7 @@ class FakePhone:
         self.screen = "budget" if self.budget_used else "sheet"
 
     def _on_up(self, _):
+        self._flush()  # closing the sheet sends a pending change
         self.screen = "sheet" if self.screen == "picker" else "overview"
 
     def _on_pick(self, _):
@@ -318,8 +356,10 @@ class FakePhone:
     def _on_dial(self, name):
         if not self.dial_locked:
             self.temp = float(name.split(":")[1])
+            self.pending, self.changed_at = True, self.clock
 
     def _on_start(self, _):
+        self._flush()  # Start sends a pending dial value first
         if self.off_grid:
             self.screen = "dialog"
             return
@@ -345,10 +385,10 @@ def _controller(phone: FakePhone, now=lambda: 10_000.0, strings=None):
     # The dial is only walked on a mode the app's own labels confirm.
     channel._app_strings = STRINGS if strings is None else strings
 
-    async def no_sleep(_s):
-        return None
+    async def fake_sleep(seconds):
+        phone.advance(seconds)
 
-    return channel, ClimateController(channel, sleep=no_sleep)
+    return channel, ClimateController(channel, sleep=fake_sleep)
 
 
 # ── commands ─────────────────────────────────────────────────────────────────
@@ -649,6 +689,7 @@ async def test_a_wrong_landing_is_reported_and_neither_corrected_nor_started(lan
     assert dial_taps == ["dial:22.5", "dial:23.0"] and phone.bursts == [2]
     assert "start" not in phone.taps and phone.running is None
     assert channel._last_write_at is not None  # the change counts as a request
+    assert phone.settings_requests == 1  # and only one: nothing was corrected
 
 
 def _no_dial_taps(phone: FakePhone) -> bool:
@@ -715,11 +756,13 @@ async def test_an_active_limit_pause_refuses_before_any_dial_tap():
 
 @pytest.mark.asyncio
 async def test_a_build_newer_than_the_listed_ones_refuses_before_any_dial_tap():
-    phone = FakePhone(version="4.7.0", temp=22.0)
+    # Refused in the gate: not even the tile or the mode picker is tapped.
+    phone = FakePhone(version="4.7.0", mode="wh", temp=22.0)
     _ch, ctrl = _controller(phone)
-    with pytest.raises(CompanionWriteBlocked, match="dial is mapped for app 4.6.4/4.3.2 only"):
+    # (PR #51 adds the same pin, with its own message, earlier in the gate.)
+    with pytest.raises(CompanionWriteBlocked, match="4.6.4/4.3.2 only|version 4.7.0"):
         await ctrl.start(temp_c=24.0)
-    assert _no_dial_taps(phone)
+    assert phone.taps == [] and phone.bursts == []
 
 
 @pytest.mark.asyncio
@@ -756,17 +799,62 @@ async def test_the_adb_burst_is_one_shell_call():
 
     async def shell(cmd, timeout_s=10.0):
         sent.append((cmd, timeout_s))
-        return ""
+        return "t\nt\nt\ntaps=3\n"
 
     t.shell = shell
     real_sleep = tmod.asyncio.sleep
     tmod.asyncio.sleep = lambda _s: real_sleep(0)
     try:
-        await t.tap_burst(970, 1103, 3)
+        made = await t.tap_burst(970, 1103, 3)
     finally:
         tmod.asyncio.sleep = real_sleep
-    assert len(sent) == 1
-    assert sent[0][0].count("input tap 970 1103") == 3
+    assert len(sent) == 1 and made == 3
+    assert "input tap 970 1103" in sent[0][0] and "for i in 0 1 2;" in sent[0][0]
+
+
+@pytest.mark.skipif(
+    not Path("/proc/uptime").exists() or shutil.which("sh") is None,
+    reason="needs a POSIX sh and /proc/uptime",
+)
+@pytest.mark.parametrize(("gaps", "made"), [
+    ([0.3] * 5, 5),                       # a normal phone: every tap
+    ([0.3, 0.3, 0.9, 0.3, 0.3], 3),       # a late tap: stop after it
+    ([1.2, 0.3, 0.3, 0.3, 0.3], 5),       # a slow FIRST tap has nothing pending
+])
+def test_the_burst_script_stops_after_a_late_tap(tmp_path, gaps, made):
+    from custom_components.vag_connect.companion.transport import (
+        parse_tap_burst,
+        tap_burst_script,
+    )
+
+    gap_file = tmp_path / "gaps"
+    gap_file.write_text("\n".join(str(g) for g in gaps) + "\n", encoding="utf-8")
+    stub = f'exec 3<"{gap_file}"; input() {{ read g <&3; sleep "$g"; }}; '
+    out = subprocess.run(
+        ["sh", "-c", stub + tap_burst_script(1, 2, len(gaps))],
+        capture_output=True, text=True, timeout=30, check=True,
+    ).stdout
+    assert parse_tap_burst(out) == made
+
+
+@pytest.mark.asyncio
+async def test_a_six_step_change_is_one_settings_request():
+    phone = FakePhone(temp=21.0)
+    _ch, ctrl = _controller(phone)
+    await ctrl.start(temp_c=24.0)
+    assert phone.bursts == [6] and phone.temp == 24.0 and phone.running == "ac"
+    assert phone.settings_requests == 1
+
+
+@pytest.mark.asyncio
+async def test_a_late_tap_stops_the_batch_at_two_settings_requests_and_no_start():
+    phone = FakePhone(temp=21.0)
+    phone.burst_gaps = [0.3, 0.3, 1.2, 0.3, 0.3, 0.3]  # the third tap is late
+    _ch, ctrl = _controller(phone)
+    with pytest.raises(CompanionWriteBlocked, match="too slow.*after 3 of 6.*Start was not pressed"):
+        await ctrl.start(temp_c=24.0)
+    assert phone.temp == 22.5 and "start" not in phone.taps and phone.running is None
+    assert phone.settings_requests == 2  # 22.0 during the late gap, then 22.5
 
 
 def test_dial_reads_lo_and_hi():
