@@ -28,10 +28,7 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 
-from .const import (
-    DOMAIN, CONF_BRAND, CONF_USERNAME, CONF_PASSWORD,
-    CONF_COMPANION_WAKE_SLEEP, CONF_COMPANION_CLOSE_APP,
-)
+from .const import DOMAIN, CONF_BRAND, CONF_USERNAME, CONF_PASSWORD
 from .coordinator import VagConnectCoordinator, entry_settings_fingerprint
 
 _LOGGER = logging.getLogger(__name__)
@@ -1117,14 +1114,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: VagConnectConfigEntry) 
 async def _async_update_listener(
     hass: HomeAssistant, entry: VagConnectConfigEntry
 ) -> None:
-    """Handle options changes — reload credentials and companion transport flags.
+    """Handle options changes — reload only when credentials change.
 
     scan_interval and spin are applied live without a full reload:
     - scan_interval: _poll_loop re-reads it on every iteration
     - spin: coordinator reads it directly from entry.data at command time
 
-    Brand/credentials need a new authenticated API client; companion wake/sleep
-    and close-app flags need a new transport.
+    A full reload is only triggered when brand, username or password changes
+    (those require a new authenticated API client). Companion wake/sleep and
+    close-app flags are pushed to the live transport instead: a reload would
+    build a new channel with no write-interval memory.
     """
     coordinator: VagConnectCoordinator | None = getattr(entry, "runtime_data", None)
 
@@ -1151,8 +1150,6 @@ async def _async_update_listener(
 
     # Fields that require a full reload (new auth client needed)
     _RELOAD_KEYS = {CONF_BRAND, CONF_USERNAME, CONF_PASSWORD}
-    if coordinator and getattr(coordinator, "is_companion", lambda: False)():
-        _RELOAD_KEYS.update({CONF_COMPANION_WAKE_SLEEP, CONF_COMPANION_CLOSE_APP})
     options: dict = dict(entry.options) if entry.options else {}
 
     changed = {
@@ -1193,5 +1190,11 @@ async def _async_update_listener(
                     await apply_relogin()
                 except Exception:  # noqa: BLE001 — never break a settings save
                     _LOGGER.debug("vw.de cred-relogin re-apply skipped", exc_info=True)
+            apply_flags = getattr(coordinator, "_apply_companion_transport_flags", None)
+            if callable(apply_flags):
+                try:
+                    await apply_flags()
+                except Exception:  # noqa: BLE001 — never break a settings save
+                    _LOGGER.debug("companion transport flags re-apply skipped", exc_info=True)
             # Trigger one immediate refresh so users see the effect
             await coordinator.async_request_refresh()

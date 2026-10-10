@@ -73,23 +73,6 @@ def test_retained_values_become_unavailable_with_read_time(monkeypatch, key, com
     assert entity.available
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("key", ["companion_wake_sleep", "companion_close_app"])
-@pytest.mark.parametrize("companion", [True, False])
-@pytest.mark.parametrize("old,new", [(False, True), (True, False), (False, False)])
-async def test_transport_option_reload_is_companion_only(key, companion, old, new):
-    coord = SimpleNamespace(is_companion=lambda: companion, async_request_refresh=AsyncMock())
-    entry = SimpleNamespace(entry_id="E1", data={key: old}, options={key: new}, runtime_data=coord)
-    hass = MagicMock()
-    hass.config_entries.async_reload = AsyncMock()
-    await _async_update_listener(hass, entry)
-    if companion and old != new:
-        hass.config_entries.async_reload.assert_awaited_once_with("E1")
-        coord.async_request_refresh.assert_not_awaited()
-    else:
-        hass.config_entries.async_reload.assert_not_awaited()
-
-
 @pytest.mark.parametrize("label", ["temporarily unavailable", "vorübergehend nicht verfügbar"])
 def test_generic_unavailability_is_not_a_request_limit(label):
     channel = CompanionChannel(object(), VW, time_fn=time.monotonic)
@@ -166,3 +149,53 @@ def test_held_climate_start_temperature_has_no_screen_read_age():
         "companion_nav_read_at": {"target_temperature": 1000.0},
     }})
     assert number._companion_read_at is None
+
+
+@pytest.mark.parametrize("old,new", [(False, True), (True, False)])
+@pytest.mark.parametrize("key", ["companion_wake_sleep", "companion_close_app"])
+@pytest.mark.asyncio
+async def test_transport_flags_apply_live_without_reload(key, old, new):
+    applied = AsyncMock()
+    coord = SimpleNamespace(
+        is_companion=lambda: True, async_request_refresh=AsyncMock(),
+        _apply_companion_transport_flags=applied,
+    )
+    entry = SimpleNamespace(
+        entry_id="E1", data={key: old}, options={key: new}, runtime_data=coord,
+    )
+    hass = MagicMock()
+    hass.config_entries.async_reload = AsyncMock()
+    await _async_update_listener(hass, entry)
+    hass.config_entries.async_reload.assert_not_awaited()  # keeps _last_write_at
+    applied.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_client_applies_flags_under_the_screen_lock():
+    from custom_components.vag_connect.companion.client import CompanionClient
+    client = object.__new__(CompanionClient)
+    lock = __import__("asyncio").Lock()
+    transport = SimpleNamespace(_wake_sleep=False, _close_app=False)
+    client._channel = SimpleNamespace(_screen_lock=lock, _t=transport)
+    await lock.acquire()
+    task = __import__("asyncio").ensure_future(
+        client.set_transport_flags(wake_sleep=True, close_app=True))
+    await __import__("asyncio").sleep(0)
+    assert transport._wake_sleep is False  # waits for the screen lock
+    lock.release()
+    await task
+    assert transport._wake_sleep is True and transport._close_app is True
+
+
+def test_reconcile_carries_read_time_with_restored_value():
+    from custom_components.vag_connect.cariad.vehicle_cache import reconcile
+    prev = {"odometer_km": 100, "companion_nav_read_at": {"odometer_km": 5.0}}
+    merged, _ = reconcile(prev, {"odometer_km": None, "companion_nav_read_at": {}})
+    assert merged["odometer_km"] == 100
+    assert merged["companion_nav_read_at"] == {"odometer_km": 5.0}
+    # a value this poll supplied itself is not tied to the old stamp
+    merged, _ = reconcile(prev, {"odometer_km": 120, "companion_nav_read_at": {}})
+    assert merged["companion_nav_read_at"] == {}
+    # fresh stamps win
+    merged, _ = reconcile(prev, {"odometer_km": None, "companion_nav_read_at": {"odometer_km": 9.0}})
+    assert merged["companion_nav_read_at"] == {"odometer_km": 9.0}

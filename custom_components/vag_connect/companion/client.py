@@ -129,6 +129,12 @@ class CompanionClient:
         self._eu_portal = None
         self._tokens = None
 
+    async def set_transport_flags(self, *, wake_sleep: bool, close_app: bool) -> None:
+        """Apply the wake/sleep and close-app options live, between screen uses."""
+        async with self._channel._screen_lock:
+            self._channel._t._wake_sleep = bool(wake_sleep)
+            self._channel._t._close_app = bool(close_app)
+
     # -- token/portal no-ops the coordinator may call directly ----------------
 
     def set_persisted_tokens(self, _tokens: Any) -> None:
