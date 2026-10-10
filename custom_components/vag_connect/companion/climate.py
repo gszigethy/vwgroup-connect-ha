@@ -39,12 +39,14 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, AsyncIterator, Awaitable, Callable
 
-from .presets import app_version_covered
+from .presets import app_version_covered, app_version_listed
 from .resources import (
+    DATA_UNAVAILABLE,
     StringResources,
     climate_function_state,
     climate_mode_is_window_heating,
     dial_labels,
+    find_app_alert,
 )
 from .screen import UiNode, _rid_matches, find_node_for, find_rate_limit_banner, has_anchor
 from .transport import CompanionTransportError
@@ -231,7 +233,14 @@ class ClimateController:
             sheet = read_sheet(nodes)
             if sheet.running:
                 # Already on: Start is not on screen, and Stop must not be
-                # pressed for a start request. Nothing to send.
+                # pressed for a start request. Nothing to send; but say so when
+                # what runs is not what was asked for.
+                if self._ac_shown(nodes, sheet) == window_heating_only:
+                    running = "air conditioning" if window_heating_only else "window heating"
+                    raise self._blocked(
+                        f"{running} is already running; nothing was sent. Stop it "
+                        "first to start the other function"
+                    )
                 return
             nodes = await self._select(nodes, window_heating_only)
             mode_title = read_sheet(nodes).pick_title
@@ -282,6 +291,7 @@ class ClimateController:
             raise self._blocked("the climate sheet path is not mapped")
         self._home = False
         walked = 0
+        trips = self._ch._limit_trips
         try:
             nodes, cleared = await self._ch._dump_and_clear_overlays()
             if not cleared:
@@ -307,6 +317,10 @@ class ClimateController:
             if not self._home:
                 # The picker adds a level; the app's own close control is used.
                 await self._ch._return_to_overview(max(walked, 1) + 1)
+        if self._ch._limit_trips != trips:
+            # The limit alert arrived late and the walk back closed it: the
+            # car refused the request after all.
+            raise self._blocked(_LIMIT_REASON)
 
     async def _screen(self, done: Callable[[list[UiNode]], bool]) -> list[UiNode]:
         """Dump until the screen a tap should produce is there (bounded)."""
@@ -337,10 +351,15 @@ class ClimateController:
             ch._live_app_version, CLIMATE_APP_VERSIONS
         ):
             raise self._blocked(
-                f"climate commands are mapped for app {'/'.join(CLIMATE_APP_VERSIONS)} "
-                f"and newer; the phone has {ch._live_app_version or 'an unknown version'}. "
+                f"climate commands are mapped for app {'/'.join(CLIMATE_APP_VERSIONS)}; "
+                f"the phone has {ch._live_app_version or 'an unknown version'}. "
                 "Reads still work."
             )
+        # Rule 9: the dial is walked with geometry from the listed builds.
+        if not app_version_listed(ch._live_app_version, CLIMATE_APP_VERSIONS):
+            from .channel import CompanionAppVersionUnverified  # noqa: PLC0415
+
+            raise CompanionAppVersionUnverified(ch._live_app_version)
         if ch._is_rate_limited():
             raise self._blocked("the channel is backed off after a rate limit; commands are paused")
         if ch._last_write_at is not None:
@@ -387,12 +406,19 @@ class ClimateController:
             if window_heating_only:
                 raise self._blocked("this car's sheet offers no window-heating-only mode")
             return nodes
-        if not window_heating_only and climate_mode_is_window_heating(
-            sheet.pick_title, self._strings
-        ) is not True:
-            # Air conditioning is the selected mode: tile, Start, done. The
-            # picker opens only to switch to or from window heating alone.
-            return nodes
+        if not window_heating_only:
+            shown = climate_mode_is_window_heating(sheet.pick_title, self._strings)
+            if shown is False:
+                # Air conditioning is the selected mode: tile, Start, done. The
+                # picker opens only to switch to or from window heating alone.
+                return nodes
+            if shown is None:
+                # An unrecognised title may be window heating alone: refuse
+                # rather than start a function nobody asked for.
+                raise self._blocked(
+                    "the sheet's mode is not one this integration recognises; "
+                    "Start was not pressed"
+                )
         # "Select mode" lists exactly [Air conditioning, Window heating], in that
         # order (ClimaViewModel.onModeChangePressed). Choose by position and
         # verify by the chosen row's own title, so no translated word is needed.
@@ -504,11 +530,14 @@ class ClimateController:
         elif sheet.pick is not None:
             # _select verified the title against the chosen row; it must not
             # have changed since, and a recognised title must name the mode.
+            # Air conditioning needs a recognised title: an unknown one may be
+            # window heating alone.
             shown = climate_mode_is_window_heating(sheet.pick_title, self._strings)
             if sheet.pick_title != mode_title or (
-                shown is not None and shown != window_heating_only
+                shown != window_heating_only
+                and (shown is not None or not window_heating_only)
             ):
-                wrong.append(f"the mode \"{sheet.pick_title}\", not {wanted}")
+                wrong.append(f"a mode other than {wanted}")
         if target is not None:
             dial = read_dial(nodes, self._strings)[0]
             if dial != target:
@@ -521,6 +550,17 @@ class ClimateController:
                 f"the sheet shows {' and '.join(wrong)} after setting it; "
                 "Start was not pressed"
             )
+
+    def _ac_shown(self, nodes: list[UiNode], sheet: ClimaSheet) -> bool | None:
+        """While running: True for air conditioning, False for window heating
+        alone, None when the sheet does not say."""
+        desc = _find(nodes, "air_conditioning_description")
+        if desc is not None:
+            return climate_function_state(desc.text, self._strings)
+        if _find(nodes, "window_heating_title") is not None:
+            return True
+        shown = climate_mode_is_window_heating(sheet.pick_title, self._strings)
+        return None if shown is None else not shown
 
     def _ac_running(self, nodes: list[UiNode], sheet: ClimaSheet) -> bool:
         """While running, is it air conditioning (not window heating alone)?"""
@@ -538,10 +578,11 @@ class ClimateController:
         self._mark_write()
         # A tap is not readback: drop only the climate sheet's cached values,
         # so the overview tile (read on every poll) supplies the new state.
-        # Nothing else is invalidated, so a command never triggers a walk of
-        # every opted-in screen.
+        # The readback refresh re-reads the climate sheet only (when opted in),
+        # like a charge command, so it never walks every opted-in screen.
         for key in _CLIMATE_KEYS:
             self._ch._nav_cache.pop(key, None)
+        self._ch._nav_only.add("climate_detail")
         await self._ch._t.tap(*node.tap_point)  # type: ignore[misc]
 
     async def _await_outcome(self, *, expect_running: bool) -> None:
@@ -567,7 +608,7 @@ class ClimateController:
         raise self._blocked("the app did not confirm the request")
 
     def _refused(self, nodes: list[UiNode], instead_of: str) -> Exception:
-        """Say what the app showed instead; pause commands on a request limit.
+        """Say what kind of screen the app showed; pause on a request limit.
 
         When the car's daily request budget is used up, the app answers a tap
         with an alert ("Too many requests sent to the vehicle") instead of the
@@ -582,15 +623,16 @@ class ClimateController:
         if limited:
             ch._trip_rate_limit()
             return self._blocked(_LIMIT_REASON)
-        shown = " — ".join(
-            n.text.strip() for n in nodes if n.text.strip() and len(n.text) <= 120
-        )[:200]
-        if shown:
-            return self._blocked(f"the app showed \"{shown}\" instead of {instead_of}")
+        # Never the screen's own text: it can carry places and notifications.
+        if find_app_alert(nodes, self._strings):
+            return self._blocked(f"the app showed its {DATA_UNAVAILABLE} alert instead of {instead_of}")
+        if any(n.text.strip() or n.content_desc.strip() for n in nodes):
+            return self._blocked(f"the app showed an unrecognised screen instead of {instead_of}")
         return self._blocked(f"the app did not show {instead_of}")
 
     def _mark_write(self) -> None:
-        self._ch._last_write_at = self._ch._now()
+        # Through the channel, so the wall-clock time is persisted too.
+        self._ch._stamp_write()
 
     @staticmethod
     def _blocked(reason: str) -> Exception:

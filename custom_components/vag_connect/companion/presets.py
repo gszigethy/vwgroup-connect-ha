@@ -100,11 +100,11 @@ def app_version_covered(
     """True when the live app is a verified build or newer than all of them.
 
     2026-10-07 — an app update used to switch every tap off until someone
-    listed the new version. Taps do not depend on the version number: each
-    control is found on screen by resource id or the app's own label, a missing
-    one stops the flow instead of tapping blind, and the result is checked
-    afterwards. So a newer build is allowed and relies on those checks; an
-    unknown OLDER build (or an unreadable version) stays blocked.
+    listed the new version. Nav reads find each control on screen by resource
+    id or the app's own label, and a missing one stops the walk instead of
+    tapping blind, so a newer build is allowed for READS; an unknown OLDER
+    build (or an unreadable version) stays blocked. Writes use
+    ``app_version_listed`` instead (maintainer rule 9).
     """
     if live is None or not verified:
         return False
@@ -114,6 +114,21 @@ def app_version_covered(
     key = _version_key(live)
     known = [k for k in (_version_key(v) for v in want) if k is not None]
     return key is not None and bool(known) and key > max(known)
+
+
+def app_version_listed(
+    live: str | None, verified: str | tuple[str, ...] | None
+) -> bool:
+    """True only when the live app is one of the verified builds.
+
+    Maintainer rule 9: commands, Save taps and the sync are pinned to the
+    builds they were verified on. The charge slider and the climate dial are
+    walked with geometry measured on those builds, so a newer layout could put
+    the taps on the wrong step; a newer build keeps reads but not writes.
+    """
+    if live is None or not verified:
+        return False
+    return live in ((verified,) if isinstance(verified, str) else tuple(verified))
 
 
 @dataclass(frozen=True)
@@ -207,7 +222,10 @@ class OverlaySelector:
     # 2026-10-07 — a screen BACK cannot clear (the Google Maps consent: BACK
     # only leaves the map, and the parking read needs it) names the button to
     # tap instead. BACK stays the fallback when that button is not on screen.
+    # The tap is made only on the walk of the opt-in named in ``tap_opt_in``,
+    # and only while the user has it on; every other read backs out instead.
     tap: ActionSelector | None = None
+    tap_opt_in: str | None = None
 
 
 @dataclass(frozen=True)
@@ -320,7 +338,7 @@ _VW = BrandPreset(
     # charge sheet, Vehicle Health, vehicle Settings (incl. Synchronise now),
     # climate sheet and settings, driving data and departure times all read the
     # same as on 4.3.2. The parking read needs the app's Google Maps consent,
-    # which the update resets; the user accepts it in the app.
+    # which the update resets; only the opted-in parking walk accepts it.
     verified_app_version=("4.6.4", "4.3.2", "3.64.0", "3.63.2", "4.2.1"),
     # v2.26.0 — READ vocabulary re-grounded against ckomma/charge-app-connector-vw
     # (real-device VW app 4.2.x). The old words ("Ladezustand", "Reichweite",
@@ -902,10 +920,11 @@ _VW = BrandPreset(
             name="departure_times",
             # The overview's Departure times tile. Each timer row shows its
             # time and a switch whose ``checked`` state is the timer's on/off;
-            # the switches are read, never tapped. ``read_departure_timers``
-            # does the reading, by layout rather than words. Each row then
-            # opens its timer page for the days and Repeat (4.6.4 ids), and
-            # BACK returns to the list without saving anything.
+            # this read never taps the switches (only the departure timer
+            # command does). ``read_departure_timers`` does the reading, by
+            # layout rather than words. Each row then opens its timer page for
+            # the days and Repeat (4.6.4 ids), and BACK returns to the list
+            # without saving anything.
             steps=(
                 ActionSelector(
                     action="open_departure_times",
@@ -987,7 +1006,8 @@ _VW = BrandPreset(
         ),
         # 2026-10-07 — app 4.6.4 asks again for the Google Maps consent
         # (modal_google_maps_disclaimer_title) on the Map tab, which blocks the
-        # parking read. Agreed on the user's request (common_button_agree).
+        # parking read. Agreed only on the parking walk, with its opt-in on
+        # (common_button_agree); any other screen backs out without agreeing.
         OverlaySelector(
             name="google_maps_consent",
             text_re=r"^(?:This\s*app\s*uses|Diese\s*App\s*(?:nutzt|verwendet))\s*Google\s*Maps",
@@ -995,6 +1015,7 @@ _VW = BrandPreset(
                 action="agree_google_maps",
                 label_re=r"^(?:Agree|Zustimmen|Einverstanden|Akzeptieren)$",
             ),
+            tap_opt_in="parking_position",
         ),
         # 2026-10-07 — the app's rating prompt (dialog_app_survey_prompt,
         # layout dialog_app_rating_alert): thumbs down / thumbs up and no close

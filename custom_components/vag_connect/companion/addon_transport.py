@@ -31,6 +31,28 @@ _LOGGER = logging.getLogger(__name__)
 _DEFAULT_PORT = 8129
 
 
+# What the add-on's adb error says, as a fixed description. Its own text can
+# carry the phone's IP or serial, so it is never passed on.
+_ADDON_REASONS = (
+    ("unauthorized", "the phone has not authorised debugging for the add-on"),
+    ("pair", "the phone needs to be paired with the add-on again"),
+    ("offline", "the phone is offline to adb"),
+    ("refused", "the phone refused the adb connection"),
+    ("timed out", "the phone did not answer in time"),
+    ("timeout", "the phone did not answer in time"),
+)
+
+
+def _addon_reason(error: object) -> str:
+    text = str(error or "").casefold()
+    if not text:
+        return ""
+    return next(
+        (reason for key, reason in _ADDON_REASONS if key in text),
+        "see the add-on log for the reason",
+    )
+
+
 class AddOnAdbTransport(NetworkAdbTransport):
     """Runs shell commands through the add-on's local HTTP API."""
 
@@ -110,7 +132,7 @@ class AddOnAdbTransport(NetworkAdbTransport):
         if not isinstance(payload, dict) or not payload.get("connected"):
             reason = ""
             if isinstance(payload, dict):
-                reason = str(payload.get("last_error") or "")
+                reason = _addon_reason(payload.get("last_error"))
             raise CompanionTransportError(
                 "the add-on is running but has no phone connected"
                 + (f": {reason}" if reason else "")

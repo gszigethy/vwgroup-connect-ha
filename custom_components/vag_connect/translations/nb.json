@@ -163,9 +163,9 @@
           "adb_port": "Vanligvis 5555 for ADB over Wi-Fi.",
           "vin": "Det 17 tegn lange VIN-nummeret til bilen som vises i appen.",
           "companion_use_addon": "Kryss av her for en telefon med Android 11 eller nyere, som bare tilbyr trådløs feilsøking. Skriv da inn TILLEGGETS adresse ovenfor i stedet for telefonens.",
-          "companion_addon_token": "Kun nødvendig hvis du har satt api_token i tillegget.",
+          "companion_addon_token": "Required for new add-on connections. Set the same api_token in the add-on. The bridge uses plain HTTP; use a trusted network.",
           "companion_use_relay": "Kryss av her hvis telefonen kjører companion-agent-appen. Telefonen ringer da Home Assistant, så verken ADB, trådløs feilsøking eller fast IP trengs — la adressefeltet stå tomt.",
-          "companion_agent_token": "Det tilfeldige tokenet agent-appen genererte. Minst 32 tegn, og et eget for hvert kjøretøy."
+          "companion_agent_token": "A random token is generated for you. Copy it into the agent app; use a different token for every vehicle. Custom tokens need at least 32 characters and 16 distinct characters, with no character making up more than half."
         }
       },
       "audi_mbb_fallback": {
@@ -204,10 +204,12 @@
       "companion_needs_addon": "Dette ser ut som en telefon med Android 11 eller nyere som bruker trådløs feilsøking, noe den direkte tilkoblingen her ikke kan bruke (den krever TLS + paring). Installer tillegget «VW Group App ADB Bridge» (github.com/its-me-prash/vwgroup-app-adb-bridge) og pek Companion mot det. Eldre telefoner (Android 10 eller eldre) kobles til direkte her.",
       "companion_app_not_found": "Koblet til telefonen, men merkeappen er ikke installert på den.",
       "companion_unknown_brand": "Dette merket har ennå ingen forhåndsinnstilling for ekstra telefon.",
-      "companion_agent_token_too_short": "Agent-tokenet er for kort. Lim inn det tilfeldige tokenet agent-appen genererte (minst 32 tegn).",
+      "companion_agent_token_too_short": "The agent token is too short. Use a random token with at least 32 characters, such as the generated token.",
       "companion_host_required": "Oppgi telefonens IP-adresse — eller kryss av for agent-alternativet hvis telefonen ringer Home Assistant.",
       "missing_captcha": "Skriv inn tegnene som vises i bildet over.",
-      "captcha_retry": "Løs captchaen som vises over for å fortsette."
+      "captcha_retry": "Løs captchaen som vises over for å fortsette.",
+      "companion_addon_token_required": "An add-on token is required for new connections. Set api_token in the ADB Bridge add-on and enter the same token here.",
+      "companion_agent_token_weak": "The agent token is too predictable. Use the generated random token or a random token with at least 32 characters and 16 distinct characters, with no character making up more than half."
     },
     "abort": {
       "already_configured": "Denne kontoen er allerede konfigurert.",
@@ -2058,7 +2060,7 @@
         "name": "Spørreintervall"
       },
       "app_sync_interval": {
-        "name": "Intervall for synkronisering av bil"
+        "name": "Intervall for synkronisering av bil (vekker bilen)"
       }
     },
     "button": {
@@ -2535,6 +2537,12 @@
     "companion_limit_language_unavailable": {
       "message": "Skriving og synkronisering er deaktivert: appens oversettelsesressurser er utilgjengelige, og det kan ikke bekreftes at brukergrensesnittets gjeldende språk er engelsk, tysk eller spansk. Data kan fortsatt leses."
     },
+    "companion_sync_refused": {
+      "message": "Appen synkroniserte ikke bilen. Hver synkronisering vekker bilen, så den avvises mens kommandoer er satt på pause eller for kort tid etter forrige kommando. Se sensoren Appens forespørselsstatus."
+    },
+    "companion_app_version_unverified": {
+      "message": "Kommandoer er slått av: appen på telefonen er versjon {version}, som ennå ikke er verifisert for kommandoer. Kommandoer, lagring og synkronisering forblir av til denne versjonen er verifisert. Kjøretøydata oppdateres fortsatt."
+    },
     "vehicle_not_found": {
       "message": "Kjøretøy med VIN {vin} ble ikke funnet. Sjekk at integrasjonen er startet."
     },
@@ -2559,6 +2567,9 @@
     "read_only_attestation_blocked": {
       "message": "VW blokkerer fjernkommandoer for SEAT/CUPRA bak en Google-enhetskontroll (Play Integrity / App Check) som bare den offisielle appen på en ekte telefon kan bestå. Låsing, klima og lading kan derfor ikke sendes herfra. Dette er en permanent serverside-blokkering fra VW, ikke en innstilling du kan slå av. Kjøretøydata oppdateres fortsatt via EU Data Act-portalen."
     },
+    "departure_timer_enabled_required": {
+      "message": "Angi 'enabled' for kjøretøyets avgangstimer: tilkoblingen krever det. Bare companion-kanalen (ADB) kan utelate det."
+    },
     "export_file_not_allowed": {
       "message": "Home Assistant har ikke lov til å lese {path}. Legg eksportfilen i konfigurasjonsmappen (eller en mappe som er oppført under allowlist_external_dirs) og oppgi banen på nytt."
     },
@@ -2576,6 +2587,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Det pågår allerede en engangseksport av historikken for denne bilen. Portalen håndterer bare én slik forespørsel om gangen, så vent til den pågående er ferdig (eller får tidsavbrudd) før du ber om en ny."
+    },
+    "hvac_mode_not_supported": {
+      "message": "HVAC-modusen {hvac_mode} støttes ikke; bruk en av: {modes}. Ingenting ble sendt."
     }
   },
   "selector": {

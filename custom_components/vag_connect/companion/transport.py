@@ -14,6 +14,7 @@ requirement is declared in the manifest for real installs.
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 from typing import Any
 
@@ -117,7 +118,18 @@ class NetworkAdbTransport:
         if self._device is None:
             raise CompanionTransportError("not connected")
         try:
-            return await asyncio.to_thread(self._device.shell, cmd, timeout_s)
+            # adb-shell 0.4.4: shell(command, transport_timeout_s,
+            # read_timeout_s=10, timeout_s=None). A positional timeout lands in
+            # the socket slot and leaves the output wait at the fixed 10 s.
+            return await asyncio.to_thread(
+                functools.partial(
+                    self._device.shell,
+                    cmd,
+                    transport_timeout_s=timeout_s,
+                    read_timeout_s=timeout_s,
+                    timeout_s=timeout_s + 5,
+                )
+            )
         except Exception as err:  # noqa: BLE001 - adb-shell raises many types
             # adb-shell keeps ``available`` True after the socket breaks (a phone
             # that dropped off Wi-Fi, a restarted adbd: "Broken pipe"), so

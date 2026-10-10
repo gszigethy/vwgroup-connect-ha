@@ -163,9 +163,9 @@
           "adb_port": "Zwykle 5555 dla ADB przez Wi-Fi.",
           "vin": "17-znakowy VIN samochodu wyświetlanego w aplikacji.",
           "companion_use_addon": "Zaznacz tę opcję dla telefonu z Androidem 11 lub nowszym, który oferuje wyłącznie debugowanie bezprzewodowe. Następnie wpisz powyżej adres DODATKU zamiast adresu telefonu.",
-          "companion_addon_token": "Wymagane tylko, jeśli ustawiłeś api_token w dodatku.",
+          "companion_addon_token": "Required for new add-on connections. Set the same api_token in the add-on. The bridge uses plain HTTP; use a trusted network.",
           "companion_use_relay": "Zaznacz, jeśli na telefonie działa aplikacja agenta. To telefon łączy się wtedy z Home Assistant: nie potrzeba ADB, debugowania bezprzewodowego ani stałego IP — pozostaw pole adresu puste.",
-          "companion_agent_token": "Losowy token wygenerowany przez aplikację agenta. Co najmniej 32 znaki i inny dla każdego pojazdu."
+          "companion_agent_token": "A random token is generated for you. Copy it into the agent app; use a different token for every vehicle. Custom tokens need at least 32 characters and 16 distinct characters, with no character making up more than half."
         }
       },
       "audi_mbb_fallback": {
@@ -204,10 +204,12 @@
       "companion_needs_addon": "To wygląda na telefon z Androidem 11 lub nowszym z debugowaniem bezprzewodowym, którego bezpośrednie połączenie stąd nie obsługuje (wymaga TLS i parowania). Zainstaluj dodatek „VW Group App ADB Bridge” (github.com/its-me-prash/vwgroup-app-adb-bridge) i wskaż go tutaj. Starsze telefony (Android 10 lub wcześniejszy) łączą się bezpośrednio.",
       "companion_app_not_found": "Połączono z telefonem, ale aplikacja marki nie jest na nim zainstalowana.",
       "companion_unknown_brand": "Ta marka nie ma jeszcze gotowego profilu telefonu pomocniczego.",
-      "companion_agent_token_too_short": "Token agenta jest za krótki. Wklej losowy token wygenerowany przez aplikację agenta (co najmniej 32 znaki).",
+      "companion_agent_token_too_short": "The agent token is too short. Use a random token with at least 32 characters, such as the generated token.",
       "companion_host_required": "Podaj adres IP telefonu — albo zaznacz opcję agenta, jeśli to telefon łączy się z Home Assistant.",
       "missing_captcha": "Wpisz znaki widoczne na obrazku powyżej.",
-      "captcha_retry": "Rozwiąż captchę widoczną powyżej, aby kontynuować."
+      "captcha_retry": "Rozwiąż captchę widoczną powyżej, aby kontynuować.",
+      "companion_addon_token_required": "An add-on token is required for new connections. Set api_token in the ADB Bridge add-on and enter the same token here.",
+      "companion_agent_token_weak": "The agent token is too predictable. Use the generated random token or a random token with at least 32 characters and 16 distinct characters, with no character making up more than half."
     },
     "abort": {
       "already_configured": "To konto jest już skonfigurowane.",
@@ -2058,7 +2060,7 @@
         "name": "Interwał odpytywania"
       },
       "app_sync_interval": {
-        "name": "Interwał synchronizacji pojazdu"
+        "name": "Interwał synchronizacji pojazdu (wybudza pojazd)"
       }
     },
     "button": {
@@ -2535,6 +2537,12 @@
     "companion_limit_language_unavailable": {
       "message": "Zapis i synchronizacja są wyłączone: zasoby tłumaczeń aplikacji są niedostępne i nie można potwierdzić, że bieżący język interfejsu to angielski, niemiecki lub hiszpański. Odczyt danych nadal działa."
     },
+    "companion_sync_refused": {
+      "message": "Aplikacja nie zsynchronizowała pojazdu. Każda synchronizacja wybudza pojazd, więc jest odrzucana, gdy polecenia są wstrzymane lub zbyt wcześnie po ostatnim poleceniu. Sprawdź czujnik Stan żądań aplikacji."
+    },
+    "companion_app_version_unverified": {
+      "message": "Polecenia są wyłączone: aplikacja na telefonie ma wersję {version}, która nie została jeszcze zweryfikowana dla poleceń. Polecenia, zapisywanie i synchronizacja pozostaną wyłączone, dopóki ta wersja nie zostanie zweryfikowana. Dane pojazdu są nadal aktualizowane."
+    },
     "vehicle_not_found": {
       "message": "Pojazd z VIN {vin} nie znaleziony."
     },
@@ -2559,6 +2567,9 @@
     "read_only_attestation_blocked": {
       "message": "VW blokuje zdalne polecenia dla SEAT/CUPRA za weryfikacją urządzenia Google (Play Integrity / App Check), którą przechodzi tylko oficjalna aplikacja na prawdziwym telefonie. Dlatego z tego miejsca nie można wysłać zamykania, klimatyzacji ani ładowania. To trwała blokada po stronie serwera VW, a nie ustawienie, które można wyłączyć. Dane pojazdu są nadal aktualizowane przez portal EU Data Act."
     },
+    "departure_timer_enabled_required": {
+      "message": "Ustaw 'enabled' dla timera odjazdu tego pojazdu: jego połączenie tego wymaga. Pominąć to może tylko kanał companion (ADB)."
+    },
     "export_file_not_allowed": {
       "message": "Home Assistant nie ma uprawnień do odczytu {path}. Umieść plik eksportu w folderze konfiguracji (lub w folderze wymienionym w allowlist_external_dirs) i podaj jego ścieżkę ponownie."
     },
@@ -2576,6 +2587,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Dla tego samochodu trwa już jednorazowy eksport danych historycznych. Portal obsługuje tylko jedno takie żądanie naraz, więc zaczekaj, aż bieżące się zakończy (lub wygaśnie), zanim poprosisz o kolejne."
+    },
+    "hvac_mode_not_supported": {
+      "message": "Tryb HVAC {hvac_mode} nie jest obsługiwany; użyj jednego z: {modes}. Nic nie zostało wysłane."
     }
   },
   "selector": {

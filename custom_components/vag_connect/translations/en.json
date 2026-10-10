@@ -163,9 +163,9 @@
           "adb_port": "Usually 5555 for ADB over Wi-Fi.",
           "vin": "The 17-character VIN of the car shown in the app.",
           "companion_use_addon": "Tick this for an Android 11 or newer phone, which only offers wireless debugging. Then enter the ADD-ON's address above instead of the phone's.",
-          "companion_addon_token": "Only needed if you set api_token in the add-on.",
+          "companion_addon_token": "Required for new add-on connections. Set the same api_token in the add-on. The bridge uses plain HTTP; use a trusted network.",
           "companion_use_relay": "Tick this when the phone runs the companion agent app. The phone then calls Home Assistant, so no ADB, no wireless debugging and no fixed phone IP are needed — leave the address field empty.",
-          "companion_agent_token": "The random token the agent app generated. At least 32 characters, and a different one for every vehicle."
+          "companion_agent_token": "A random token is generated for you. Copy it into the agent app; use a different token for every vehicle. Custom tokens need at least 32 characters and 16 distinct characters, with no character making up more than half."
         }
       },
       "audi_mbb_fallback": {
@@ -204,10 +204,12 @@
       "companion_needs_addon": "This looks like an Android 11+ phone using wireless debugging, which the direct connection here cannot use (it is TLS + pairing). Install the 'VW Group App ADB Bridge' add-on (github.com/its-me-prash/vwgroup-app-adb-bridge) and point the companion at it. Older phones (Android 10 or earlier) connect here directly.",
       "companion_app_not_found": "Connected to the phone, but the brand app is not installed on it.",
       "companion_unknown_brand": "That brand has no companion preset yet.",
-      "companion_agent_token_too_short": "The agent token is too short. Paste the random token the agent app generated (at least 32 characters).",
+      "companion_agent_token_too_short": "The agent token is too short. Use a random token with at least 32 characters, such as the generated token.",
       "companion_host_required": "Enter the phone's IP address — or tick the companion agent option if the phone calls Home Assistant instead.",
       "missing_captcha": "Please type the characters shown in the image above.",
-      "captcha_retry": "Please solve the captcha shown above to continue."
+      "captcha_retry": "Please solve the captcha shown above to continue.",
+      "companion_addon_token_required": "An add-on token is required for new connections. Set api_token in the ADB Bridge add-on and enter the same token here.",
+      "companion_agent_token_weak": "The agent token is too predictable. Use the generated random token or a random token with at least 32 characters and 16 distinct characters, with no character making up more than half."
     },
     "abort": {
       "already_configured": "This account is already configured.",
@@ -2058,7 +2060,7 @@
         "name": "Poll interval"
       },
       "app_sync_interval": {
-        "name": "Vehicle sync interval"
+        "name": "Vehicle sync interval (wakes the car)"
       }
     },
     "button": {
@@ -2535,6 +2537,12 @@
     "companion_limit_language_unavailable": {
       "message": "Writes and synchronisation are disabled: app translation resources are unavailable and the current UI language cannot be confirmed as English, German or Spanish. Reads continue."
     },
+    "companion_sync_refused": {
+      "message": "The app did not sync the car. Each sync wakes the car, so it is refused while commands are paused or too soon after the last command. Check the App request status sensor."
+    },
+    "companion_app_version_unverified": {
+      "message": "Commands are off: the app on the phone is version {version}, which has not been verified for commands yet. Commands, saves and syncs stay off until this version is verified. Vehicle data still updates."
+    },
     "vehicle_not_found": {
       "message": "Vehicle with VIN {vin} not found. Check that the integration is started."
     },
@@ -2559,6 +2567,9 @@
     "read_only_attestation_blocked": {
       "message": "VW blocks remote commands for SEAT/CUPRA behind a Google device-attestation check (Play Integrity / App Check) that only the official app on a genuine phone can pass, so lock, climate and charging can't be sent from here. This is a permanent VW server-side lockdown, not a setting you can toggle. Vehicle data still updates via the EU Data Act portal."
     },
+    "departure_timer_enabled_required": {
+      "message": "Set 'enabled' for this vehicle's departure timer: its connection needs it. Only the companion (ADB) channel can leave it out."
+    },
     "export_file_not_allowed": {
       "message": "Home Assistant is not allowed to read {path}. Put the export file in the config folder (or a folder listed under allowlist_external_dirs) and pass its path again."
     },
@@ -2576,6 +2587,9 @@
     },
     "historical_wedge_blocked": {
       "message": "A one-time historical export is already in progress for this car. The portal handles one request of this kind at a time, so wait for the current one to finish (or time out) before requesting another."
+    },
+    "hvac_mode_not_supported": {
+      "message": "The HVAC mode {hvac_mode} is not supported; use one of: {modes}. Nothing was sent."
     }
   },
   "selector": {

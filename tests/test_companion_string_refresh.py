@@ -65,7 +65,12 @@ async def test_relay_unknown_language_refuses_without_taps(action):
         if verb == 'app_version':
             return '4.6.4'
         if verb == 'dump_ui':
-            return '<hierarchy><node resource-id="vwd_title" text="Recharge" /></hierarchy>'
+            # The overview (its anchor is up), in a language the fallback
+            # does not cover: refused there, before any tap.
+            return (
+                '<hierarchy><node resource-id="rangeTile" bounds="[53,808][508,1254]" />'
+                '<node resource-id="vwd_title" text="Recharge" /></hierarchy>'
+            )
         assert verb in ('foreground', 'is_foreground')
     broker.command.side_effect = command
     phone = AgentRelayTransport(broker)
@@ -84,7 +89,10 @@ async def test_failed_fetch_reconnects_and_screen_read_continues():
         phone.connected = False
         raise CompanionTransportError('shell failed')
     phone.battery_strings = AsyncMock(side_effect=broken_getter)
-    phone.dump_ui = AsyncMock(return_value='<hierarchy><node text="Recharge" /></hierarchy>')
+    phone.dump_ui = AsyncMock(return_value=(
+        '<hierarchy><node resource-id="rangeTile" bounds="[53,808][508,1254]" />'
+        '<node text="Recharge" /></hierarchy>'
+    ))
     ch = channel(phone)
     assert isinstance(await ch.read(), dict)
     phone.connect.assert_awaited_once()
