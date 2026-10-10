@@ -2060,7 +2060,15 @@
         "name": "Pollingsinterval"
       },
       "app_sync_interval": {
-        "name": "Interval for synkronisering af bil (vækker bilen)"
+        "name": "Interval for synkronisering af bil (vækker bilen)",
+        "state_attributes": {
+          "note": {
+            "name": "Bemærkning",
+            "state": {
+              "battery_protection": "Slået fra som standard. Hver synkronisering vækker bilen og bruger af dens anmodningsbudget. For hyppig synkronisering kan aktivere bilens batteribeskyttelse, og appen forbliver derefter i nødtilstand, indtil bilen startes næste gang. Det korteste interval er 60 min; indstil til 0 for at slå synkroniseringen fra."
+            }
+          }
+        }
       }
     },
     "button": {

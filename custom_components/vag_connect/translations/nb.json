@@ -2060,7 +2060,15 @@
         "name": "Spørreintervall"
       },
       "app_sync_interval": {
-        "name": "Intervall for synkronisering av bil (vekker bilen)"
+        "name": "Intervall for synkronisering av bil (vekker bilen)",
+        "state_attributes": {
+          "note": {
+            "name": "Merknad",
+            "state": {
+              "battery_protection": "Slått av som standard. Hver synkronisering vekker bilen og bruker av forespørselsbudsjettet. For hyppig synkronisering kan aktivere bilens batteribeskyttelse, og appen blir da værende i nødmodus til bilen startes neste gang. Det korteste intervallet er 60 min; sett til 0 for å slå av synkroniseringen."
+            }
+          }
+        }
       }
     },
     "button": {

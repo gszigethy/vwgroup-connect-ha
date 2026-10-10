@@ -2060,7 +2060,15 @@
         "name": "Intervallo di polling"
       },
       "app_sync_interval": {
-        "name": "Intervallo di sincronizzazione del veicolo (sveglia il veicolo)"
+        "name": "Intervallo di sincronizzazione del veicolo (sveglia il veicolo)",
+        "state_attributes": {
+          "note": {
+            "name": "Nota",
+            "state": {
+              "battery_protection": "Disattivato per impostazione predefinita. Ogni sincronizzazione risveglia il veicolo e consuma parte della sua quota di richieste. Una sincronizzazione troppo frequente può attivare la protezione della batteria del veicolo e l’app rimane quindi in modalità di sicurezza fino al successivo avviamento del veicolo. L’intervallo minimo è di 60 min; impostare 0 per disattivare la sincronizzazione."
+            }
+          }
+        }
       }
     },
     "button": {

@@ -2060,7 +2060,15 @@
         "name": "Intervalo de sondeo"
       },
       "app_sync_interval": {
-        "name": "Intervalo de sincronización del vehículo (despierta el vehículo)"
+        "name": "Intervalo de sincronización del vehículo (despierta el vehículo)",
+        "state_attributes": {
+          "note": {
+            "name": "Nota",
+            "state": {
+              "battery_protection": "Desactivado de forma predeterminada. Cada sincronización despierta el vehículo y consume parte de su cuota de solicitudes. Una sincronización demasiado frecuente puede activar la protección de la batería del vehículo, y la aplicación permanece entonces en modo de seguridad hasta que se vuelva a arrancar el vehículo. El intervalo mínimo es de 60 min; establezca 0 para desactivar la sincronización."
+            }
+          }
+        }
       }
     },
     "button": {
