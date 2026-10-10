@@ -747,6 +747,170 @@ EU Data Act sensors are unchanged apart from the charging-switch fix.
   for the tick box in the full options form. Six steps before you reached the login. Selecting **Fix** now does all of
   that for you and opens the login for the car the notice is about. The one-time code itself is unchanged: Volkswagen
   wants it and only you have it.
+## [4.12.0] - 2026-10-09 — The portal login works again / Die Portal-Anmeldung geht wieder
+
+### Hinzugefügt / Added
+- **A car reading the EU Data Act portal gains one more diagnostic: when the instrument cluster
+  last recorded a warning.** A Touareg reported the field, and every sample we have of it — four,
+  from three different cars — carries an absolute timestamp, so it becomes a timestamp sensor
+  beside the existing raw warning value rather than being folded into it. Off by default, like
+  every diagnostic of this kind, and it only appears on cars that actually send it (#1757, thanks
+  @robertbakum).
+- Internal, no user-visible change: three further fields the same car reported stay deliberately
+  unmapped. The official field catalogue gives them no meaning and no unit at all, and every
+  sample so far is empty — so they raise no repair card, while staying visible on the raw-fields
+  sensor, which is what keeps a car that one day sends a real value findable (#1757, #1164).
+- **Six Škoda commands can now fall back to the official Škoda API when the app backend refuses
+  them.** Every Škoda command goes through the reverse-engineered app backend today, and that
+  backend is expected to be switched off. The official public API — the one you already use for
+  readings if you have a key — implements six of the same commands: start and stop charging,
+  start and stop climatisation, start and stop active ventilation. If the app backend refuses one
+  of those in a way that proves your car never received it, the official API is tried once.
+  Nothing changes while the app backend works.
+- **Six of twenty-four, and that is the honest number.** Locking, unlocking, flashing, waking and
+  every charging-settings change have no equivalent on the official API — it has nine endpoints
+  and no way to write settings at all — so they cannot be covered, now or later. If the app
+  backend goes away, those stop working. This buys time for the commands people use daily, not
+  for all of them.
+- Internal, no user-visible change: the fallback is deliberately narrow. It fires only on a
+  refusal that proves nothing was actuated, never after a server error or a dropped connection —
+  those are already retried up to three times underneath, so the car may have received the
+  command and a second channel would send it again. Auxiliary heating is excluded although the
+  official API has it, because the S-PIN is held per entry there and per vehicle here, and
+  repeated wrong PINs are how a vehicle PIN gets locked.
+
+### Geändert / Changed
+- **The "MBB operationList → 401" warning no longer tells primary users to become primary user (#584, #923).**
+  The warning asked "is the account the primary user in the brand app?" as if that were the only cause. On a
+  Tiguan eHybrid MY2026 whose relation reads `PRIMARY_USER`, `enrollmentStatus COMPLETED`, `carnetIndicator true`
+  — and whose own pre-flight says `mbb_eligibility: eligible` — the same 401 still arrives, so the question sent
+  the owner looking for a problem on the account side that is not there. The message now says the legacy gateway
+  refuses the car, that this also happens on fully enrolled accounts, and — for entries with a volkswagen.de
+  channel — points at `mbb_eligibility` to tell the two apart (empty means that check has not run). It no longer
+  promises that all vehicle data is unaffected, only readings from volkswagen.de or the EU Data Act portal. Log
+  text only; the verdict and its handling are unchanged.
+- Internal, no user-visible change: Home Assistant 2026.10 replaced the library it validates
+  configuration with. Nothing about this integration broke — Home Assistant keeps the old name
+  working on purpose, and names custom integrations as the reason — but our type checking had to
+  follow it, and until it did, every change to this project failed its automated checks. The
+  validation library is now reached through one documented place instead of six, so the next step
+  of that migration is a one-line change, and nine repair dialogs carry the result type Home
+  Assistant now expects. Verified against both the new release and the previous one.
+- **Requests to the EU Data Act portal now say who they are, and the login makes one fewer
+  round trip (#1740, thanks @VWGroupDatahub).** The portal's operator asked for a dedicated
+  user-agent on requests to their domain so they can tell traffic apart and report problems
+  back to whoever is causing them — our data requests had been going out under the HTTP
+  library's default name. They also confirmed the priming request we made before signing in
+  was unnecessary, because the load balancer hands over the cookie it was there to collect
+  on the redirect from the login server anyway. Nothing changes for you; signing in is one
+  request shorter.
+- Internal, no user-visible change: the dedicated agent goes on portal-domain requests only.
+  The sign-in steps keep the browser agent they have carried since v2.10.x, when the WAF in
+  front of the login server started answering `403` to a non-browser one (#388, #393).
+
+### Behoben / Fixed
+- **A diagnostics download could carry more vehicle identification than it should.** Tightened, and
+  any card created before this update is cleared on upgrade so nothing lingers. If you have already
+  shared a diagnostics file publicly, consider replacing it (#1768, thanks @kalwados).
+- **A Škoda API key you typed in yourself is no longer thrown away when another car enrols
+  automatically.** Arming the official channel from the stored keys replaced it with only the
+  automatic ones, so a car that depended on the key you entered quietly lost its backup
+  connection — and, since the official channel started carrying commands, its commands too.
+  Nothing reported it, because the arming itself succeeded.
+- **The message announcing automatic Škoda enrolment no longer describes an older version of
+  itself.** It said the official channel "stays on standby and only reads when your main
+  connection can't". That stopped being true in v4.6.1, when the channel became a live source
+  read on every update. It now says what actually happens — read every cycle alongside the normal
+  connection, stepping in on its own if that fails, paced so the hourly limit is never the
+  bottleneck — in all thirteen languages.
+- **Two things Home Assistant 2026.10 started warning about in our LLM tools are dealt with before
+  they become errors.** Each of the Škoda tools now names the integration it comes from, and a tool
+  hands its result back in the container the newer Home Assistant expects instead of a bare object.
+  Home Assistant had been papering over both and writing a deprecation line into your log on every
+  tool call; the first becomes a hard error in 2027.10, the second in 2027.11. Nothing changes in
+  what the tools do or what an assistant sees, and older Home Assistant builds still get exactly
+  the shape they expect.
+- A car sending an empty value for the raw dashboard-warning reading no longer creates a sensor
+  that shows nothing. Found while mapping its sibling above.
+- **A solved Porsche captcha is now replayed into the login it belongs to.** When Porsche puts a
+  captcha in front of you, the integration showed it, you typed it, and the answer went back on a
+  brand-new connection that had forgotten everything about the sign-in it was answering for — so
+  Porsche could reasonably refuse a correct answer. The login now carries its session across the
+  pause while you read the image. Every other project that handles this captcha keeps that session
+  alive; we were the one that did not. Honest caveat: nobody here has an account that produces a
+  Porsche captcha, so this is reasoned from the code and from what the working clients do, not
+  confirmed on a real one — if you hit it, the report link in the dialog is still worth using
+  (#1752).
+- **A Porsche login that stops now asks you for something you can actually produce.** The
+  report link the dialog hands you carried one set of instructions for everyone: turn on debug
+  logging from the integration's three-dots menu and try the login again. That menu only exists
+  once the integration is set up, so everyone whose very first setup failed was being sent to a
+  button they do not have. And when the login hits the my.porsche.com wall, the line we need is
+  already in your normal log from the attempt you just made, so asking for another attempt cost
+  you a retry for nothing on an account where repeated failures cause lockouts. A failed setup now
+  gets the `configuration.yaml` route instead, a wall report points at the line already written,
+  and neither asks you to try again (#1737).
+- **A password Porsche refuses at the captcha step is no longer reported as a used-up captcha.**
+  Typing a correct captcha with an e-mail or password Porsche rejects produced "that captcha could
+  not be verified and it is now used up", which sent people to re-check a challenge that was fine
+  and invited exactly the retry that step exists to prevent. It now says what happened (#1752).
+- Porsche login reports name the integration version, the way the Scout and error reports already
+  do — one less round of "which version are you on" (#1736/#1738).
+- **A single rate-limit response from the official Škoda API could silence its readings long
+  after the limit had passed.** The `Retry-After` value from a throttled response was kept and
+  then re-applied to any later refusal, so one busy minute could park the channel for the whole
+  window again and again. The block now comes from the response in front of it.
+
+## [4.11.1] - 2026-10-06 — The Fix button actually fixes / Der Fix-Knopf tut jetzt was er sagt
+
+### Behoben / Fixed
+- **The "Volkswagen.de channel needs re-login" Fix button now actually logs you in (#1717, thanks @fschulte2812).**
+  It was shipped broken in 4.11.0: pressing Fix closed the dialog, made the notice disappear and did nothing else —
+  no login appeared and the channel stayed down. @fschulte2812 found it and read the code to work out why. The repair
+  was handing the job to a settings screen that Home Assistant never shows when something other than you opens it,
+  and then marking itself done regardless. The login now happens inside the notice itself: e-mail and password, then
+  the one-time code if Volkswagen asks for it, and the notice only clears once you are actually signed in again.
+
+### Geändert / Changed
+- **The Volkswagen.de Data Act login stops one page earlier, and is a little quicker for it
+  (#1740, thanks @VWGroupDatahub).** Signing in used to end with a request for a portal content page
+  that the integration reads nothing from — the page before it is the one that hands out the
+  session. That last request is gone. You will not see a difference beyond a slightly faster
+  login; it matters because the portal's own team told us the hop is about to change, and they
+  sent the fix before it did. Volkswagen's consent, legal-terms and optional marketing-consent
+  pages are handled exactly as before.
+- Internal, no user-visible change: following that chain by hand means the integration now
+  applies the rules a browser used to apply for it. The ones worth naming: a `303` does not
+  re-send your password to the next address, a redirect that leaves the host drops any
+  credential header instead of carrying it along, a redirect off `https` is not followed at
+  all, and a chain that never ends gives up after ten hops instead of spinning.
+- **A Vehicle Data Scout report now says which version of the integration produced it
+  (#1736, #1738).** It always had room for that line and never filled it, so every report
+  that reached me started with me asking you which version you were on — three times in the
+  past week. In one of those the field had been mapped thirty-seven minutes before the report
+  was filed, which nobody could tell from the report itself. The same line is now on the error
+  reporter's output. Nothing about what is collected changes: same fields, same masking, no
+  raw API response.
+- **The trip-computer distance since the last fill-up is a normal sensor now, visible without
+  hunting for it (#1655, thanks @fschulte2812).** It arrived as a hidden diagnostic entity
+  while the two memories next to it — total distance and last journey — were ordinary sensors,
+  which is why @fschulte2812 went looking and could not find it. That caution was for a value
+  nobody had seen on a real car yet; several cars have reported it since. If you enabled it by
+  hand, nothing changes for you.
+
+### Docs
+- Internal note only, no user-visible change: the device-grant source file still claimed Audi's app
+  client returned `200` from Volkswagen's device-code endpoint. That stopped being true when VW walled
+  the Audi app login (#1364), and a stale comment saying a dead login works is how someone later sends
+  a user down it. Corrected, together with why Audi deliberately stays in the brand list anyway: it is
+  what lets an Audi user reach the honest "this login was switched off" message instead of finding the
+  brand quietly missing from the picker.
+- Internal note only, no user-visible change: the rule that recognises a manufacturer-retired app
+  login (#1364, #1337) was written inline inside the browser-login error handler, which meant the
+  test covering it had copied the rule into its own body and was asserting on the copy — it could
+  not have failed if the real rule changed. The rule now lives in one place that the test actually
+  calls, with the first negative cases it has ever had, so a timeout or a 503 can no longer be
+  mistaken for a brand's login being permanently gone.
 
 ## [4.11.0] - 2026-10-04 — Trip figures and a Fix button / Fahrtdaten und ein Fix-Knopf
 
