@@ -1624,6 +1624,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             # a restart instead of blanking every entity, even though a valid
             # cached snapshot is loaded (entity_base requires last_good).
             self._seed_last_good_from_snapshot(cached.get("saved_at"), _restored_vins)
+            self._seed_companion_synced_at(_restored_vins)
             _LOGGER.debug(
                 "VW Group Connect portal-safety: restored %d cached vehicle(s) "
                 "for %s", len(self.vehicles), brand,
@@ -7367,6 +7368,24 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             address = locality or (display[:60] if display else "")
 
         return {"address": address or None, "city": locality or None}
+
+    def _seed_companion_synced_at(self, vins: list[str]) -> None:
+        """#968 — start the companion's car sync time from the snapshot.
+
+        The time only moves forward within a run, so starting from the
+        restored value keeps a restart or reload from putting it back.
+        """
+        restore = getattr(self._cariad_client, "restore_synced_at", None)
+        if restore is None:
+            return
+        from homeassistant.util import dt as dt_util  # noqa: PLC0415
+        for vin in vins:
+            raw = self.vehicles.get(vin, {}).get("companion_app_synced_at")
+            seen = raw if isinstance(raw, datetime) else (
+                dt_util.parse_datetime(raw) if isinstance(raw, str) else None
+            )
+            if seen is not None:
+                restore(seen)
 
     def _save_vehicle_cache(self) -> None:
         """Persist the last-known-good vehicle snapshot (debounced 30s).

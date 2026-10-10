@@ -435,6 +435,19 @@ class CompanionChannel:
             self._last_write_at = self._now() - ago
             self._last_write_wall = float(at)
 
+    def restore_synced_at(self, seen: datetime) -> None:
+        """Re-apply the last known car sync time at setup.
+
+        The sync line only narrows from below, so a run that starts from
+        nothing would put the time back by up to the line's rounding after
+        every restart or reload. A time in the future (a clock step) is
+        ignored.
+        """
+        if seen.tzinfo is None or seen.timestamp() > self._wall():
+            return
+        if self._seen_at is None or seen > self._seen_at:
+            self._seen_at = seen
+
     def _stamp_write(self) -> None:
         self._last_write_at = self._now()
         self._last_write_wall = self._wall()

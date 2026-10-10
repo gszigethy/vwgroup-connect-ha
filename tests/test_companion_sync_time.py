@@ -197,3 +197,58 @@ async def test_the_time_reaches_vehicle_data():
     data = await client.get_status(client._vin)
     assert data.companion_app_synced_at == T0 - timedelta(minutes=33)
     assert data.last_seen_at is None  # the cloud streams own last_seen_at
+
+
+# ── across a restart: the restored time is the floor ──────────────────────────
+
+@pytest.mark.asyncio
+async def test_a_restored_time_is_never_put_back_by_the_first_read():
+    phone = OverviewPhone()
+    channel = CompanionChannel(phone, PRESETS["volkswagen"], time_fn=lambda: 0.0,
+                               wall_clock_fn=lambda: T0.timestamp())
+    # Before the restart, reads had narrowed it to 32 min 10 s ago; the first
+    # read of the new run alone only proves 33 minutes.
+    channel.restore_synced_at(T0 - timedelta(minutes=32, seconds=10))
+    assert (await channel.read())["companion_app_synced_at"] == T0 - timedelta(minutes=32, seconds=10)
+    phone.line = "Synchronised just now"
+    assert (await channel.read())["companion_app_synced_at"] == T0 - timedelta(minutes=1)
+
+
+@pytest.mark.parametrize("restored", [
+    T0 + timedelta(hours=1),                       # in the future: a clock step
+    (T0 - timedelta(minutes=5)).replace(tzinfo=None),  # no time zone
+])
+@pytest.mark.asyncio
+async def test_a_restored_time_that_cannot_be_right_is_ignored(restored):
+    channel = CompanionChannel(OverviewPhone(), PRESETS["volkswagen"], time_fn=lambda: 0.0,
+                               wall_clock_fn=lambda: T0.timestamp())
+    channel.restore_synced_at(restored)
+    assert (await channel.read())["companion_app_synced_at"] == T0 - timedelta(minutes=33)
+
+
+@pytest.mark.parametrize("stored", [
+    "2026-10-05T09:27:50+00:00",                   # from the JSON snapshot
+    datetime(2026, 10, 5, 9, 27, 50, tzinfo=timezone.utc),
+])
+def test_setup_seeds_the_channel_from_the_snapshot(stored):
+    from types import SimpleNamespace
+
+    from custom_components.vag_connect.coordinator import VagConnectCoordinator
+
+    seeded = []
+    coordinator = SimpleNamespace(
+        _cariad_client=SimpleNamespace(restore_synced_at=seeded.append),
+        vehicles={"VIN1": {"companion_app_synced_at": stored}, "VIN2": {}},
+    )
+    VagConnectCoordinator._seed_companion_synced_at(coordinator, ["VIN1", "VIN2", "VIN3"])
+    assert seeded == [datetime(2026, 10, 5, 9, 27, 50, tzinfo=timezone.utc)]
+
+
+def test_setup_seeds_nothing_for_a_cloud_client():
+    from types import SimpleNamespace
+
+    from custom_components.vag_connect.coordinator import VagConnectCoordinator
+
+    coordinator = SimpleNamespace(_cariad_client=object(),
+                                  vehicles={"VIN1": {"companion_app_synced_at": "2026-10-05T09:27:50+00:00"}})
+    VagConnectCoordinator._seed_companion_synced_at(coordinator, ["VIN1"])
