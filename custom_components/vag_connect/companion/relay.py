@@ -362,7 +362,7 @@ def ensure_relay_view(hass: "HomeAssistant") -> None:
         from homeassistant.components.http.const import KEY_HASS  # noqa: PLC0415
     except ImportError:
         # Older HA releases stored the instance under a plain string key.
-        KEY_HASS = "hass"
+        KEY_HASS = "hass"  # type: ignore[assignment]
 
     class CompanionAgentView(HomeAssistantView):  # type: ignore[misc]
         """The agent's long-poll endpoint. Open by necessity, token-gated in fact."""
