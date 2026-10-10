@@ -131,3 +131,49 @@ async def test_climate_refuses_unknown_language_before_tile_tap():
     with pytest.raises(HomeAssistantError):
         await ClimateController(ch).start()
     phone.tap.assert_not_awaited()
+
+
+def _foreign_nodes():
+    from custom_components.vag_connect.companion.screen import parse_ui_dump
+    return parse_ui_dump('<hierarchy><node resource-id="vwd_title" text="Recharge" /></hierarchy>')
+
+
+@pytest.mark.asyncio
+async def test_stale_table_after_new_split_failure_does_not_authorise_writes():
+    phone = Phone()
+    phone.battery_strings = AsyncMock(return_value={'key': {'label'}})
+    ch = channel(phone)
+    await ch._refresh_version_gate()
+    ch._require_limit_language(_foreign_nodes())  # current table: allowed
+    phone.paths += ('/data/app/test/split_config.fr.apk',)
+    phone.battery_strings = AsyncMock(side_effect=CompanionTransportError('failed'))
+    await ch._refresh_version_gate()
+    assert ch._app_strings == {'key': {'label'}}  # still serves reads
+    with pytest.raises(HomeAssistantError):
+        ch._require_limit_language(_foreign_nodes())
+
+
+@pytest.mark.asyncio
+async def test_failed_extraction_retries_with_backoff():
+    phone = Phone()
+    phone.battery_strings = AsyncMock(side_effect=CompanionTransportError('failed'))
+    ch = channel(phone)
+    clock = [1000.0]
+    ch._now = lambda: clock[0]
+    await ch._refresh_version_gate()
+    assert phone.battery_strings.await_count == 1
+    clock[0] += 899
+    await ch._refresh_version_gate()
+    assert phone.battery_strings.await_count == 1  # inside the 15 min backoff
+    clock[0] += 2
+    await ch._refresh_version_gate()
+    assert phone.battery_strings.await_count == 2
+    clock[0] += 3599
+    await ch._refresh_version_gate()
+    assert phone.battery_strings.await_count == 2  # second backoff is 1 h
+    clock[0] += 2
+    phone.battery_strings = AsyncMock(return_value={'key': {'label'}})
+    await ch._refresh_version_gate()
+    assert ch._strings_current()
+    await ch._refresh_version_gate()
+    assert phone.battery_strings.await_count == 1  # success: no further fetches

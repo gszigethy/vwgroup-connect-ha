@@ -213,9 +213,12 @@ class CompanionChannel:
         self._nav_only: set[str] = set()
         self._screen_lock = asyncio.Lock()
         self._app_strings: dict[str, set[str]] = {}
-        self._strings_version: str | None = None
-        self._strings_paths: tuple[str, ...] | None = None
-        self._strings_attempted = False
+        # (app version, split list) the current table was successfully read for.
+        self._strings_ok_key: tuple[str | None, tuple[str, ...]] | None = None
+        self._strings_try_key: tuple[str | None, tuple[str, ...]] | None = None
+        self._strings_fails = 0
+        self._strings_retry_at = 0.0
+        self._strings_paths_now: tuple[str, ...] | None = None
 
     @property
     def preset(self) -> BrandPreset:
@@ -908,24 +911,47 @@ class CompanionChannel:
         getter = getattr(self._t, "battery_strings", None)
         if self._preset.brand != "volkswagen" or getter is None:
             return
+        self._strings_paths_now = None  # unknown until the split list is read
         try:
             path_getter = getattr(self._t, "app_resource_paths", None)
             paths = await path_getter(self._preset.package) if path_getter else ()
-            if (self._strings_attempted and self._strings_version == self._live_app_version
-                    and self._strings_paths == paths):
+            self._strings_paths_now = paths
+            key = (self._live_app_version, paths)
+            if self._strings_ok_key == key:
                 return
-            self._strings_attempted = True
-            self._strings_version = self._live_app_version
-            self._strings_paths = paths
+            if key != self._strings_try_key:
+                self._strings_try_key, self._strings_fails = key, 0
+            elif self._now() < self._strings_retry_at:
+                return
             strings = await getter(self._preset.package)
             if strings:
                 self._app_strings = strings
+                self._strings_ok_key = key
+                self._strings_fails = 0
+            else:
+                self._strings_failed()
         except CompanionTransportError:
             _LOGGER.debug("companion: app translation resources unavailable")
+            self._strings_failed()
             # Direct ADB drops its socket on shell errors. Reconnect once for
             # the remaining screen read, without retrying the extraction.
             if not self._t.connected:
                 await self._t.connect()
+
+    def _strings_failed(self) -> None:
+        """Back off a failed extraction: 15 min, then hourly, per (version, splits)."""
+        self._strings_fails += 1
+        self._strings_retry_at = self._now() + (900.0 if self._strings_fails == 1 else 3600.0)
+
+    def _strings_current(self) -> bool:
+        """True when the table was read for the installed version and splits.
+
+        A stale table (from before an update or a new language split) may still
+        serve reads, but must not vouch for limit detection on writes.
+        """
+        return bool(self._app_strings) and self._strings_ok_key == (
+            self._live_app_version, self._strings_paths_now
+        )
 
     def _require_limit_language(self, nodes: list[UiNode]) -> None:
         """Identify fallback coverage from known labels in the current dump.
@@ -935,7 +961,7 @@ class CompanionChannel:
         Navigation accessibility descriptions may stay English in foreign UIs,
         so only visible app labels and known command labels are considered.
         """
-        if self._app_strings:
+        if self._strings_current():
             return
         labels = {
             "charging", "air conditioning", "klimatisierung", "climatización",
