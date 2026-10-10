@@ -18,7 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Any, Awaitable, Callable
 
 from ..cariad.models import VehicleData
@@ -597,6 +597,10 @@ class CompanionClient:
     def restore_last_write(self, at: float) -> None:
         """Re-apply a persisted last command time at setup."""
         self._channel.restore_last_write(at)
+
+    def restore_synced_at(self, seen: datetime) -> None:
+        """Re-apply the last known car sync time at setup."""
+        self._channel.restore_synced_at(seen)
 
     def reset_cooldown(self) -> None:
         """Clear a stuck failure/rate-limit backoff (user-initiated retry)."""
