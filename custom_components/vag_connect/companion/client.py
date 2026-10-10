@@ -42,10 +42,46 @@ class ClimateTargets:
     """The climate Start's mode and temperature, as HA holds them.
 
     ``temp_c`` None means none was set yet: Start leaves the dial alone.
+    ``app_dial_c`` is the dial value last read from the app. A read that
+    differs from it means the dial was changed in the app (the app saves
+    every dial change to the car), so that value becomes the held one.
     """
 
     window_heating_only: bool = False
     temp_c: float | None = None
+    app_dial_c: float | None = None
+    # A held value restored without the dial it was held against: the next
+    # read cannot be compared, so it wins.
+    adopt_next_dial: bool = False
+
+    def note_app_dial(self, value: object) -> bool:
+        """Take in a dial read; True when it replaced the held temperature."""
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return False
+        read = float(value)
+        changed = self.adopt_next_dial or (
+            self.app_dial_c is not None and read != self.app_dial_c
+        )
+        self.app_dial_c = read
+        self.adopt_next_dial = False
+        if changed and self.temp_c is not None and self.temp_c != read:
+            self.temp_c = read
+            return True
+        return False
+
+    def restore(self, held: float, app_dial_c: float | None) -> None:
+        """Restore a held temperature saved with the dial it was held against."""
+        if self.temp_c is not None:
+            return  # set since startup
+        if self.app_dial_c is None:
+            # No read yet: the first one is compared with the saved dial.
+            self.temp_c = held
+            self.app_dial_c = app_dial_c
+            self.adopt_next_dial = app_dial_c is None
+        elif app_dial_c is not None and app_dial_c == self.app_dial_c:
+            # Read already, and the dial is where it was: still held.
+            self.temp_c = held
+        # Otherwise the dial moved in the app while HA was down: it wins.
 
 
 def climate_targets_of(coordinator: Any) -> ClimateTargets | None:
@@ -220,6 +256,8 @@ class CompanionClient:
         data.companion_writes_enabled = self._channel.writes_enabled
         data.companion_app_version = getattr(self._channel, "live_app_version", None)
         data.companion_source_age_s = self._channel.source_data_age_s
+        if "target_temperature" in fields:
+            self.climate_targets.note_app_dial(fields["target_temperature"])
         self._last_data = data
         return data
 
@@ -314,7 +352,15 @@ class CompanionClient:
         """Store the temperature for the next Start, on the app's 0.5 °C grid."""
         target = snap_temperature(float(temp_c))
         self.climate_targets.temp_c = target
+        # Chosen in HA: the next read of the unchanged dial must not undo it.
+        self.climate_targets.adopt_next_dial = False
         return target
+
+    def restore_climate_target_temperature(
+        self, temp_c: float, app_dial_c: float | None,
+    ) -> None:
+        """Restore a held temperature with the app dial it was held against."""
+        self.climate_targets.restore(snap_temperature(float(temp_c)), app_dial_c)
 
     def _start_with_targets(self) -> Awaitable[None]:
         targets = self.climate_targets

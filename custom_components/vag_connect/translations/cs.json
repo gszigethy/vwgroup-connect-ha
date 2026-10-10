@@ -2064,7 +2064,15 @@
         "name": "Interval dotazování"
       },
       "app_sync_interval": {
-        "name": "Interval synchronizace vozidla (probouzí vozidlo)"
+        "name": "Interval synchronizace vozidla (probouzí vozidlo)",
+        "state_attributes": {
+          "note": {
+            "name": "Poznámka",
+            "state": {
+              "battery_protection": "Ve výchozím nastavení vypnuto. Každá synchronizace probudí vozidlo a čerpá jeho limit požadavků. Příliš častá synchronizace může aktivovat ochranu baterie vozidla a aplikace pak zůstane v nouzovém režimu až do příštího nastartování vozidla. Nejkratší interval je 60 min; nastavením na 0 synchronizaci vypnete."
+            }
+          }
+        }
       }
     },
     "button": {

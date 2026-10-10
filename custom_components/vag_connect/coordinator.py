@@ -3112,8 +3112,13 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         The primary is the command-capable (or first-configured) channel; it
         stays highest priority in the merge so read-only supplementary channels
         only ever fill gaps."""
-        from .const import CONF_WEBSITE_AUTHPROXY  # noqa: PLC0415
+        from .const import CONF_WEBSITE_AUTHPROXY, is_companion_entry_data  # noqa: PLC0415
         data = self.entry.data
+        if is_companion_entry_data(data):
+            # The companion reads the brand's app, not its cloud: name the
+            # transport (ADB / relay) the client reports, never the brand.
+            token = getattr(self._cariad_client, "_source_channel", None)
+            return token if isinstance(token, str) and token else "companion_adb"
         if data.get(CONF_WEBSITE_AUTHPROXY):
             return "website_authproxy"
         dag = data.get("dag_initial_tokens") or {}
