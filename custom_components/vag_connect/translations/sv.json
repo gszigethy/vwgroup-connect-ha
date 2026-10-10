@@ -2064,7 +2064,15 @@
         "name": "Avläsningsintervall"
       },
       "app_sync_interval": {
-        "name": "Intervall för fordonssynkronisering (väcker bilen)"
+        "name": "Intervall för fordonssynkronisering (väcker bilen)",
+        "state_attributes": {
+          "note": {
+            "name": "Anmärkning",
+            "state": {
+              "battery_protection": "Avstängt som standard. Varje synkronisering väcker bilen och förbrukar en del av dess förfrågningsbudget. För tät synkronisering kan aktivera bilens batteriskydd, och appen förblir då i nödläge tills bilen startas nästa gång. Det kortaste intervallet är 60 min; ställ in 0 för att stänga av synkroniseringen."
+            }
+          }
+        }
       }
     },
     "button": {

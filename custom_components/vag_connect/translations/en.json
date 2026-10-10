@@ -2064,7 +2064,15 @@
         "name": "Poll interval"
       },
       "app_sync_interval": {
-        "name": "Vehicle sync interval (wakes the car)"
+        "name": "Vehicle sync interval (wakes the car)",
+        "state_attributes": {
+          "note": {
+            "name": "Note",
+            "state": {
+              "battery_protection": "Off by default. Each sync wakes the car and uses its request budget. Syncing too often can make the car's battery protection kick in, and the app then stays in failsafe mode until the car is next started. The shortest interval is 60 min; set to 0 to turn the sync off."
+            }
+          }
+        }
       }
     },
     "button": {

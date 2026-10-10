@@ -2064,7 +2064,15 @@
         "name": "Intervalle d'interrogation"
       },
       "app_sync_interval": {
-        "name": "Intervalle de synchronisation du véhicule (réveille le véhicule)"
+        "name": "Intervalle de synchronisation du véhicule (réveille le véhicule)",
+        "state_attributes": {
+          "note": {
+            "name": "Remarque",
+            "state": {
+              "battery_protection": "Désactivé par défaut. Chaque synchronisation réveille le véhicule et consomme une partie de son quota de requêtes. Des synchronisations trop fréquentes peuvent déclencher la protection de la batterie du véhicule. L’application reste alors en mode de sécurité jusqu’au prochain démarrage du véhicule. L’intervalle minimum est de 60 min ; réglez sur 0 pour désactiver la synchronisation."
+            }
+          }
+        }
       }
     },
     "button": {

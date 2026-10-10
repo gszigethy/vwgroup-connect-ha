@@ -2064,7 +2064,15 @@
         "name": "Interwał odpytywania"
       },
       "app_sync_interval": {
-        "name": "Interwał synchronizacji pojazdu (wybudza pojazd)"
+        "name": "Interwał synchronizacji pojazdu (wybudza pojazd)",
+        "state_attributes": {
+          "note": {
+            "name": "Uwaga",
+            "state": {
+              "battery_protection": "Domyślnie wyłączone. Każda synchronizacja wybudza samochód i zużywa część jego limitu żądań. Zbyt częsta synchronizacja może uruchomić ochronę akumulatora samochodu, a aplikacja pozostaje wtedy w trybie awaryjnym do następnego uruchomienia samochodu. Najkrótszy interwał wynosi 60 min; ustaw 0, aby wyłączyć synchronizację."
+            }
+          }
+        }
       }
     },
     "button": {

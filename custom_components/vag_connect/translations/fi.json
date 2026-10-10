@@ -2064,7 +2064,15 @@
         "name": "Kyselyväli"
       },
       "app_sync_interval": {
-        "name": "Ajoneuvon synkronointiväli (herättää auton)"
+        "name": "Ajoneuvon synkronointiväli (herättää auton)",
+        "state_attributes": {
+          "note": {
+            "name": "Huomautus",
+            "state": {
+              "battery_protection": "Oletuksena pois käytöstä. Jokainen synkronointi herättää auton ja kuluttaa sen pyyntökiintiötä. Liian tiheä synkronointi voi aktivoida auton akun suojauksen, jolloin sovellus pysyy vikasietotilassa, kunnes auto seuraavan kerran käynnistetään. Lyhin aikaväli on 60 min; aseta arvoksi 0 poistaaksesi synkronoinnin käytöstä."
+            }
+          }
+        }
       }
     },
     "button": {

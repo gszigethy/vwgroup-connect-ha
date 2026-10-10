@@ -557,15 +557,6 @@ def _companion_can_sync(coordinator: VagConnectCoordinator, entry: ConfigEntry) 
     return preset_can_sync(str(entry.data.get(CONF_BRAND, "")))
 
 
-# Shown on the slider's more-info dialog; the app's own warning is not on screen.
-APP_SYNC_NOTE = (
-    "Off by default. Each sync wakes the car and uses its request budget. "
-    "Syncing too often can make the car's battery protection kick in, and the "
-    "app then stays in failsafe mode until the car is next started. The "
-    "shortest interval is 60 min; set to 0 to turn the sync off."
-)
-
-
 class VagConnectAppSyncIntervalNumber(NumberEntity):
     """How often the companion taps the app's "Synchronise now", in minutes.
 
@@ -592,7 +583,8 @@ class VagConnectAppSyncIntervalNumber(NumberEntity):
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_app_sync_interval"
         self._attr_device_info = _settings_device(entry)
-        self._attr_extra_state_attributes = {"note": APP_SYNC_NOTE}
+        # Home Assistant translates this value in the more-info dialog.
+        self._attr_extra_state_attributes = {"note": "battery_protection"}
 
     @property
     def native_value(self) -> float:

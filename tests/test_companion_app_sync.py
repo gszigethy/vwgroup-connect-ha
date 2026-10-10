@@ -424,11 +424,36 @@ def test_slider_and_poll_interval_are_independent():
     assert (num.native_value, poll.native_value) == (120, 15)
 
 
-def test_slider_carries_the_battery_protection_note():
-    note = _number().extra_state_attributes["note"]
+_COMPONENT = Path(__file__).resolve().parents[1] / "custom_components" / DOMAIN
+_NOTE_FILES = [_COMPONENT / "strings.json", *sorted((_COMPONENT / "translations").glob("*.json"))]
+
+
+def _sync_note(path: Path) -> str:
+    strings = json.loads(path.read_text(encoding="utf-8"))
+    note = strings["entity"]["number"]["app_sync_interval"]["state_attributes"]["note"]
+    assert note["name"].strip()
+    return note["state"]["battery_protection"]
+
+
+def test_slider_note_is_a_translation_token():
+    # HA translates the token in the more-info dialog (state_attributes.note).
+    assert _number().extra_state_attributes == {"note": "battery_protection"}
+
+
+def test_battery_protection_note_in_english():
+    note = _sync_note(_COMPONENT / "strings.json")
     assert "battery protection" in note and "failsafe" in note and "next started" in note
     assert "Each sync wakes the car" in note and "Off by default" in note
     assert "0 to turn the sync off" in note
+    assert _sync_note(_COMPONENT / "translations" / "en.json") == note
+
+
+@pytest.mark.parametrize("path", _NOTE_FILES, ids=lambda path: path.name)
+def test_battery_protection_note_in_every_language(path):
+    note = _sync_note(path)
+    assert "60" in note and "0" in note
+    if path.stem not in {"en", "strings"}:
+        assert note != _sync_note(_COMPONENT / "strings.json")
 
 
 @pytest.mark.asyncio

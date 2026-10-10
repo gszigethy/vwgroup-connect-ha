@@ -2064,7 +2064,15 @@
         "name": "Abfrageintervall"
       },
       "app_sync_interval": {
-        "name": "Fahrzeug-Synchronisierungsintervall (weckt das Fahrzeug)"
+        "name": "Fahrzeug-Synchronisierungsintervall (weckt das Fahrzeug)",
+        "state_attributes": {
+          "note": {
+            "name": "Hinweis",
+            "state": {
+              "battery_protection": "Standardmäßig ausgeschaltet. Jede Synchronisierung weckt das Fahrzeug auf und verbraucht einen Teil seines Anfragekontingents. Zu häufiges Synchronisieren kann den Batterieschutz des Fahrzeugs auslösen. Die App bleibt dann bis zum nächsten Start des Fahrzeugs im Notbetrieb. Das kürzeste Intervall beträgt 60 min; mit 0 wird die Synchronisierung ausgeschaltet."
+            }
+          }
+        }
       }
     },
     "button": {

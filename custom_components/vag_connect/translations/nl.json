@@ -2064,7 +2064,15 @@
         "name": "Pollinterval"
       },
       "app_sync_interval": {
-        "name": "Synchronisatie-interval voertuig (wekt het voertuig)"
+        "name": "Synchronisatie-interval voertuig (wekt het voertuig)",
+        "state_attributes": {
+          "note": {
+            "name": "Opmerking",
+            "state": {
+              "battery_protection": "Standaard uitgeschakeld. Elke synchronisatie maakt de auto wakker en verbruikt een deel van het verzoekenbudget. Te vaak synchroniseren kan de accubescherming van de auto activeren. De app blijft dan in de noodmodus totdat de auto opnieuw wordt gestart. Het kortste interval is 60 min; stel in op 0 om synchronisatie uit te schakelen."
+            }
+          }
+        }
       }
     },
     "button": {
