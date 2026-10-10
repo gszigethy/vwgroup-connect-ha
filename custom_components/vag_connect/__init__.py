@@ -171,15 +171,24 @@ def _get_coordinator(hass: HomeAssistant, vin: str) -> VagConnectCoordinator | N
     `_get_coordinator` called during a startup race) without the older
     `hasattr` overhead.
     """
+    found = _get_coordinators(hass, vin)
+    return found[0] if found else None
+
+
+def _get_coordinators(hass: HomeAssistant, vin: str) -> list[VagConnectCoordinator]:
+    """Every loaded coordinator that owns *vin*, in config-entry order.
+
+    One car can sit in several entries, e.g. a read-only EU Data Act entry and a
+    companion (ADB) entry; a command must go to the one that can send it.
+    """
+    found: list[VagConnectCoordinator] = []
     for entry in hass.config_entries.async_entries(DOMAIN):
         coordinator: VagConnectCoordinator | None = getattr(
             entry, "runtime_data", None
         )
-        if coordinator is None:
-            continue
-        if vin in coordinator.vehicles:
-            return coordinator
-    return None
+        if coordinator is not None and vin in coordinator.vehicles:
+            found.append(coordinator)
+    return found
 
 
 _LLM_API_KEY = f"{DOMAIN}_llm_api"
@@ -391,6 +400,11 @@ def _register_services(hass: HomeAssistant) -> None:
         creation; raw service calls still went through).
         """
         c = _coord(vin)
+        # The same car in a read-only entry and a writable one: use the
+        # writable one instead of failing on whichever entry was set up first.
+        c = next(
+            (o for o in _get_coordinators(hass, vin) if not o.is_read_only()), c
+        )
         if c.is_read_only():
             # #543 — a portal/website car is STRUCTURALLY read-only: the
             # token has no command path, so "disable the option" is wrong
