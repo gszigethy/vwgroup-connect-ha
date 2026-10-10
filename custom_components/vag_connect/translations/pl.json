@@ -2058,7 +2058,7 @@
         "name": "Interwał odpytywania"
       },
       "app_sync_interval": {
-        "name": "Interwał synchronizacji pojazdu"
+        "name": "Interwał synchronizacji pojazdu (wybudza pojazd)"
       }
     },
     "button": {
@@ -2532,6 +2532,12 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "Aplikacja nie zsynchronizowała pojazdu. Każda synchronizacja wybudza pojazd, więc jest odrzucana, gdy polecenia są wstrzymane lub zbyt wcześnie po ostatnim poleceniu. Sprawdź czujnik Stan żądań aplikacji."
+    },
+    "companion_app_version_unverified": {
+      "message": "Polecenia są wyłączone: aplikacja na telefonie ma wersję {version}, która nie została jeszcze zweryfikowana dla poleceń. Polecenia, zapisywanie i synchronizacja pozostaną wyłączone, dopóki ta wersja nie zostanie zweryfikowana. Dane pojazdu są nadal aktualizowane."
+    },
     "vehicle_not_found": {
       "message": "Pojazd z VIN {vin} nie znaleziony."
     },
@@ -2556,6 +2562,9 @@
     "read_only_attestation_blocked": {
       "message": "VW blokuje zdalne polecenia dla SEAT/CUPRA za weryfikacją urządzenia Google (Play Integrity / App Check), którą przechodzi tylko oficjalna aplikacja na prawdziwym telefonie. Dlatego z tego miejsca nie można wysłać zamykania, klimatyzacji ani ładowania. To trwała blokada po stronie serwera VW, a nie ustawienie, które można wyłączyć. Dane pojazdu są nadal aktualizowane przez portal EU Data Act."
     },
+    "departure_timer_enabled_required": {
+      "message": "Ustaw 'enabled' dla timera odjazdu tego pojazdu: jego połączenie tego wymaga. Pominąć to może tylko kanał companion (ADB)."
+    },
     "export_file_not_allowed": {
       "message": "Home Assistant nie ma uprawnień do odczytu {path}. Umieść plik eksportu w folderze konfiguracji (lub w folderze wymienionym w allowlist_external_dirs) i podaj jego ścieżkę ponownie."
     },
@@ -2573,6 +2582,9 @@
     },
     "historical_wedge_blocked": {
       "message": "Dla tego samochodu trwa już jednorazowy eksport danych historycznych. Portal obsługuje tylko jedno takie żądanie naraz, więc zaczekaj, aż bieżące się zakończy (lub wygaśnie), zanim poprosisz o kolejne."
+    },
+    "hvac_mode_not_supported": {
+      "message": "Tryb HVAC {hvac_mode} nie jest obsługiwany; użyj jednego z: {modes}. Nic nie zostało wysłane."
     }
   },
   "selector": {

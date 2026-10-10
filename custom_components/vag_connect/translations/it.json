@@ -2058,7 +2058,7 @@
         "name": "Intervallo di polling"
       },
       "app_sync_interval": {
-        "name": "Intervallo di sincronizzazione del veicolo"
+        "name": "Intervallo di sincronizzazione del veicolo (sveglia il veicolo)"
       }
     },
     "button": {
@@ -2532,6 +2532,12 @@
     }
   },
   "exceptions": {
+    "companion_sync_refused": {
+      "message": "L'app non ha sincronizzato il veicolo. Ogni sincronizzazione sveglia il veicolo, quindi viene rifiutata mentre i comandi sono in pausa o troppo presto dopo l'ultimo comando. Controlla il sensore Stato richieste dell'app."
+    },
+    "companion_app_version_unverified": {
+      "message": "I comandi sono disattivati: l'app sul telefono è la versione {version}, che non è ancora stata verificata per i comandi. Comandi, salvataggi e sincronizzazioni restano disattivati finché questa versione non viene verificata. I dati del veicolo continuano ad aggiornarsi."
+    },
     "vehicle_not_found": {
       "message": "Veicolo con VIN {vin} non trovato. Verifica che l'integrazione sia avviata."
     },
@@ -2556,6 +2562,9 @@
     "read_only_attestation_blocked": {
       "message": "VW blocca i comandi a distanza per SEAT/CUPRA dietro una verifica del dispositivo di Google (Play Integrity / App Check) che solo l'app ufficiale su un telefono reale può superare. Blocco porte, climatizzazione e ricarica non possono quindi essere inviati da qui. È un blocco permanente lato server di VW, non un'impostazione disattivabile. I dati del veicolo continuano ad aggiornarsi tramite il portale EU Data Act."
     },
+    "departure_timer_enabled_required": {
+      "message": "Imposta 'enabled' per il timer di partenza di questo veicolo: la sua connessione lo richiede. Solo il canale companion (ADB) può ometterlo."
+    },
     "export_file_not_allowed": {
       "message": "Home Assistant non è autorizzato a leggere {path}. Sposta il file di esportazione nella cartella di configurazione (o in una cartella elencata in allowlist_external_dirs) e indica di nuovo il suo percorso."
     },
@@ -2573,6 +2582,9 @@
     },
     "historical_wedge_blocked": {
       "message": "È già in corso un'esportazione una tantum dello storico per questo veicolo. Il portale gestisce una sola richiesta di questo tipo alla volta, quindi attendi che quella in corso si concluda (o vada in timeout) prima di richiederne un'altra."
+    },
+    "hvac_mode_not_supported": {
+      "message": "La modalità HVAC {hvac_mode} non è supportata; usa una tra: {modes}. Non è stato inviato nulla."
     }
   },
   "selector": {

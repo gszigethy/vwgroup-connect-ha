@@ -87,6 +87,22 @@ class TestConnect:
             asyncio.run(t.connect())
         assert t.connected is False
 
+    def test_addon_error_text_is_never_passed_on(self) -> None:
+        # The add-on's adb text can carry the phone's IP or serial: only a
+        # fixed description of it reaches the error.
+        sess = _Session(health=_Resp(200, {
+            "connected": False,
+            "last_error": "failed to connect to 192.168.1.57:40125: Connection refused",
+        }))
+        with pytest.raises(CompanionTransportError) as err:
+            asyncio.run(_t(sess).connect())
+        assert "192.168" not in str(err.value) and "40125" not in str(err.value)
+        assert "refused the adb connection" in str(err.value)
+        sess = _Session(health=_Resp(200, {"connected": False, "last_error": "R58N1234XYZ gone"}))
+        with pytest.raises(CompanionTransportError) as err:
+            asyncio.run(_t(sess).connect())
+        assert "R58N" not in str(err.value) and "add-on log" in str(err.value)
+
     def test_bad_token_names_the_token(self) -> None:
         sess = _Session(health=_Resp(403, {}))
         with pytest.raises(CompanionTransportError, match="token"):
