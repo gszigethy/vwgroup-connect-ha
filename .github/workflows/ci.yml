@@ -16,21 +16,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Set up Python 3.14
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      - name: Python 3.14 einrichten
+        uses: actions/setup-python@v7
         with:
           python-version: "3.14"
 
-      # Keep the verified HA baseline; 2026.10 changes the schema APIs.
       - name: Install dependencies
         run: |
           pip install \
             ruff==0.15.12 \
             mypy \
-            homeassistant==2026.9.4
+            homeassistant
 
       - name: Ruff Lint
-        run: ruff check custom_components/
+        run: ruff check custom_components/ tests/
 
       - name: mypy strict
         run: |
@@ -94,16 +93,15 @@ jobs:
     name: Unit Tests + Coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Set up Python 3.14
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+      - name: Python 3.14 einrichten
+        uses: actions/setup-python@v7
         with:
           python-version: "3.14"
 
-      # Match the HA version used by lint and type checking.
       - name: Install test dependencies
         run: |
           pip install \
@@ -112,7 +110,7 @@ jobs:
             pytest-asyncio \
             hypothesis \
             voluptuous \
-            homeassistant==2026.9.4
+            homeassistant
 
       - name: Run tests with coverage
         id: pytest

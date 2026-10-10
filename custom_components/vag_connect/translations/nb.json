@@ -221,6 +221,7 @@
       "porsche_login_wall": "Påloggingsdetaljene dine er i orden — innloggingen kom forbi passordtrinnet, men stoppet ved en Porsche captcha-/samtykkeskjerm som den ikke kan fullføre automatisk (sett på my.porsche.com). Dette er en sperre på Porsches side, spores i #1337, ikke feil passord. Ikke prøv igjen i en løkke — gjentatte forsøk har låst Porsche-kontoer. Hvis du kan, rapporter det gjerne så vi kan fikse det (legg ved diagnostikk): {report_url}",
       "porsche_portal_step": "Porsche sendte denne innloggingen til nettportalen sin (my.porsche.com) for et engangstrinn som integrasjonen ikke kan fullføre selv. Åpne {portal_url} i en vanlig nettleser — helst på samme nettverk som Home Assistant — logg inn med den samme kontoen, fullfør det den viser (samtykke, vilkår, informasjonskapsel-varsel), og kom så tilbake og prøv igjen. Ikke prøv igjen i en løkke: gjentatte mislykkede forsøk har låst Porsche-kontoer. Sitter du fortsatt fast? Rapporter det her: {report_url}",
       "porsche_captcha_failed": "Captchaen kunne ikke bekreftes og er nå brukt opp. Lukk denne dialogen og start Porsche-innloggingen på nytt for å få en ny. Hvis du kan, rapporter det gjerne så vi kan fikse det (legg ved diagnostikk): {report_url}",
+      "porsche_captcha_credentials": "Porsche avviste innloggingen i dette trinnet, så captchaen er brukt opp — men captchaen var ikke problemet: e-postadressen eller passordet ble ikke godtatt. Sjekk dem, og start Porsche-innloggingen på nytt. Ikke prøv om og om igjen: gjentatte mislykkede forsøk har ført til at Porsche låser kontoer. Hvis påloggingsinformasjonen helt sikkert er riktig, rapporter det gjerne så vi kan fikse det (legg ved diagnostikk): {report_url}",
       "porsche_captcha_cooldown": "For mange captcha-forsøk. Gjentatte forsøk kan føre til at Porsche midlertidig låser kontoen eller flagger nettverket ditt, så dette ble stoppet for å beskytte kontoen din. Vent noen minutter før du prøver igjen. Hvis du kan, rapporter det gjerne så vi kan fikse det (legg ved diagnostikk): {report_url}",
       "reconfigure_failed": "Rekonfigurering mislyktes: konfigurasjonsoppføringen ble ikke funnet. Prøv igjen.",
       "reauth_failed": "Reautentisering mislyktes: konfigurasjonsoppføringen ble ikke funnet. Prøv igjen."
@@ -1279,6 +1280,9 @@
       "dashboard_warnings_raw": {
         "name": "Dashbordvarsler (rå)"
       },
+      "dashboard_warnings_last_at": {
+        "name": "Varsellamper sist registrert"
+      },
       "climate_error_code": {
         "name": "Klimafeilkode"
       },
@@ -2312,7 +2316,38 @@
           "confirm": {
             "title": "Koble til Volkswagen.de-kanalen på nytt",
             "description": "Volkswagen.de-lesekanalen kunne ikke gjenoppta økten — Volkswagen ber om engangskoden på e-post igjen. Hoveddataene for bilen er upåvirket. Fortsett, og du kommer direkte til innloggingen for denne bilen; du trenger ikke finne innstillingene selv."
+          },
+          "credentials": {
+            "title": "Volkswagen.de-nettsted (BETA, kun lesing)",
+            "data": {
+              "username": "E-postadresse",
+              "password": "Passord",
+              "scan_interval": "Oppdateringsintervall"
+            },
+            "data_description": {
+              "username": "E-posten til Volkswagen ID- / myVolkswagen-kontoen din.",
+              "password": "Passordet til Volkswagen ID-en din.",
+              "scan_interval": "Hvor ofte data hentes (minutter). Minimum: 5."
+            }
+          },
+          "otp": {
+            "title": "E-postbekreftelseskode",
+            "description": "En bekreftelseskode ble sendt til e-posten for **{username}**.\n\nSkriv inn koden for å fullføre innloggingen til Volkswagen.de-nettstedskanalen (beta).",
+            "data": {
+              "mfa_code": "Bekreftelseskode"
+            },
+            "data_description": {
+              "mfa_code": "Kode fra e-postinnboksen din — gyldig i noen minutter."
+            }
           }
+        },
+        "error": {
+          "invalid_credentials": "E-postadresse eller passord er feil.",
+          "cannot_connect": "Kunne ikke nå Volkswagen. Prøv igjen.",
+          "website_login_failed": "E-postadressen og passordet ditt er ikke problemet — innloggingen på volkswagen.de kom forbi dem og feilet i et senere steg (for eksempel en utløpt sesjon, en omdirigeringsløkke eller en side den ikke gjenkjente). Årsaken står i Home Assistant-loggen. Nytt passord hjelper ikke; hvis det fortsetter, opprett et issue med den logglinjen."
+        },
+        "abort": {
+          "entry_gone": "Den integrasjonsoppføringen finnes ikke lenger."
         }
       }
     },
@@ -2342,7 +2377,7 @@
     },
     "skoda_official_enrolled": {
       "title": "Škoda offisielt API — du er nå automatisk påmeldt",
-      "description": "Gode nyheter: vi brukte den eksisterende Škoda-innloggingen din til å opprette en offisiell Škoda API-nøkkel for bilen din, så Home Assistant nå kan lese av bilen via Škodas nye, offisielle og varige kanal — som en automatisk reserve dersom den vanlige tilkoblingen skulle få problemer. Fordi denne offisielle kanalen har en forespørselsgrense (bare et lite antall forespørsler i timen), står den i beredskap og leser bare når hovedtilkoblingen ikke klarer det — så den bremser ingenting. Du trenger ikke gjøre noe; dette er bare til info, og du kan lukke varselet."
+      "description": "Gode nyheter: vi brukte den eksisterende Škoda-innloggingen din til å opprette en offisiell Škoda-API-nøkkel for bilen din, slik at Home Assistant nå kan lese den over Škodas egen offisielle og varige kanal. Den leses ved hver vanlige oppdatering sammen med den normale tilkoblingen din, og målingene fra produsenten utfyller og retter det tilkoblingen rapporterer — og den tar over selv hvis den normale tilkoblingen svikter. Fordi den offisielle kanalen bare tillater et lite antall forespørsler i timen, fordeler integrasjonen budsjettet og hopper over den når det begynner å bli lite, så ingenting blir tregere. Du trenger ikke gjøre noe; dette er bare en opplysning som du kan lukke."
     },
     "skoda_official_quota_full": {
       "title": "Škoda offisielt API — grensen for nøkler er nådd",

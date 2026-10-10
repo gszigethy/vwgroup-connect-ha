@@ -221,6 +221,7 @@
       "porsche_login_wall": "Deine Zugangsdaten sind in Ordnung — die Anmeldung kam am Passwort-Schritt vorbei, blieb dann aber an einem Porsche-Captcha-/Zustimmungs-Bildschirm hängen, den sie nicht automatisch abschließen kann (auf my.porsche.com beobachtet). Das ist eine Porsche-seitige Sperre (verfolgt unter #1337), kein falsches Passwort. Nicht in einer Schleife wiederholen — wiederholte Versuche haben schon zu Porsche-Konto-Sperrungen geführt. Wenn möglich, melde es bitte, damit wir es beheben können (Diagnose anhängen): {report_url}",
       "porsche_portal_step": "Porsche hat diese Anmeldung an sein Web-Portal (my.porsche.com) weitergeleitet, für einen einmaligen Schritt, den die Integration nicht selbst abschließen kann. Öffne {portal_url} in einem normalen Browser — am besten im selben Netzwerk wie Home Assistant — melde dich mit demselben Konto an, erledige, was dort angezeigt wird (Zustimmung, AGB, Cookie-Hinweis), und versuche es danach hier erneut. Nicht in einer Schleife wiederholen: wiederholte Fehlversuche haben schon zu Porsche-Konto-Sperrungen geführt. Klappt es immer noch nicht? Melde es hier: {report_url}",
       "porsche_captcha_failed": "Das Captcha konnte nicht bestätigt werden und ist jetzt verbraucht. Bitte schließe diesen Dialog und starte die Porsche-Anmeldung neu, um ein frisches zu erhalten. Wenn möglich, melde es bitte, damit wir es beheben können (Diagnose anhängen): {report_url}",
+      "porsche_captcha_credentials": "Porsche hat die Anmeldung in diesem Schritt abgelehnt, damit ist das Captcha verbraucht — es war aber nicht das Problem: E-Mail oder Passwort wurden nicht akzeptiert. Prüfe beides und starte die Porsche-Anmeldung neu. Nicht in einer Schleife wiederholen: wiederholte Fehlversuche haben schon zu gesperrten Porsche-Konten geführt. Wenn die Zugangsdaten sicher stimmen, melde es bitte, damit wir es beheben können (Diagnose anhängen): {report_url}",
       "porsche_captcha_cooldown": "Zu viele Captcha-Versuche. Wiederholte Versuche können dazu führen, dass Porsche das Konto vorübergehend sperrt oder dein Netzwerk markiert – daher wurde hier gestoppt, um dein Konto zu schützen. Warte ein paar Minuten, bevor du es erneut versuchst. Wenn möglich, melde es bitte, damit wir es beheben können (Diagnose anhängen): {report_url}",
       "reconfigure_failed": "Neukonfiguration fehlgeschlagen: Der Konfigurationseintrag wurde nicht gefunden. Bitte versuche es erneut.",
       "reauth_failed": "Erneute Anmeldung fehlgeschlagen: Der Konfigurationseintrag wurde nicht gefunden. Bitte versuche es erneut."
@@ -1279,6 +1280,9 @@
       "dashboard_warnings_raw": {
         "name": "Warnleuchten (Rohwert)"
       },
+      "dashboard_warnings_last_at": {
+        "name": "Warnleuchten zuletzt erfasst"
+      },
       "climate_error_code": {
         "name": "Klima-Fehlercode"
       },
@@ -2312,7 +2316,38 @@
           "confirm": {
             "title": "Volkswagen.de-Kanal neu verbinden",
             "description": "Der volkswagen.de-Lesekanal konnte seine Sitzung nicht fortsetzen — Volkswagen verlangt wieder den Einmalcode per E-Mail. Die Hauptdaten deines Fahrzeugs sind nicht betroffen. Weiter, und du landest direkt im Login für dieses Auto; die Einstellungen der Integration musst du nicht selbst suchen."
+          },
+          "credentials": {
+            "title": "Volkswagen.de Website (BETA, nur Lesen)",
+            "data": {
+              "username": "E-Mail-Adresse",
+              "password": "Passwort",
+              "scan_interval": "Aktualisierungsintervall"
+            },
+            "data_description": {
+              "username": "Die E-Mail deines Volkswagen-ID- / myVolkswagen-Kontos.",
+              "password": "Dein Volkswagen-ID-Passwort.",
+              "scan_interval": "Wie oft Daten abgerufen werden (Minuten). Minimum: 5."
+            }
+          },
+          "otp": {
+            "title": "E-Mail-Bestätigungscode",
+            "description": "Ein Bestätigungscode wurde an die E-Mail von **{username}** gesendet.\n\nGib den Code ein, um die Anmeldung am Volkswagen.de-Website-Kanal (Beta) abzuschließen.",
+            "data": {
+              "mfa_code": "Bestätigungscode"
+            },
+            "data_description": {
+              "mfa_code": "Code aus deinem E-Mail-Posteingang — einige Minuten gültig."
+            }
           }
+        },
+        "error": {
+          "invalid_credentials": "E-Mail-Adresse oder Passwort falsch.",
+          "cannot_connect": "Volkswagen konnte nicht erreicht werden. Bitte erneut versuchen.",
+          "website_login_failed": "Deine E-Mail-Adresse und dein Passwort sind nicht das Problem — die Anmeldung bei volkswagen.de ist daran vorbeigekommen und erst in einem späteren Schritt gescheitert (zum Beispiel abgelaufene Sitzung, Weiterleitungsschleife oder eine Seite, die nicht erkannt wurde). Der Grund steht im Home-Assistant-Protokoll. Ein neues Passwort hilft hier nicht; wenn es weiter auftritt, erstelle bitte ein Issue und füge diese Protokollzeile bei."
+        },
+        "abort": {
+          "entry_gone": "Dieser Integrationseintrag existiert nicht mehr."
         }
       }
     },
@@ -2342,7 +2377,7 @@
     },
     "skoda_official_enrolled": {
       "title": "Offizielle Škoda-API — du bist jetzt automatisch dabei",
-      "description": "Gute Nachricht: Wir haben mit deinem bestehenden Škoda-Login einen offiziellen Škoda-API-Schlüssel für dein Auto erstellt, sodass Home Assistant es jetzt über Škodas neuen, offiziellen und dauerhaften Kanal lesen kann — als automatisches Backup, falls die normale Verbindung mal schwächelt. Da dieser offizielle Kanal ratenbegrenzt ist (nur wenige Anfragen pro Stunde), bleibt er im Standby und liest nur, wenn deine Hauptverbindung nicht kann — er bremst also nichts. Von deiner Seite ist nichts zu tun; das ist nur ein Hinweis, den du schließen kannst."
+      "description": "Gute Nachricht: Wir haben mit deinem bestehenden Škoda-Login einen offiziellen Škoda-API-Schlüssel für dein Auto erstellt, sodass Home Assistant es jetzt über Škodas eigenen, offiziellen und dauerhaften Kanal lesen kann. Er wird bei jeder regulären Aktualisierung zusätzlich zu deiner normalen Verbindung gelesen, und seine Werte vom Hersteller ergänzen und korrigieren, was diese Verbindung meldet — und er übernimmt von selbst, falls die normale Verbindung ausfällt. Weil der offizielle Kanal nur wenige Anfragen pro Stunde erlaubt, teilt sich die Integration das Budget ein und lässt ihn aus, wenn es knapp wird; es bremst also nichts. Von deiner Seite ist nichts zu tun; das ist nur ein Hinweis, den du schließen kannst."
     },
     "skoda_official_quota_full": {
       "title": "Offizielle Škoda-API — Schlüssel-Limit erreicht",
