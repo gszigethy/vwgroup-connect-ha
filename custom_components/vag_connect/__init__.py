@@ -27,9 +27,22 @@ from homeassistant.exceptions import (
 )
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
-from .const import DOMAIN, CONF_BRAND, CONF_USERNAME, CONF_PASSWORD
-from .coordinator import VagConnectCoordinator, entry_settings_fingerprint
+from .const import (
+    CONF_COMPANION_UID_NAMESPACE,
+    CONF_BRAND,
+    CONF_PASSWORD,
+    CONF_USERNAME,
+    DOMAIN,
+    is_companion_entry_data,
+    vehicle_unique_id,
+)
+from .coordinator import (
+    VagConnectCoordinator,
+    _self_update_entry,
+    entry_settings_fingerprint,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -158,15 +171,24 @@ def _get_coordinator(hass: HomeAssistant, vin: str) -> VagConnectCoordinator | N
     `_get_coordinator` called during a startup race) without the older
     `hasattr` overhead.
     """
+    found = _get_coordinators(hass, vin)
+    return found[0] if found else None
+
+
+def _get_coordinators(hass: HomeAssistant, vin: str) -> list[VagConnectCoordinator]:
+    """Every loaded coordinator that owns *vin*, in config-entry order.
+
+    One car can sit in several entries, e.g. a read-only EU Data Act entry and a
+    companion (ADB) entry; a command must go to the one that can send it.
+    """
+    found: list[VagConnectCoordinator] = []
     for entry in hass.config_entries.async_entries(DOMAIN):
         coordinator: VagConnectCoordinator | None = getattr(
             entry, "runtime_data", None
         )
-        if coordinator is None:
-            continue
-        if vin in coordinator.vehicles:
-            return coordinator
-    return None
+        if coordinator is not None and vin in coordinator.vehicles:
+            found.append(coordinator)
+    return found
 
 
 _LLM_API_KEY = f"{DOMAIN}_llm_api"
@@ -206,8 +228,35 @@ def _unregister_llm_api(hass: HomeAssistant) -> None:
         unregister()
 
 
+def _pin_companion_app_sync_off(hass: HomeAssistant, entry: VagConnectConfigEntry) -> None:
+    """#968 — the companion's "Synchronise now" wakes the car, so it is opt-in.
+
+    A companion entry with no stored sync interval (in data or options) gets an
+    explicit 0 (off), once: after that the key is there, and a value the user
+    set is never touched. Other channels have no such setting.
+    """
+    from .const import (  # noqa: PLC0415
+        COMPANION_APP_SYNC_OFF,
+        CONF_COMPANION_APP_SYNC_INTERVAL,
+        CONF_STRATEGY,
+        STRATEGY_COMPANION_ADB,
+    )
+
+    if entry.data.get(CONF_STRATEGY) != STRATEGY_COMPANION_ADB:
+        return
+    if CONF_COMPANION_APP_SYNC_INTERVAL in entry.data or CONF_COMPANION_APP_SYNC_INTERVAL in (
+        entry.options or {}
+    ):
+        return
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, CONF_COMPANION_APP_SYNC_INTERVAL: COMPANION_APP_SYNC_OFF},
+    )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: VagConnectConfigEntry) -> bool:
     """Set up a VW Group Connect config entry."""
+    # Before the update listener is attached, so this write never reloads.
+    _pin_companion_app_sync_off(hass, entry)
     coordinator = VagConnectCoordinator(hass, entry)
 
     try:
@@ -251,6 +300,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: VagConnectConfigEntry) -
     coordinator.async_set_updated_data(dict(coordinator.vehicles))
     entry.runtime_data = coordinator
 
+    if _companion_uid_migration_due(entry.data):
+        _migrate_companion_unique_ids(hass, entry, list(coordinator.vehicles))
+        _self_update_entry(
+            coordinator, data={**entry.data, CONF_COMPANION_UID_NAMESPACE: 1}
+        )
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
@@ -278,6 +333,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: VagConnectConfigEntry) -
 
     _LOGGER.info("VW Group Connect ready: %d vehicle(s)", len(coordinator.vehicles))
     return True
+
+
+def _companion_uid_migration_due(data: Any) -> bool:
+    """True for a companion entry whose ids were not yet moved to its namespace."""
+    return is_companion_entry_data(data) and not data.get(CONF_COMPANION_UID_NAMESPACE)
+
+
+def _migrate_companion_unique_ids(
+    hass: HomeAssistant, entry: VagConnectConfigEntry, vins: list[str]
+) -> None:
+    """Move this companion entry's ``{vin}_{key}`` entities to ``{vin}_companion_{key}``.
+
+    Keeps each entity's entity_id, name and history; only the registry's
+    unique id changes, so the platforms find them again under the new id.
+    Runs once per entry (``CONF_COMPANION_UID_NAMESPACE``), so every
+    ``{vin}_…`` id moves exactly once, including legacy keys that already
+    start with ``companion_``. Entry-scoped ids (``{entry_id}_…``) stay.
+    """
+    registry = er.async_get(hass)
+    for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        uid = reg_entry.unique_id or ""
+        vin = next((v for v in vins if uid.startswith(f"{v}_")), None)
+        if vin is None:
+            continue
+        new_uid = vehicle_unique_id(vin, uid[len(vin) + 1:], companion=True)
+        if registry.async_get_entity_id(reg_entry.domain, DOMAIN, new_uid):
+            continue
+        registry.async_update_entity(reg_entry.entity_id, new_unique_id=new_uid)
 
 
 async def async_migrate_entry(
@@ -344,6 +427,11 @@ def _register_services(hass: HomeAssistant) -> None:
         creation; raw service calls still went through).
         """
         c = _coord(vin)
+        # The same car in a read-only entry and a writable one: use the
+        # writable one instead of failing on whichever entry was set up first.
+        c = next(
+            (o for o in _get_coordinators(hass, vin) if not o.is_read_only()), c
+        )
         if c.is_read_only():
             # #543 — a portal/website car is STRUCTURALLY read-only: the
             # token has no command path, so "disable the option" is wrong

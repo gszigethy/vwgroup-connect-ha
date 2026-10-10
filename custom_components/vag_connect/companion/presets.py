@@ -100,11 +100,11 @@ def app_version_covered(
     """True when the live app is a verified build or newer than all of them.
 
     2026-10-07 — an app update used to switch every tap off until someone
-    listed the new version. Taps do not depend on the version number: each
-    control is found on screen by resource id or the app's own label, a missing
-    one stops the flow instead of tapping blind, and the result is checked
-    afterwards. So a newer build is allowed and relies on those checks; an
-    unknown OLDER build (or an unreadable version) stays blocked.
+    listed the new version. Nav reads find each control on screen by resource
+    id or the app's own label, and a missing one stops the walk instead of
+    tapping blind, so a newer build is allowed for READS; an unknown OLDER
+    build (or an unreadable version) stays blocked. Writes use
+    ``app_version_listed`` instead (maintainer rule 9).
     """
     if live is None or not verified:
         return False
@@ -114,6 +114,21 @@ def app_version_covered(
     key = _version_key(live)
     known = [k for k in (_version_key(v) for v in want) if k is not None]
     return key is not None and bool(known) and key > max(known)
+
+
+def app_version_listed(
+    live: str | None, verified: str | tuple[str, ...] | None
+) -> bool:
+    """True only when the live app is one of the verified builds.
+
+    Maintainer rule 9: commands, Save taps and the sync are pinned to the
+    builds they were verified on. The charge slider and the climate dial are
+    walked with geometry measured on those builds, so a newer layout could put
+    the taps on the wrong step; a newer build keeps reads but not writes.
+    """
+    if live is None or not verified:
+        return False
+    return live in ((verified,) if isinstance(verified, str) else tuple(verified))
 
 
 @dataclass(frozen=True)

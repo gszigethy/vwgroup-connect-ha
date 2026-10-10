@@ -10,8 +10,10 @@ from homeassistant.components.climate import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .const import DOMAIN
 from .coordinator import VagConnectCoordinator
 from .entity_base import VagConnectEntity, register_dynamic_spawner
 
@@ -113,15 +115,36 @@ class VagClimate(VagConnectEntity, ClimateEntity):
         t = self._vehicle.get("target_temperature")
         return float(t) if t is not None else DEFAULT_TEMP
 
+    def _check_hvac_mode(self, hvac_mode: str) -> HVACMode:
+        # Only the listed modes: anything else must never be read as Stop.
+        if hvac_mode not in self.hvac_modes:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="hvac_mode_not_supported",
+                translation_placeholders={
+                    "hvac_mode": str(hvac_mode), "modes": ", ".join(self.hvac_modes),
+                },
+            )
+        return HVACMode(hvac_mode)
+
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
+        hvac_mode = self._check_hvac_mode(hvac_mode)
         if hvac_mode == HVACMode.HEAT_COOL:
             await self.coordinator.async_start_climatisation(self._vin)
         else:
             await self.coordinator.async_stop_climatisation(self._vin)
 
     async def async_set_temperature(self, **kwargs: object) -> None:
+        hvac_mode = kwargs.get("hvac_mode") if self.coordinator.is_companion() else None
+        if hvac_mode is not None:
+            # Checked before anything is stored or sent.
+            hvac_mode = self._check_hvac_mode(str(hvac_mode))
         raw = kwargs.get("temperature", DEFAULT_TEMP)
         temp = float(raw) if isinstance(raw, (int, float)) else DEFAULT_TEMP
         await self.coordinator.async_set_climatisation_temperature(
             self._vin, temp
         )
+        # Companion: the store comes first, so a Start asked for alongside
+        # applies the new temperature.
+        if hvac_mode is not None:
+            await self.async_set_hvac_mode(hvac_mode)

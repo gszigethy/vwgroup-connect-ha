@@ -4717,6 +4717,13 @@ class VagAppRequestStatusSensor(VagConnectEntity, SensorEntity):
         state = self._vehicle.get("companion_request_state")
         return state if state in self._attr_options else None
 
+    def _platform_attributes(self) -> dict[str, Any] | None:
+        # Rule 9: commands run only on an app build verified for them.
+        return {
+            "app_version": self._vehicle.get("companion_app_version"),
+            "commands_enabled": self._vehicle.get("companion_writes_enabled"),
+        }
+
 
 class VagCompanionChargeModeSensor(VagConnectEntity, SensorEntity):
     """The charge mode the Volkswagen app shows, read-only (companion).

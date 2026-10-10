@@ -34,6 +34,7 @@ from custom_components.vag_connect.companion.presets import (
 )
 from custom_components.vag_connect.companion.resources import read_climate_resources
 from custom_components.vag_connect.companion.screen import parse_ui_dump, read_selectors
+from custom_components.vag_connect.companion.transport import CompanionTransportError
 
 FIXTURES = Path(__file__).parent / "fixtures" / "companion_climate_settings"
 VW = PRESETS["volkswagen"]
@@ -301,6 +302,8 @@ async def test_toggle_is_switched_saved_and_read_back(key, flag, switch):
     assert phone.screen == "overview"
     assert channel._nav_cache[key] is True
     assert channel._last_write_at == 10_000.0
+    # The readback refresh re-reads the settings page only.
+    assert channel._nav_only == {"climate_settings"}
 
 
 @pytest.mark.asyncio
@@ -423,6 +426,120 @@ async def test_second_write_within_a_minute_is_refused():
         await channel.set_climate_setting("window_heating_enabled", True)
     clock[0] += 31
     assert await channel.set_climate_setting("window_heating_enabled", True) is True
+
+
+class DroppingPhone(SettingsPhone):
+    """The direct ADB transport: a dump timeout after the switch closes the device."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.connected = True
+        self.fail_next_dump = False
+        self.connects = 0
+
+    async def connect(self):
+        self.connects += 1
+        self.connected = True
+
+    def _need(self):
+        if not self.connected:
+            raise CompanionTransportError("not connected")
+
+    async def dump_ui(self):
+        self._need()
+        if self.fail_next_dump:
+            self.fail_next_dump = False
+            self.connected = False
+            raise CompanionTransportError("the ADB connection failed (TimeoutError)")
+        return await super().dump_ui()
+
+    async def tap(self, x, y):
+        self._need()
+        await super().tap(x, y)
+        if self.taps == ["tile", "settings_row", "aux"]:
+            self.fail_next_dump = True  # only the first switch tap
+
+    async def key_back(self):
+        self._need()
+        await super().key_back()
+
+
+@pytest.mark.asyncio
+async def test_dropped_connection_mid_walk_still_unstages_the_switch():
+    phone = DroppingPhone()
+    channel = _channel(phone)
+    with pytest.raises(CompanionWriteBlocked, match="TimeoutError"):
+        await channel.set_climate_setting("climate_at_unlock", True)
+    # The cleanup reconnected once, switched it back and left without Save.
+    assert phone.connects == 1
+    assert phone.taps.count("aux") == 2 and "save" not in phone.taps
+    assert not phone.dirty and phone.screen == "overview"
+    assert phone.saved["aux"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_staged_switch_left_behind_is_never_saved_with_the_next_command():
+    # An earlier walk was cut off with "climate at unlock" switched but not
+    # saved, and its cleanup could not reach the phone either.
+    phone = SettingsPhone()
+    phone.screen = "settings"
+    phone.staged["aux"] = True
+    channel = _channel(phone)
+    assert await channel.set_climate_setting("window_heating_enabled", True) is True
+    # Home first (Leading drops the staged switch), then the usual walk.
+    assert phone.taps[:2] == ["leading", "sheet_up"]
+    assert "aux" not in phone.taps
+    assert phone.saved == {"aux": False, "wh": True, "fl": True, "fr": False}
+
+
+@pytest.mark.asyncio
+async def test_a_command_is_refused_when_the_app_cannot_get_home():
+    # A zone change left on the Zones page, and the app ignores every tap.
+    phone = SettingsPhone()
+    phone.screen = "zones"
+    phone.zones_page = {"fl": True, "fr": True}
+
+    async def ignored(*_args):
+        phone.taps.append("ignored")
+
+    phone.tap = phone.key_back = ignored
+    with pytest.raises(CompanionWriteBlocked, match="did not return to its overview"):
+        await _channel(phone).set_climate_setting("climate_at_unlock", True)
+    assert phone.taps == ["ignored"] * 3  # bounded, and none of them a Save
+    assert phone.saved == {"aux": False, "wh": False, "fl": True, "fr": False}
+
+
+@pytest.mark.asyncio
+async def test_a_request_limit_alert_off_the_overview_pauses_before_any_tap():
+    # The walk home would close the alert with BACK before anything saw it.
+    phone = SettingsPhone()
+    phone.screen = "limit"
+    channel = _channel(phone)
+    with pytest.raises(CompanionWriteBlocked, match="request budget"):
+        await channel.set_climate_setting("climate_at_unlock", True)
+    assert channel._is_rate_limited()
+    assert phone.taps == [] and phone.saved["aux"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_request_limit_alert_off_the_overview_pauses_a_poll_too():
+    phone = SettingsPhone()
+    phone.screen = "limit"
+    channel = _channel(phone)
+    await channel.read()
+    assert channel._is_rate_limited()
+    assert "save" not in phone.taps
+
+
+@pytest.mark.asyncio
+async def test_a_poll_on_an_unverified_app_version_does_not_walk_home():
+    phone = SettingsPhone(version="0.0.0")
+    phone.screen = "settings"
+    phone.staged["aux"] = True
+    channel = _channel(phone)
+    assert await channel.read() == {}
+    assert phone.taps == []
+    assert phone.screen == "settings"
 
 
 @pytest.mark.asyncio
