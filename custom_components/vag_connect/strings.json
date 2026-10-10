@@ -221,6 +221,7 @@
       "porsche_login_wall": "Your credentials are fine — the login got past the password step but stopped at a Porsche captcha/consent screen it can't complete automatically (seen at my.porsche.com). This is a Porsche-side wall, tracked in #1337, not a wrong password. Don't retry in a loop — repeated attempts have locked Porsche accounts. If you can, please report it so we can fix it (attach diagnostics): {report_url}",
       "porsche_portal_step": "Porsche sent this login to its web portal (my.porsche.com) for a one-time step the integration cannot complete on its own. Open {portal_url} in a normal browser — ideally on the same network as Home Assistant — sign in with the same account, complete whatever it shows (consent, terms, cookie notice), then come back and try again. Do not retry in a loop: repeated failed attempts have locked Porsche accounts. Still stuck? Report it here: {report_url}",
       "porsche_captcha_failed": "That captcha could not be verified and it is now used up. Please close this dialog and start the Porsche login again to get a fresh one. If you can, please report it so we can fix it (attach diagnostics): {report_url}",
+      "porsche_captcha_credentials": "Porsche refused the sign-in at this step, so that captcha is used up — but the captcha was not the problem: the e-mail or password was not accepted. Check them, then start the Porsche login again. Do not retry in a loop: repeated failed attempts have caused Porsche to lock accounts. If the credentials are definitely correct, please report it so we can fix it (attach diagnostics): {report_url}",
       "porsche_captcha_cooldown": "Too many captcha attempts. Repeated tries can make Porsche temporarily lock the account or flag your network, so this stopped to keep your account safe. Wait a few minutes before trying again. If you can, please report it so we can fix it (attach diagnostics): {report_url}",
       "reconfigure_failed": "Reconfigure failed: the configuration entry could not be found. Please try again.",
       "reauth_failed": "Re-authentication failed: the configuration entry could not be found. Please try again."
@@ -1199,6 +1200,9 @@
       },
       "dashboard_warnings_raw": {
         "name": "Dashboard warnings (raw)"
+      },
+      "dashboard_warnings_last_at": {
+        "name": "Dashboard warnings last recorded"
       },
       "climate_error_code": {
         "name": "Climate error code"
@@ -2312,7 +2316,38 @@
           "confirm": {
             "title": "Re-connect the Volkswagen.de channel",
             "description": "The volkswagen.de read channel couldn't resume its session — Volkswagen wants the email one-time code again. Your vehicle's main data is unaffected. Continue and you will be taken straight to the login for this car; you do not need to find the integration's settings yourself."
+          },
+          "credentials": {
+            "title": "Volkswagen.de website (BETA, read-only)",
+            "data": {
+              "username": "Email Address",
+              "password": "Password",
+              "scan_interval": "Update Interval"
+            },
+            "data_description": {
+              "username": "The email of your Volkswagen ID / myVolkswagen account.",
+              "password": "Your Volkswagen ID password.",
+              "scan_interval": "How often data is fetched (minutes). Minimum: 5."
+            }
+          },
+          "otp": {
+            "title": "Email verification code",
+            "description": "A verification code was sent to the email for **{username}**.\n\nEnter the code to finish signing in to the Volkswagen.de website (beta) channel.",
+            "data": {
+              "mfa_code": "Verification Code"
+            },
+            "data_description": {
+              "mfa_code": "Code from your email inbox — valid for a few minutes."
+            }
           }
+        },
+        "error": {
+          "invalid_credentials": "Email address or password incorrect.",
+          "cannot_connect": "Could not reach Volkswagen. Please try again.",
+          "website_login_failed": "Your email and password are not the problem — the volkswagen.de login got past that and then failed at a later step (for example an expired session, a redirect loop, or a page it did not recognise). The reason is in the Home Assistant log. Changing your password will not help; if it keeps happening, please open an issue and include that log line."
+        },
+        "abort": {
+          "entry_gone": "That integration entry no longer exists."
         }
       }
     },
@@ -2334,7 +2369,7 @@
     },
     "skoda_official_enrolled": {
       "title": "Škoda official API — you're now enrolled automatically",
-      "description": "Good news: we used your existing Škoda login to create an official Škoda API key for your car, so Home Assistant can now read it over Škoda's new official, durable channel — as an automatic backup if the normal connection ever struggles. Because this official channel is rate-limited (only a small number of requests an hour), it stays on standby and only reads when your main connection can't — so it won't slow anything down. Nothing to do on your side; this is just a heads-up, and you can dismiss it."
+      "description": "Good news: we used your existing Škoda login to create an official Škoda API key for your car, so Home Assistant can now read it over Škoda's own official, durable channel. It is read on every regular update alongside your normal connection, and its manufacturer-grade readings fill in and correct what that connection reports — and it steps in on its own if the normal connection ever fails. Because the official channel allows only a small number of requests an hour, the integration paces itself and skips it when that budget runs low, so nothing slows down. Nothing to do on your side; this is just a heads-up, and you can dismiss it."
     },
     "skoda_official_quota_full": {
       "title": "Škoda official API — key limit reached",

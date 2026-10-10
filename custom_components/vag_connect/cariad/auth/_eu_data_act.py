@@ -37,17 +37,16 @@ import logging
 import math
 import os
 import re
-import secrets
 import uuid
 import zipfile
 from collections.abc import Callable
-from datetime import date
 from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import parse_qs, urljoin, urlparse
 
 from aiohttp import ClientConnectionError, ClientSession, ClientTimeout
 
+from .._util import drop_charge_sentinel, drop_odometer_sentinel
 from ..exceptions import (
     AuthenticationError,
     EmailTwoFactorRequiredError,
@@ -57,7 +56,6 @@ from ..exceptions import (
     TwoFactorRequiredError,
     UpstreamUnavailableError,
 )
-from .._util import drop_charge_sentinel, drop_odometer_sentinel
 from ..models import VehicleData
 from ._data_act_scraper import pick_active_15min_identifier
 
@@ -144,119 +142,52 @@ _DOWNLOAD_PATH = (
     "/proxy_api/euda-apim/datadelivery/vehicles/{vin}/{identifier}/download"
 )
 
-# The portal's CDN answers 406 to a User-Agent it has blocked. In Oct 2026 it
-# blocked the exact string this module hard-coded (macOS Chrome/148.0.0.0) —
-# the same version on Windows, and every other version, still got through — so
-# every install of the integration was locked out at once. No fixed UA any
-# more: each connector picks one UA from a broad pool of current browsers —
-# desktop and phone, Chromium, Firefox and Safari — and keeps it for its whole
-# session (cookie jar and UA stay consistent, like a real browser), and picks
-# another when the portal refuses it. A pool that wide can't be blocked by UA
-# without blocking the portal's real visitors too.
-# Versions follow the calendar, so the pool never goes stale: Chrome 138 and
-# Firefox 140 both shipped 2025-06-24 and a new major follows about every 4
-# weeks; Safari 26 shipped 2025-09-15 and a new major follows yearly.
-_CHROME_ANCHOR = (date(2025, 6, 24), 138)
-_FIREFOX_ANCHOR = (date(2025, 6, 24), 140)
-_SAFARI_ANCHOR = (date(2025, 9, 15), 26)
-# Holiday gaps put the real stable slightly behind the 4-week estimate; stay a
-# major behind it rather than claim a version that isn't out yet.
-_RAPID_RELEASE_LAG = 1
-_UA_MAJOR_SPREAD = 3  # the estimated stable major and the three before it
-_UA_PICK_ATTEMPTS = 3
-# Opera rebrands Chromium with its own major, a fixed distance behind Chrome's.
-_OPERA_BEHIND_CHROME = 15
-# Safari point releases in use alongside each major.
-_SAFARI_POINT_RELEASES = 4
-# Frozen platform tokens: Chrome's reduced UA reports these whatever the real
-# OS version is, and Safari 26 froze the iOS one the same way.
-_MAC = "Macintosh; Intel Mac OS X 10_15_7"
-_WINDOWS = "Windows NT 10.0; Win64; x64"
-_LINUX = "X11; Linux x86_64"
-_ANDROID = "Linux; Android 10; K"
-_IPHONE = "iPhone; CPU iPhone OS 18_6 like Mac OS X"
-_IPAD = "iPad; CPU OS 18_6 like Mac OS X"
-# Firefox on Android still reports the real Android version.
-_FIREFOX_ANDROID_VERSIONS = (14, 15, 16)
+# The sign-in steps below talk to the IDP, which is a browser flow: v2.10.x
+# (#388/#393) the WAF in front of it started answering 403 to a non-browser
+# agent, and a plain browser string is what fixed it. That is why this one
+# stays as it is.
+_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
+)
+
+# #1740 — the portal's operator asked that requests to the PORTAL domain carry
+# a dedicated agent, so they can attribute traffic and report problems back to
+# the project causing them. That is a different set of requests from the login
+# steps above: it is _get_json (vehicles, metadata, delivery list, relation)
+# and the dataset download, which until now went out under the HTTP library's
+# default name.
+#
+# The version is handed in once at setup rather than read from manifest.json
+# here: this module is imported from inside coroutines, so a file read at
+# import time would be I/O on the event loop.
+_PORTAL_UA_PRODUCT = "HA_vag_connect"
+_portal_ua_version: str = ""
 
 
-def _rapid_release_major(anchor: tuple[date, int], today: date | None) -> int:
-    """Estimated current stable major of a 4-weekly browser for *today*."""
-    anchor_day, anchor_major = anchor
-    days = max(((today or date.today()) - anchor_day).days, 0)
-    return anchor_major + days // 28 - _RAPID_RELEASE_LAG
+def set_integration_version(version: str) -> None:
+    """Record the integration version for the portal user-agent.
+
+    Called once from the coordinator at setup. Empty or missing simply omits
+    the version from the agent; it never blocks or fails a request.
+    """
+    global _portal_ua_version
+    _portal_ua_version = (version or "").strip()
 
 
-def _current_chrome_major(today: date | None = None) -> int:
-    """Estimated current stable Chrome major for *today* (default: now)."""
-    return _rapid_release_major(_CHROME_ANCHOR, today)
-
-
-def _current_safari_major(today: date | None = None) -> int:
-    """Current Safari major for *today*: one per year since the anchor."""
-    anchor_day, anchor_major = _SAFARI_ANCHOR
-    days = max(((today or date.today()) - anchor_day).days, 0)
-    return anchor_major + days // 365
-
-
-def _user_agent_pool(today: date | None = None) -> tuple[str, ...]:
-    """Current desktop + phone browser UAs, several versions of each."""
-    chrome = _current_chrome_major(today)
-    firefox = _rapid_release_major(_FIREFOX_ANCHOR, today)
-    safari = _current_safari_major(today)
-    webkit = "AppleWebKit/537.36 (KHTML, like Gecko)"
-    apple = "AppleWebKit/605.1.15 (KHTML, like Gecko)"
-    pool: list[str] = []
-    for back in range(_UA_MAJOR_SPREAD + 1):
-        c, f = f"{chrome - back}.0.0.0", f"{firefox - back}.0"
-        opera = f"{chrome - back - _OPERA_BEHIND_CHROME}.0.0.0"
-        desktop = f"{webkit} Chrome/{c} Safari/537.36"
-        mobile = f"{webkit} Chrome/{c} Mobile Safari/537.36"
-        for platform in (_MAC, _WINDOWS, _LINUX):
-            pool += [
-                f"Mozilla/5.0 ({platform}) {desktop}",
-                f"Mozilla/5.0 ({platform}) {desktop} Edg/{c}",
-            ]
-        for platform in (_MAC, _WINDOWS):
-            pool.append(f"Mozilla/5.0 ({platform}) {desktop} OPR/{opera}")
-        pool += [
-            f"Mozilla/5.0 ({_ANDROID}) {mobile}",
-            f"Mozilla/5.0 ({_ANDROID}) {mobile} EdgA/{c}",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; "
-            f"rv:{f}) Gecko/20100101 Firefox/{f}",
-            f"Mozilla/5.0 ({_WINDOWS}; rv:{f}) Gecko/20100101 Firefox/{f}",
-            f"Mozilla/5.0 ({_LINUX}; rv:{f}) Gecko/20100101 Firefox/{f}",
-        ]
-        pool += [
-            f"Mozilla/5.0 (Android {a}; Mobile; rv:{f}) Gecko/{f} Firefox/{f}"
-            for a in _FIREFOX_ANDROID_VERSIONS
-        ]
-        for platform in (_IPHONE, _IPAD):
-            pool += [
-                f"Mozilla/5.0 ({platform}) {apple} CriOS/{c} Mobile/15E148 "
-                "Safari/604.1",
-                f"Mozilla/5.0 ({platform}) {apple} FxiOS/{f} Mobile/15E148 "
-                "Safari/605.1.15",
-            ]
-    for major in (safari, safari - 1):
-        for point in range(_SAFARI_POINT_RELEASES):
-            s = f"{major}.{point}"
-            pool.append(f"Mozilla/5.0 ({_MAC}) {apple} Version/{s} Safari/605.1.15")
-            pool += [
-                f"Mozilla/5.0 ({platform}) {apple} Version/{s} Mobile/15E148 "
-                "Safari/604.1"
-                for platform in (_IPHONE, _IPAD)
-            ]
-    return tuple(pool)
-
-
-def _pick_user_agent(exclude: tuple[str, ...] = ()) -> str:
-    """A random pool UA, avoiding *exclude* while the pool has others."""
-    pool = _user_agent_pool()
-    return secrets.choice([ua for ua in pool if ua not in exclude] or pool)
-
-
+def _portal_user_agent() -> str:
+    """``HA_vag_connect/<version>``, or the bare product when unknown."""
+    return (
+        f"{_PORTAL_UA_PRODUCT}/{_portal_ua_version}"
+        if _portal_ua_version
+        else _PORTAL_UA_PRODUCT
+    )
 _NO_CONTENT_SUFFIX = "_no_content_found.zip"
+# The portal hop that sets the authenticated session cookie. Everything
+# after it is AEM content the login does not need.
+_PORTAL_CALLBACK_PATH = "/services/callbacklogin"
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+_MAX_LOGIN_REDIRECTS = 10
 
 # Junk sentinels the portal uses for state STRINGS (no active session / single-
 # port car / infra not up / no reading). Any of these means "no value" → the
@@ -827,7 +758,7 @@ def _parse_ts(value: Any) -> float | None:
         except ValueError:
             pass
         try:
-            from datetime import datetime  # noqa: PLC0415
+            from datetime import datetime
 
             return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
         except (ValueError, TypeError):
@@ -1689,7 +1620,7 @@ def _epoch_or_iso(raw: str | None) -> str | None:
         f = float(s)
     except (ValueError, TypeError):
         return s  # non-numeric → assume it's already an ISO/string timestamp
-    from datetime import datetime, timezone  # noqa: PLC0415
+    from datetime import datetime, timezone
 
     if f > 1e12:
         f /= 1000.0
@@ -3315,12 +3246,12 @@ def map_dataset_to_vehicle_data(
     # last-wins bare twins (``physical_value_x``/``_y``, ``value_type``) are left as
     # the deliberately-visible generic leaves (they are not reported by the Scout).
     _speed_ratios: dict[str, dict[str, str]] = {}
-    for _srk in fields:
+    for _srk, _srv in fields.items():
         if _srk.startswith("setup_real_speed_ratios.speed_ratio_"):
             used.add(_srk)
             _parts = _srk.split(".")
             if len(_parts) >= 3:
-                _speed_ratios.setdefault(_parts[1], {})[_parts[2]] = fields[_srk]
+                _speed_ratios.setdefault(_parts[1], {})[_parts[2]] = _srv
     if _speed_ratios and not d.speed_ratio_calibration:
         d.speed_ratio_calibration = _speed_ratios
     # state_of_hood — separate source field, same enum family (dict: unsupported
@@ -4549,8 +4480,29 @@ def map_dataset_to_vehicle_data(
         "active_warnings_in_instrument_cluster_0001_filtered",
         "active_warnings_in_instrument_cluster_0001",
     )
-    if _warn is not None:
+    if _warn is not None and str(_warn).strip():
         d.dashboard_warnings_raw = str(_warn)
+    # #1757 (VW Touareg eHybrid) — the HISTORY sibling of that mask, and a
+    # different vocabulary: every sample so far is an absolute ISO timestamp,
+    # never a mask. Four payloads from three reporters (#1164, #1230, #1276,
+    # #1757) all carry one, so THE CODE WINS OVER THE DICTIONARY here — the
+    # field catalogue declares this UUID a number, and anyone 'correcting' the
+    # sensor to numeric would break a working timestamp.
+    #
+    # Only the ``_fff`` variant is read. ``_0001`` has never been delivered by
+    # any car in the Scout archive and is declared Boolean, so consuming it
+    # would mark it used and strip it from raw_unmapped_fields — costing us the
+    # discovery and buying nothing.
+    #
+    # Timezone is NOT established: the value is tz-naive and HA stamps UTC on
+    # it, while the portal does ship a local-time sibling family
+    # (``instrument_cluster_time``), so a CEST car may read two hours early.
+    # Settling that needs one payload correlated against its own
+    # car_captured_time — until then the UTC reading is an assumption, not a
+    # finding.
+    _warn_at = first("history_active_warnings_in_instrument_cluster_fff")
+    if _warn_at is not None and str(_warn_at).strip():
+        d.dashboard_warnings_last_at = _epoch_or_iso(_warn_at)
     # #901 (Mezzo1973, volkswagen) — best-effort LOW-confidence mapping of four
     # newly-observed EU-Data-Act driving-telemetry fields. Types inferred from
     # the Scout samples; we do NOT invent enum values or units beyond speed's
@@ -5115,9 +5067,6 @@ class EUDataActConnector:
         access_token: str | None = None,
     ) -> None:
         self._session = session
-        # One browser UA for this connector's whole session, sent on every
-        # portal and IDP request; login() swaps it only if the portal refuses it.
-        self._user_agent = _pick_user_agent()
         cfg = _EUDA_BRANDS.get(brand.lower())
         if cfg is None:
             # Unknown brand → VW client with a brand-derived state suffix.
@@ -5185,7 +5134,7 @@ class EUDataActConnector:
     @staticmethod
     def _now_iso() -> str:
         """UTC now as an ISO-8601 string (the TIMESTAMP sensors parse this)."""
-        from datetime import datetime, timezone  # noqa: PLC0415
+        from datetime import datetime, timezone
 
         return datetime.now(timezone.utc).isoformat()
 
@@ -5231,6 +5180,108 @@ class EUDataActConnector:
         self.logged_in = True
         self.last_login_interaction = ""
 
+    async def _follow_login_redirects(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        data: Any = None,
+    ) -> tuple[str, str, int]:
+        """Walk the login redirect chain by hand, stopping at the callback.
+
+        The portal's ``/services/callbacklogin`` is where the authenticated
+        session cookie is set; it then redirects to an AEM content page we
+        have no use for. aiohttp's own redirect following cannot stop there,
+        so the chain is walked here and returned as soon as the callback has
+        answered — the cookie is already in the jar by then.
+
+        Reported and first implemented by @VWGroupDatahub, who maintains the
+        portal side; the same change is in the reference integrations they
+        point maintainers at. Returns ``(url, html, status)`` exactly like the
+        ``async with`` blocks it replaces, so callers are unchanged otherwise.
+        """
+        current_method = method.upper()
+        current_url = url
+        current_headers = dict(headers or {})
+        current_data = data
+        portal_host = urlparse(_PORTAL_BASE).netloc
+
+        for _hop in range(_MAX_LOGIN_REDIRECTS):
+            request = (
+                self._session.post
+                if current_method == "POST"
+                else self._session.get
+            )
+            kwargs: dict[str, Any] = {
+                "headers": current_headers,
+                "allow_redirects": False,
+                "timeout": ClientTimeout(total=_TIMEOUT_S),
+            }
+            if current_data is not None:
+                kwargs["data"] = current_data
+
+            async with request(current_url, **kwargs) as resp:
+                response_url = str(resp.url)
+                response_html = await resp.text(errors="replace")
+                status = resp.status
+                location = resp.headers.get("Location", "")
+
+            parsed = urlparse(response_url)
+            if (
+                parsed.netloc == portal_host
+                and parsed.path.rstrip("/") == _PORTAL_CALLBACK_PATH
+            ):
+                _LOGGER.debug(
+                    "EU Data Act portal: login chain stopped at the callback"
+                    " — the session cookie is set, the page behind it is not"
+                    " fetched"
+                )
+                return response_url, response_html, status
+
+            if status not in _REDIRECT_STATUSES or not location:
+                return response_url, response_html, status
+
+            next_url = urljoin(response_url, location)
+            next_parsed = urlparse(next_url)
+            if next_parsed.scheme != "https":
+                # Never step off TLS mid-login, and never hand a credentialed
+                # header set to a custom scheme. Stop with what we have and
+                # let the caller's classifier judge the landing.
+                _LOGGER.debug(
+                    "EU Data Act portal: refusing a non-https login redirect"
+                )
+                return response_url, response_html, status
+
+            if next_parsed.netloc != parsed.netloc:
+                # Cross-host hop: drop anything credential-bearing we were
+                # asked to carry. Session cookies travel in the jar, which is
+                # host-scoped already.
+                current_headers = {
+                    k: v
+                    for k, v in current_headers.items()
+                    if k.lower() not in ("authorization", "cookie")
+                }
+            current_headers = {
+                k: v
+                for k, v in current_headers.items()
+                if k.lower() != "referer"
+            }
+            current_headers["Referer"] = response_url
+
+            if status in (301, 302, 303):
+                # Same rule a browser applies: the body belongs to the first
+                # request only. Re-posting credentials to the next hop is how
+                # a password ends up somewhere it was never meant to go.
+                current_method = "GET"
+                current_data = None
+            current_url = next_url
+
+        raise AuthenticationError(
+            "EU Data Act portal: login exceeded "
+            f"{_MAX_LOGIN_REDIRECTS} redirects"
+        )
+
     async def _skip_marketing_consent_landing(
         self, landing_url: str, headers: dict[str, str]
     ) -> tuple[str, str, int] | None:
@@ -5260,13 +5311,9 @@ class EUDataActConnector:
             return None
         cb_url = urljoin(landing_url, callback)
         try:
-            async with self._session.get(
-                cb_url,
-                headers=headers,
-                allow_redirects=True,
-                timeout=ClientTimeout(total=_TIMEOUT_S),
-            ) as resp:
-                result = (str(resp.url), await resp.text(errors="replace"), resp.status)
+            result = await self._follow_login_redirects(
+                "GET", cb_url, headers=headers,
+            )
         except Exception as exc:  # noqa: BLE001
             # No exc_info: an aiohttp client error's str() can embed the raw
             # callback URL (code / relayState). Log only the exception TYPE. (#1355)
@@ -5283,6 +5330,86 @@ class EUDataActConnector:
             "(followed callback, granted no marketing scopes)"
         )
         return result
+
+    async def _request_login_redirects(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        data: Any = None,
+    ) -> tuple[str, str, int]:
+        """Follow login redirects, stopping on the portal callback response.
+
+        The callback sets the authenticated portal cookie and then redirects to
+        AEM user content. We need the callback response's cookies, not that page.
+        """
+        current_method = method.upper()
+        current_url = url
+        current_headers = dict(headers or {})
+        current_data = data
+        portal_host = urlparse(_PORTAL_BASE).netloc
+
+        for redirect_count in range(11):
+            request = (
+                self._session.post
+                if current_method == "POST"
+                else self._session.get
+            )
+            request_kwargs: dict[str, Any] = {
+                "headers": current_headers,
+                "allow_redirects": False,
+                "timeout": ClientTimeout(total=_TIMEOUT_S),
+            }
+            if current_data is not None:
+                request_kwargs["data"] = current_data
+
+            async with request(current_url, **request_kwargs) as resp:
+                response_url = str(resp.url)
+                response_html = await resp.text(errors="replace")
+                status = resp.status
+                response_headers = getattr(resp, "headers", {})
+                location = response_headers.get("Location", "")
+
+            parsed_response = urlparse(response_url)
+            if (
+                parsed_response.netloc == portal_host
+                and parsed_response.path.rstrip("/") == "/services/callbacklogin"
+            ):
+                _LOGGER.debug(
+                    "EU Data Act portal: stopped redirect following at "
+                    "callbacklogin after receiving its response"
+                )
+                return response_url, response_html, status
+
+            if status not in {301, 302, 303, 307, 308} or not location:
+                return response_url, response_html, status
+            if redirect_count == 10:
+                raise AuthenticationError(
+                    "EU Data Act portal: login exceeded redirect limit"
+                )
+
+            next_url = urljoin(response_url, location)
+            next_host = urlparse(next_url).netloc
+            if next_host != parsed_response.netloc:
+                current_headers = {
+                    key: value
+                    for key, value in current_headers.items()
+                    if key.lower() not in {"authorization", "cookie"}
+                }
+            current_headers = {
+                key: value
+                for key, value in current_headers.items()
+                if key.lower() != "referer"
+            }
+            current_headers["Referer"] = response_url
+
+            if status in {301, 302, 303} and current_method != "HEAD":
+                current_method = "GET"
+                current_data = None
+            current_url = next_url
+
+        raise AuthenticationError("EU Data Act portal: login redirect limit reached")
 
     @staticmethod
     def _is_consent_landing(landing_url: str, landing_html: str) -> bool:
@@ -5369,14 +5496,14 @@ class EUDataActConnector:
         # _resolve_action (it strips the query → 400 generalErrorBranded).
         accept_action = urljoin(consent_url, action) if action else consent_url
         try:
-            async with self._session.post(
-                accept_action, data=pairs,
-                headers={"User-Agent": self._user_agent, "Referer": consent_url},
-                allow_redirects=True, timeout=ClientTimeout(total=_TIMEOUT_S),
-            ) as resp:
-                new_landing = str(resp.url)
-                new_html = await resp.text(errors="replace")
-                new_status = resp.status
+            new_landing, new_html, new_status = (
+                await self._follow_login_redirects(
+                    "POST",
+                    accept_action,
+                    data=pairs,
+                    headers={"User-Agent": _USER_AGENT, "Referer": consent_url},
+                )
+            )
         except Exception as exc:  # noqa: BLE001 — best-effort accept
             _LOGGER.debug(
                 "EU Data Act portal: consent accept POST failed (%s) — "
@@ -5439,14 +5566,14 @@ class EUDataActConnector:
         # _resolve_action (it strips the query → 400 generalErrorBranded).
         accept_action = urljoin(terms_url, action) if action else terms_url
         try:
-            async with self._session.post(
-                accept_action, data=pairs,
-                headers={"User-Agent": self._user_agent, "Referer": terms_url},
-                allow_redirects=True, timeout=ClientTimeout(total=_TIMEOUT_S),
-            ) as resp:
-                new_landing = str(resp.url)
-                new_html = await resp.text(errors="replace")
-                new_status = resp.status
+            new_landing, new_html, new_status = (
+                await self._follow_login_redirects(
+                    "POST",
+                    accept_action,
+                    data=pairs,
+                    headers={"User-Agent": _USER_AGENT, "Referer": terms_url},
+                )
+            )
         except Exception as exc:  # noqa: BLE001 — best-effort accept
             _LOGGER.debug(
                 "EU Data Act portal: T&C accept POST failed (%s) — leaving to "
@@ -5491,36 +5618,7 @@ class EUDataActConnector:
         if self._bearer:
             self.logged_in = True
             return
-        # 0. Prime portal session cookies (AEM load-balancer state). The CDN
-        #    answers this GET with 406 when it has blocked our UA; pick another
-        #    and re-prime, so the login runs with a UA the portal accepts.
-        refused: list[str] = []
-        for _attempt in range(_UA_PICK_ATTEMPTS):
-            try:
-                async with self._session.get(
-                    f"{_PORTAL_BASE}/", headers={"User-Agent": self._user_agent},
-                    timeout=ClientTimeout(total=_TIMEOUT_S),
-                ) as resp:
-                    prime_status = resp.status
-            except Exception as exc:  # noqa: BLE001
-                # Class only, never str(exc) — an aiohttp error's message echoes
-                # the request URL. (Here it is the static portal base, but keep
-                # the sweep posture uniform so no future URL change re-opens a
-                # leak.)
-                _LOGGER.debug(
-                    "EU Data Act: priming GET failed (ignored): %s",
-                    type(exc).__name__,
-                )
-                break
-            if prime_status != 406:
-                break
-            refused.append(self._user_agent)
-            _LOGGER.debug(
-                "EU Data Act portal refused the session User-Agent (HTTP 406) — "
-                "picking another (%d refused so far)", len(refused),
-            )
-            self._user_agent = _pick_user_agent(exclude=tuple(refused))
-        headers = {"User-Agent": self._user_agent}
+        headers = {"User-Agent": _USER_AGENT}
 
         # 1. Start OIDC directly at the IDP (portal's own servlet 500s for
         #    non-browser clients). response_type=code; portal does the
@@ -5572,14 +5670,12 @@ class EUDataActConnector:
         # param and the IDP rejects it with HTTP 400. _resolve_action
         # strips the query AND guards the doubled-/login/login/ trap.
         authenticate_action = _resolve_action(authenticate_url, action2)
-        async with self._session.post(
-            authenticate_action, data=fields2,
+        landing, landing_html, status = await self._follow_login_redirects(
+            "POST",
+            authenticate_action,
+            data=fields2,
             headers={**headers, "Referer": authenticate_url},
-            allow_redirects=True, timeout=ClientTimeout(total=_TIMEOUT_S),
-        ) as resp:
-            landing = str(resp.url)
-            landing_html = await resp.text(errors="replace")
-            status = resp.status
+        )
 
         # 3b. (#527, v2.15.5) — generic OAuth/IDP consent grant page. After
         # correct credentials the IDP can interject a server-rendered consent
@@ -5829,7 +5925,9 @@ class EUDataActConnector:
         # v2.13.0 — Bearer mode: attach the device-grant token. Covers every
         # JSON proxy_api call (vehicles list, metadata, datadelivery list,
         # relation) since they all funnel through here. No-op in cookie mode.
-        eff_headers = {"User-Agent": self._user_agent, **(headers or {})}
+        eff_headers = dict(headers or {})
+        # #1740 — portal-domain traffic identifies itself.
+        eff_headers.setdefault("User-Agent", _portal_user_agent())
         if self._bearer:
             eff_headers["Authorization"] = f"Bearer {self._bearer}"
         # v2.13.1 — the portal is flaky: transient 5xx come and go within
@@ -5944,7 +6042,9 @@ class EUDataActConnector:
         download endpoint requires.
         """
         dl_headers = {
-            "User-Agent": self._user_agent, "filename": name, "type": request_type,
+            "filename": name,
+            "type": request_type,
+            "User-Agent": _portal_user_agent(),  # #1740
         }
         if self._bearer:
             dl_headers["Authorization"] = f"Bearer {self._bearer}"
