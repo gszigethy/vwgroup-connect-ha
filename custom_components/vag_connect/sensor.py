@@ -4791,7 +4791,11 @@ async def async_setup_entry(
     # (any Volkswagen companion entry); App request status goes with the sync
     # slider (the preset maps "Synchronise now", outside Read-only Mode).
     from .companion.app_sync import preset_can_sync  # noqa: PLC0415
-    from .companion.entity_twins import has_control_twin, remove_twin  # noqa: PLC0415
+    from .companion.entity_twins import (  # noqa: PLC0415
+        has_control_twin,
+        is_cloud_only,
+        remove_twin,
+    )
     reads_sync_line = coordinator.is_companion() and brand == "volkswagen"
     syncs_vehicle = (
         coordinator.is_companion()
@@ -4809,7 +4813,9 @@ async def async_setup_entry(
                 continue
             if desc.condition == "combustion" and not has_combustion:
                 continue
-            if has_control_twin(coordinator, vin, vehicle, "sensor", desc.key):
+            if is_cloud_only(coordinator, "sensor", desc.key) or has_control_twin(
+                coordinator, vin, vehicle, "sensor", desc.key,
+            ):
                 remove_twin(hass, "sensor", vin, desc.key)
                 continue
             if coordinator.is_companion() and desc.key in _COMPANION_READ_OF_HELD:
