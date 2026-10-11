@@ -4,14 +4,20 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .coordinator import VagConnectCoordinator
 from .entity_base import VagConnectEntity, register_dynamic_spawner
+
+if TYPE_CHECKING:
+    from .companion.client import ClimateTargets
 
 # CARIAD charge modes.
 #
@@ -153,6 +159,11 @@ async def async_setup_entry(
 
     def _build_for_vin(vin: str, vehicle: dict) -> list:
         entities: list = []
+        # Companion: the mode the next climate Start applies, held in HA.
+        if _companion_climate_targets(coordinator) is not None and (
+            coordinator.command_method_available("command_start_climate")
+        ):
+            entities.append(VagCompanionClimateModeSelect(coordinator, vin))
         if vehicle.get("has_battery"):
             # v3.0.0a1 — only if the client implements the command, else the
             # select raises AttributeError on change (companion/ADB has no
@@ -199,6 +210,68 @@ class VagChargeModeSelect(VagConnectEntity, SelectEntity):
         """Set the charging mode — maps canonical key back to the API token."""
         api_token = _CANONICAL_TO_API.get(option, option)
         await self.coordinator.async_set_charge_mode(self._vin, api_token)
+
+
+def _companion_climate_targets(coordinator: VagConnectCoordinator) -> ClimateTargets | None:
+    """The companion client's climate Start targets; None for other entries."""
+    if not coordinator.is_companion():
+        return None
+    from .companion.client import climate_targets_of  # noqa: PLC0415
+
+    return climate_targets_of(coordinator)
+
+
+# Companion climate Start modes, as the app's "Select mode" lists them. Same
+# keys as the read-only ``climate_start_mode`` sensor (what the app shows).
+_CLIMATE_START_MODES: list[str] = ["air_conditioning", "window_heating"]
+
+
+class VagCompanionClimateModeSelect(VagConnectEntity, SelectEntity, RestoreEntity):
+    """Companion: the mode the next climate Start applies.
+
+    The app's Air Conditioning sheet has no Save; Start applies the selected
+    mode (air conditioning, or window heating only) and the dial. So the mode
+    is held in HA (restored across restarts): choosing it only stores it, and
+    the climate Start selects it on the sheet first. The poll never writes it;
+    what the app shows stays on the read-only Climate Start Mode sensor. The
+    window-heating start/stop commands remain a one-off override that leaves
+    this choice as it is.
+    """
+
+    _attr_translation_key = "companion_climate_start_mode"
+    _attr_icon = "mdi:car-defrost-front"
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_options = list(_CLIMATE_START_MODES)
+
+    def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin, "companion_climate_start_mode")
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        state = await self.async_get_last_state()
+        if state is not None and state.state in _CLIMATE_START_MODES:
+            self._store(state.state)
+
+    def _store(self, option: str) -> None:
+        client = getattr(self.coordinator, "_cariad_client", None)
+        store = getattr(client, "store_climate_start_mode", None)
+        if callable(store):
+            store(option == "window_heating")
+
+    @property
+    def current_option(self) -> str | None:
+        targets = _companion_climate_targets(self.coordinator)
+        if targets is None:
+            return None
+        return "window_heating" if targets.window_heating_only else "air_conditioning"
+
+    async def async_select_option(self, option: str) -> None:
+        """Store the mode for the next Start. Nothing is sent to the phone."""
+        if option not in _CLIMATE_START_MODES:
+            return
+        self._store(option)
+        # The temperature number's availability follows the mode; no refresh.
+        self.coordinator.async_update_listeners()
 
 
 class VagSkodaChargeCurrentSelect(VagConnectEntity, SelectEntity):
