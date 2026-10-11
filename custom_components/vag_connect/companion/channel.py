@@ -326,6 +326,9 @@ class CompanionChannel:
         self._walk_basis: dict[str, _WalkBasis] = {}
         self._trip_tile_now: str | None = None
         self._trip_tile: str | None = None
+        # The trip tile as first read during a request-limit pause: a later,
+        # different trip means the car was driven, so the pause can end.
+        self._pause_trip_tile: str | None = None
         self._walk_all_next = False
         # #968 — what the vehicle sync flow last found; None until it has run.
         self._request_state: str | None = None
@@ -657,6 +660,7 @@ class CompanionChannel:
             self._trip_tile_now = driving_tile_text(nodes, self._app_strings)
             if self._trip_tile_now is not None:
                 self._trip_tile = self._trip_tile_now
+            self._lift_pause_on_new_trip(self._trip_tile_now)
         if self._seen_at is not None:
             fields["companion_app_synced_at"] = self._seen_at
         # v2.26.0 (C9) — values behind a detail screen (charge target/power/time
@@ -742,6 +746,50 @@ class CompanionChannel:
         self._seen_precision_s = line.precision_s
         if self._seen_at is None or seen > self._seen_at:
             self._seen_at = seen
+        self._lift_pause_on_new_car_data(seen)
+
+    def _lift_pause_on_new_car_data(self, seen: datetime) -> None:
+        """End a request-limit pause once the car has sent data since it began.
+
+        The app's limit alerts say starting the car makes everything available
+        again, and a car that sent data after the alert is reachable. ``seen``
+        is the earliest time the sync line can mean, so an older sync never
+        lifts it. The start is derived from the deadline, so a pause restored
+        after a restart lifts the same way.
+        """
+        if not self._is_rate_limited():
+            return
+        started = self._rate_limited_until - _RATE_LIMIT_BACKOFF_S
+        if seen.timestamp() <= started:
+            return
+        self._lift_pause("the car sent new data after the request-limit alert")
+
+    def _lift_pause_on_new_trip(self, tile: str | None) -> None:
+        """End a request-limit pause once the overview shows a new trip.
+
+        The alerts ask for the engine to be started, and a new trip is proof
+        it was. The first tile read during the pause is the baseline, so a
+        trip that ended before the alert (and first shows on the read that
+        trips the pause) never lifts it. A screen without the tile changes
+        nothing.
+        """
+        if not self._is_rate_limited():
+            self._pause_trip_tile = None
+            return
+        if tile is None:
+            return
+        if self._pause_trip_tile is None:
+            self._pause_trip_tile = tile
+            return
+        if tile != self._pause_trip_tile:
+            self._lift_pause("a new trip shows the car was driven")
+
+    def _lift_pause(self, why: str) -> None:
+        self._rate_limited_until = 0.0
+        self._limit_kind = None
+        self._pause_trip_tile = None
+        self._request_state = REQUESTS_AVAILABLE
+        _LOGGER.info("companion %s: %s; pause lifted", self._preset.brand, why)
 
     async def _augment_via_nav(self, fields: dict[str, object]) -> None:
         """Fill missing nav-read targets by opening their detail screen.

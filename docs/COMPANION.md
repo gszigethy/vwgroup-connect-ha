@@ -380,7 +380,7 @@ Target* as the vehicle-wide limit.
 - *App request status* is the outcome of the last sync attempt or the pause ([2.7](#27-the-cars-request-budget)).
 - *Refresh Data* re-reads but does not sync.
 
-**The pause cluster.** A request-limit alert in the app sets a 12 h pause. During it every control and every sync is refused (a pause identified as the local power-budget alert allows one probe sync per 4 h), and *App request status* reads *restricted*. The pause ends at its deadline, on *Reset companion connection*, or when a permitted probe is accepted.
+**The pause cluster.** A request-limit alert in the app sets a 12 h pause. During it every control and every sync is refused (a pause identified as the local power-budget alert allows one probe sync per 4 h), and *App request status* reads *restricted*. The pause ends when the car sends new data after the alert (it was started or woke up) or the overview shows a new trip, at its deadline, on *Reset companion connection*, or when a permitted probe is accepted.
 Reads continue, but see [5](#5-quirks-of-the-vw-app) for what the app shows meanwhile.
 
 **Freshness and availability.** Values read from a detail screen are cached. A value not refreshed by a successful read for **24 hours** becomes unavailable ; the entity's `companion_read_at` attribute is
@@ -489,6 +489,12 @@ only these flags.
   refused, *App request status* shows *restricted*, the alert is closed, and the screen behind it is
   read. The pause and the 60 s command gap are persisted and survive a restart (an account lockout must
   not be cleared by a restart). *Reset companion connection* clears the pause.
+- **New car data ends it.** Both alerts say that starting the car makes everything available again. When
+  the overview's sync time ("Synchronised … ago") shows the car sent data after the pause began, the
+  pause ends and *App request status* returns to *available*. The earliest time the rounded line can mean
+  is used, so a sync from before the alert never ends it. A new trip on the Driving data tile ends it too
+  (the engine ran); the tile as first read during the pause is the baseline, so a trip that ended before
+  the alert never ends it. Neither check sends anything to the car.
 - **Probing.** A pause identified as the local power-budget alert lets one sync probe through per 4 hours, so the integration notices the car coming back; there is no fixed quota, and a further alert extends the pause. A backend "too many requests" pause, an ambiguous alert, and a pause restored after a restart allow none.
 The pause as a state machine:
 
@@ -497,6 +503,8 @@ stateDiagram-v2
     [*] --> Normal
     Normal --> Paused: request-limit alert seen (12 h)
     Paused --> Paused: a further alert extends the pause
+    Paused --> Normal: the car sends data after the alert
+    Paused --> Normal: a new trip shows on the overview
     Paused --> Normal: the deadline passes
     Paused --> Normal: Reset companion connection
     Paused --> Normal: a permitted probe sync is accepted
@@ -606,7 +614,9 @@ One `read()` per poll, serialised with commands by a screen lock:
 6. If a sub-screen is up (behind a closed alert, or left by a cut-short walk), go home first. Never parse
    overview selectors off another page. If the overview anchor (`rangeTile`) is still absent, return `{}`.
 7. Parse the overview: preset selectors, then resource-based parsers. Record the car's data age from the
-   sync line.
+   sync line. A sync time later than the start of a running request-limit pause (the deadline minus 12 h,
+   so a pause restored after a restart counts too) ends the pause (`_lift_pause_on_new_car_data`), and so
+   does a Driving data tile that differs from the first one read during the pause (`_lift_pause_on_new_trip`).
 8. Run the **nav walks** that are due ([3.4](#34-navigation-reads)).
 9. Back-fill from the **cache** (24 h) the values a non-due poll did not read.
 10. Wake/sleep and close-app options run in a `finally`, also after a failure.
@@ -774,7 +784,7 @@ To add a value or a screen:
 | Vehicle sync interval | 0 (off) or 60–240 min, step 5; first sync waits a full interval | Each sync wakes the car and spends budget |
 | Read-back after a sync | 3 min | The car needs time to answer |
 | Gap between commands | 60 s, kept across restarts | Never drive into a backend limit |
-| Request-limit pause | 12 h, persisted | The car's daily power budget |
+| Request-limit pause | 12 h, persisted; ends early when the car sends data or a new trip shows after the alert | The car's daily power budget |
 | Probe through a pause | one sync per 4 h while a local power-budget pause is identified (no fixed quota); none for a backend pause, an ambiguous alert, or after a restart | Notice the car coming back |
 | Gated walks | on trip end or new car data; always every 12 h; trip walks every 6 h without the Driving data tile | Values only change then |
 | "New car data" settle time | 10 min with an unmoving sync time | A car on the move sends data every few minutes |

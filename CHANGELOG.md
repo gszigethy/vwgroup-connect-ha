@@ -42,6 +42,10 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+### Changed / Geändert
+
+- **Companion (ADB): the request-limit pause ends when the car sends new data.** The app's limit alerts say starting the car makes everything available again; once the overview's sync time is later than the alert, or the Driving data tile shows a new trip, controls and *Synchronise now* work again and *App request status* returns to *available*, instead of waiting out the full 12 h.
+
 ## [4.13.0-2] - 2026-10-11 — Volkswagen Companion (ADB): first full release, on upstream 4.13.0
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
