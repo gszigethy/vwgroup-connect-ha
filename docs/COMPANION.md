@@ -867,6 +867,9 @@ What makes the app hard to read, observed live on 4.6.4 (and 4.3.2) and confirme
   vehicle-wide setting's info text ([2.4](#24-how-the-entities-depend-on-each-other)).
 - Location timers always repeat. The *Active* badge is a separate clickable control inside the row, which is why the walk
   taps the name text instead.
+- **A location deleted in the car stays in the app until the app restarts.** The app keeps its location list for
+  as long as it runs: a *Vehicle sync* or *Synchronise now* does not refresh it, only closing and restarting the app
+  does (observed live). Until then the walk reads the deleted location like any other.
 
 ---
 
@@ -881,6 +884,7 @@ What the VW app itself does, and what follows from it. This list is about the ap
 | Per-location charge limits unreadable | The location sliders draw their values themselves, without text. No route found ([5](#5-quirks-of-the-vw-app)) |
 | PHEV petrol percentage | Not shown by the app's PHEV layout, so it is never estimated |
 | A request-limit pause empties some screens | After the car refuses requests, the Departure times screen shows no charging locations and the climate timers disappear, exactly as if none existed. An empty screen is therefore never taken as proof that the data is gone: the last readings stay until they expire (24 h) |
+| Deleted charging locations linger | A location deleted in the car stays in the app's list, and so in the charging location entities, until the app is closed and restarted; a vehicle sync does not refresh it ([5](#5-quirks-of-the-vw-app)). The *close the app after each read* option restarts it every poll |
 | Every tap is a car request | Climate dial gestures, Start/Stop, Save and charge commands each spend the car's daily request budget ([4](#4-limits-and-timings)) |
 | The app is the only screen | Using the app on the same phone while a walk runs can disturb it |
 
