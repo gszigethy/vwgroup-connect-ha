@@ -86,6 +86,17 @@ from .departure import (
     page_fields,
     read_timer_page,
 )
+from .charging_locations import (
+    LOCATION_PARTS,
+    charging_section_visible,
+    location_rows,
+    location_settings,
+    location_timers,
+    location_title,
+    on_location_list,
+    on_location_settings,
+    settings_icon,
+)
 from .app_sync import find_sync_button
 from .sync_time import find_sync_line
 from .charge_target import (
@@ -803,6 +814,14 @@ class CompanionChannel:
                     extra = await self._read_driving_data(detail)
                 if self._preset.brand == "volkswagen" and nav.name == "departure_times":
                     extra = await self._read_departure_pages(detail)
+                if self._preset.brand == "volkswagen" and nav.name == "charging_locations":
+                    # A preceding member opened climate timer pages; use the
+                    # returned list, rather than its earlier dump.
+                    if done:
+                        detail, cleared = await self._dump_and_clear_overlays(await self._settle())
+                        if not cleared:
+                            break
+                    extra = await self._read_charging_locations(detail)
                 self._apply_nav_values(nav, detail, fields, extra)
                 targets = [v.target for v in nav.values] + list(nav.resource_targets)
                 if any(fields.get(t) is not None for t in targets):
@@ -824,7 +843,10 @@ class CompanionChannel:
             # stopped early (a step not on screen) must not press BACK for
             # taps it never made, or it would leave the app somewhere behind
             # the overview for the next poll.
-            await self._return_to_overview(min(walked, reached.back_presses))
+            if any(nav.name == "charging_locations" for nav in group):
+                await self._return_to_overview(min(walked, reached.back_presses), back_only=True)
+            else:
+                await self._return_to_overview(min(walked, reached.back_presses))
 
     def walk_details_next_read(self) -> None:
         """Have the next read walk every opted-in detail, gated or not."""
@@ -926,6 +948,16 @@ class CompanionChannel:
             target = read_dial(detail, self._app_strings)[0]
             if target is not None and dial_is_celsius(detail, self._app_strings):
                 values["target_temperature"] = target
+        if nav.name == "charging_locations":
+            for slot in range(1, 6):
+                prefix = f"charging_location_{slot}_"
+                name = values.get(prefix + "name")
+                previous = self._nav_cache.get(prefix + "name", fields.get(prefix + "name"))
+                if name is not None and name != previous:
+                    # A slot now names another location; old settings and
+                    # timer values must not follow it through a partial read.
+                    for part in LOCATION_PARTS:
+                        values.setdefault(prefix + part, None)
         for key, val in values.items():
             # #1552 — a fresh detail-screen value wins over a stale
             # overview value for the same key (direct assign, not
@@ -1051,6 +1083,114 @@ class CompanionChannel:
             nodes = back
         return out
 
+    async def _read_charging_locations(self, nodes: list[UiNode]) -> dict[str, object]:
+        """Read names, timer labels and location settings; BACK after each page."""
+        out: dict[str, object] = {}
+        names: list[str] = []
+        current = "none"
+        complete = False
+        depth = 0
+        section_seen = False
+        if not any(key.startswith("active_chargingtimes_option#") and labels
+                   for key, labels in self._app_strings.items()):
+            return out
+        if not self._app_strings.get("common_status_active"):
+            return out
+        try:
+            for _ in range(16):
+                if not on_location_list(nodes, self._app_strings):
+                    break
+                section_seen |= charging_section_visible(nodes, self._app_strings)
+                rows = location_rows(nodes, self._app_strings)
+                visible = [row.name.text for row in rows]
+                if len(set(visible)) != len(visible):
+                    break  # ambiguous slots: keep only what was already read
+                for row in rows:
+                    name = row.name.text
+                    if name in names:
+                        continue
+                    point = row.name.tap_point
+                    if point is None or len(names) == 5:
+                        return out
+                    names.append(name)
+                    slot = len(names)
+                    prefix = f"charging_location_{slot}_"
+                    out.update({prefix + "name": name, prefix + "active": row.active,
+                                prefix + "active_timers": row.active_timers})
+                    if row.active:
+                        current = name
+                    await self._t.tap(*point)
+                    depth = 1
+                    page, cleared = await self._dump_and_clear_overlays(await self._settle())
+                    if on_location_list(page, self._app_strings):
+                        depth = 0  # the tap did not open a page
+                        return out
+                    if not cleared or location_title(page, name) is None:
+                        return out
+                    out.update(location_timers(page, self._app_strings, slot))
+                    icon = settings_icon(page, name)
+                    if icon is not None and icon.tap_point is not None:
+                        await self._t.tap(*icon.tap_point)
+                        depth = 2
+                        settings, cleared = await self._dump_and_clear_overlays(await self._settle())
+                        if location_title(settings, name) is not None:
+                            depth = 1  # settings did not open
+                            return out
+                        if not cleared or not on_location_settings(settings, self._app_strings):
+                            return out
+                        out.update(location_settings(settings, self._app_strings, slot, name))
+                        await self._t.key_back()
+                        depth = 1
+                        page, cleared = await self._dump_and_clear_overlays(await self._settle())
+                        if not cleared or location_title(page, name) is None:
+                            return out
+                    await self._t.key_back()
+                    depth = 0
+                    nodes, cleared = await self._dump_and_clear_overlays(await self._settle())
+                    if not cleared or not on_location_list(nodes, self._app_strings):
+                        return out
+                    # Re-resolve every name on the returned screen; coordinates
+                    # from a previous dump must not drive the next tap.
+                    break
+                else:
+                    if len(names) == 5:
+                        complete = True
+                        break
+                    if getattr(self._t, "swipe", None) is None or screen_bounds(nodes) is None:
+                        break
+                    await self._scroll_up(nodes, strict=True)
+                    scrolled, cleared = await self._dump_and_clear_overlays(await self._settle())
+                    if not cleared or not on_location_list(scrolled, self._app_strings):
+                        break
+                    if scrolled == nodes:
+                        complete = True  # a swipe at the end of the list
+                        break
+                    nodes = scrolled
+            # An empty list is ambiguous: the app shows the same "create your
+            # charging locations" text when the car has none and when the
+            # backend returned no departure data (live 2026-10-10, during a
+            # request-limit pause). Only a list with rows is a full read.
+            if complete and section_seen and names:
+                out["charging_location_count"] = len(names)
+                out["charging_location_current"] = current
+                for slot in range(len(names) + 1, 6):
+                    out.update({f"charging_location_{slot}_{part}": None for part in LOCATION_PARTS})
+        except CompanionTransportError:
+            _LOGGER.debug("companion volkswagen: charging locations read interrupted")
+        finally:
+            if depth:
+                await self._reconnect_for_cleanup()
+            for _ in range(depth):
+                try:
+                    here, _cleared = await self._dump_and_clear_overlays()
+                    if on_location_list(here, self._app_strings) or has_anchor(here, self._preset):
+                        break
+                    await self._t.key_back()
+                    await self._dump_and_clear_overlays(await self._settle())
+                except CompanionTransportError:
+                    break
+        return out
+
     async def _open_timer_page(
         self, nodes: list[UiNode], slot: int
     ) -> tuple[TimerPage | None, list[UiNode]]:
@@ -1077,7 +1217,7 @@ class CompanionChannel:
             return nodes
         return None
 
-    async def _scroll_up(self, nodes: list[UiNode]) -> list[UiNode]:
+    async def _scroll_up(self, nodes: list[UiNode], *, strict: bool = False) -> list[UiNode]:
         """Swipe the current screen up by half a display, best-effort.
 
         Expressed in fractions of the screen the phone actually reports, so it
@@ -1099,8 +1239,12 @@ class CompanionChannel:
                 500,
             )
         except CompanionTransportError:
+            if strict:
+                raise
             return nodes
         scrolled, cleared = await self._dump_and_clear_overlays()
+        if strict and not cleared:
+            raise CompanionTransportError("could not read the scrolled list")
         return scrolled if cleared else nodes
 
     def _step_node(self, nodes: list[UiNode], step: "ActionSelector") -> UiNode | None:
@@ -1145,7 +1289,7 @@ class CompanionChannel:
             previous = current
         return previous
 
-    async def _return_to_overview(self, presses: int = 1) -> None:
+    async def _return_to_overview(self, presses: int = 1, *, back_only: bool = False) -> None:
         """Walk back to the overview so the next plain read sees the main screen.
 
         v4.4.0 — prefer the app's OWN up/close control over Android's global
@@ -1175,7 +1319,7 @@ class CompanionChannel:
             ):
                 return
             up_point: tuple[int, int] | None = None
-            for spec in self._preset.up_controls:
+            for spec in (() if back_only else self._preset.up_controls):
                 candidate = find_node_for(nodes, spec)
                 if candidate is not None and candidate.tap_point is not None:
                     up_point = candidate.tap_point

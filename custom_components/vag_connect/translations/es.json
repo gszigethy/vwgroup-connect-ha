@@ -1624,6 +1624,135 @@
           "immediate_discharging": "Descargar ahora",
           "timer_charging_climatization": "Carga programada con climatización"
         }
+      },
+      "charging_location_count": {
+        "name": "Número de lugares de carga"
+      },
+      "charging_location_current": {
+        "name": "Lugar de carga actual",
+        "state": {
+          "none": "Ninguno"
+        }
+      },
+      "charging_location_1_name": {
+        "name": "Lugar de carga 1"
+      },
+      "charging_location_1_active_timers": {
+        "name": "Lugar de carga 1 temporizadores activos"
+      },
+      "charging_location_1_timer_1_time": {
+        "name": "Lugar de carga 1 temporizador 1 hora"
+      },
+      "charging_location_1_timer_1_weekdays": {
+        "name": "Lugar de carga 1 temporizador 1 días de la semana"
+      },
+      "charging_location_1_timer_2_time": {
+        "name": "Lugar de carga 1 temporizador 2 hora"
+      },
+      "charging_location_1_timer_2_weekdays": {
+        "name": "Lugar de carga 1 temporizador 2 días de la semana"
+      },
+      "charging_location_1_timer_3_time": {
+        "name": "Lugar de carga 1 temporizador 3 hora"
+      },
+      "charging_location_1_timer_3_weekdays": {
+        "name": "Lugar de carga 1 temporizador 3 días de la semana"
+      },
+      "charging_location_2_name": {
+        "name": "Lugar de carga 2"
+      },
+      "charging_location_2_active_timers": {
+        "name": "Lugar de carga 2 temporizadores activos"
+      },
+      "charging_location_2_timer_1_time": {
+        "name": "Lugar de carga 2 temporizador 1 hora"
+      },
+      "charging_location_2_timer_1_weekdays": {
+        "name": "Lugar de carga 2 temporizador 1 días de la semana"
+      },
+      "charging_location_2_timer_2_time": {
+        "name": "Lugar de carga 2 temporizador 2 hora"
+      },
+      "charging_location_2_timer_2_weekdays": {
+        "name": "Lugar de carga 2 temporizador 2 días de la semana"
+      },
+      "charging_location_2_timer_3_time": {
+        "name": "Lugar de carga 2 temporizador 3 hora"
+      },
+      "charging_location_2_timer_3_weekdays": {
+        "name": "Lugar de carga 2 temporizador 3 días de la semana"
+      },
+      "charging_location_3_name": {
+        "name": "Lugar de carga 3"
+      },
+      "charging_location_3_active_timers": {
+        "name": "Lugar de carga 3 temporizadores activos"
+      },
+      "charging_location_3_timer_1_time": {
+        "name": "Lugar de carga 3 temporizador 1 hora"
+      },
+      "charging_location_3_timer_1_weekdays": {
+        "name": "Lugar de carga 3 temporizador 1 días de la semana"
+      },
+      "charging_location_3_timer_2_time": {
+        "name": "Lugar de carga 3 temporizador 2 hora"
+      },
+      "charging_location_3_timer_2_weekdays": {
+        "name": "Lugar de carga 3 temporizador 2 días de la semana"
+      },
+      "charging_location_3_timer_3_time": {
+        "name": "Lugar de carga 3 temporizador 3 hora"
+      },
+      "charging_location_3_timer_3_weekdays": {
+        "name": "Lugar de carga 3 temporizador 3 días de la semana"
+      },
+      "charging_location_4_name": {
+        "name": "Lugar de carga 4"
+      },
+      "charging_location_4_active_timers": {
+        "name": "Lugar de carga 4 temporizadores activos"
+      },
+      "charging_location_4_timer_1_time": {
+        "name": "Lugar de carga 4 temporizador 1 hora"
+      },
+      "charging_location_4_timer_1_weekdays": {
+        "name": "Lugar de carga 4 temporizador 1 días de la semana"
+      },
+      "charging_location_4_timer_2_time": {
+        "name": "Lugar de carga 4 temporizador 2 hora"
+      },
+      "charging_location_4_timer_2_weekdays": {
+        "name": "Lugar de carga 4 temporizador 2 días de la semana"
+      },
+      "charging_location_4_timer_3_time": {
+        "name": "Lugar de carga 4 temporizador 3 hora"
+      },
+      "charging_location_4_timer_3_weekdays": {
+        "name": "Lugar de carga 4 temporizador 3 días de la semana"
+      },
+      "charging_location_5_name": {
+        "name": "Lugar de carga 5"
+      },
+      "charging_location_5_active_timers": {
+        "name": "Lugar de carga 5 temporizadores activos"
+      },
+      "charging_location_5_timer_1_time": {
+        "name": "Lugar de carga 5 temporizador 1 hora"
+      },
+      "charging_location_5_timer_1_weekdays": {
+        "name": "Lugar de carga 5 temporizador 1 días de la semana"
+      },
+      "charging_location_5_timer_2_time": {
+        "name": "Lugar de carga 5 temporizador 2 hora"
+      },
+      "charging_location_5_timer_2_weekdays": {
+        "name": "Lugar de carga 5 temporizador 2 días de la semana"
+      },
+      "charging_location_5_timer_3_time": {
+        "name": "Lugar de carga 5 temporizador 3 hora"
+      },
+      "charging_location_5_timer_3_weekdays": {
+        "name": "Lugar de carga 5 temporizador 3 días de la semana"
       }
     },
     "binary_sensor": {
@@ -1956,6 +2085,96 @@
       },
       "connect_contract_active": {
         "name": "Contrato Connect activo"
+      },
+      "charging_location_1_active": {
+        "name": "Lugar de carga 1 activo"
+      },
+      "charging_location_1_reduced_ac_current": {
+        "name": "Lugar de carga 1 corriente de carga CA reducida"
+      },
+      "charging_location_1_auto_release_connector": {
+        "name": "Lugar de carga 1 liberación automática del conector CA"
+      },
+      "charging_location_1_timer_1_enabled": {
+        "name": "Lugar de carga 1 temporizador 1 activado"
+      },
+      "charging_location_1_timer_2_enabled": {
+        "name": "Lugar de carga 1 temporizador 2 activado"
+      },
+      "charging_location_1_timer_3_enabled": {
+        "name": "Lugar de carga 1 temporizador 3 activado"
+      },
+      "charging_location_2_active": {
+        "name": "Lugar de carga 2 activo"
+      },
+      "charging_location_2_reduced_ac_current": {
+        "name": "Lugar de carga 2 corriente de carga CA reducida"
+      },
+      "charging_location_2_auto_release_connector": {
+        "name": "Lugar de carga 2 liberación automática del conector CA"
+      },
+      "charging_location_2_timer_1_enabled": {
+        "name": "Lugar de carga 2 temporizador 1 activado"
+      },
+      "charging_location_2_timer_2_enabled": {
+        "name": "Lugar de carga 2 temporizador 2 activado"
+      },
+      "charging_location_2_timer_3_enabled": {
+        "name": "Lugar de carga 2 temporizador 3 activado"
+      },
+      "charging_location_3_active": {
+        "name": "Lugar de carga 3 activo"
+      },
+      "charging_location_3_reduced_ac_current": {
+        "name": "Lugar de carga 3 corriente de carga CA reducida"
+      },
+      "charging_location_3_auto_release_connector": {
+        "name": "Lugar de carga 3 liberación automática del conector CA"
+      },
+      "charging_location_3_timer_1_enabled": {
+        "name": "Lugar de carga 3 temporizador 1 activado"
+      },
+      "charging_location_3_timer_2_enabled": {
+        "name": "Lugar de carga 3 temporizador 2 activado"
+      },
+      "charging_location_3_timer_3_enabled": {
+        "name": "Lugar de carga 3 temporizador 3 activado"
+      },
+      "charging_location_4_active": {
+        "name": "Lugar de carga 4 activo"
+      },
+      "charging_location_4_reduced_ac_current": {
+        "name": "Lugar de carga 4 corriente de carga CA reducida"
+      },
+      "charging_location_4_auto_release_connector": {
+        "name": "Lugar de carga 4 liberación automática del conector CA"
+      },
+      "charging_location_4_timer_1_enabled": {
+        "name": "Lugar de carga 4 temporizador 1 activado"
+      },
+      "charging_location_4_timer_2_enabled": {
+        "name": "Lugar de carga 4 temporizador 2 activado"
+      },
+      "charging_location_4_timer_3_enabled": {
+        "name": "Lugar de carga 4 temporizador 3 activado"
+      },
+      "charging_location_5_active": {
+        "name": "Lugar de carga 5 activo"
+      },
+      "charging_location_5_reduced_ac_current": {
+        "name": "Lugar de carga 5 corriente de carga CA reducida"
+      },
+      "charging_location_5_auto_release_connector": {
+        "name": "Lugar de carga 5 liberación automática del conector CA"
+      },
+      "charging_location_5_timer_1_enabled": {
+        "name": "Lugar de carga 5 temporizador 1 activado"
+      },
+      "charging_location_5_timer_2_enabled": {
+        "name": "Lugar de carga 5 temporizador 2 activado"
+      },
+      "charging_location_5_timer_3_enabled": {
+        "name": "Lugar de carga 5 temporizador 3 activado"
       }
     },
     "switch": {
@@ -2030,6 +2249,9 @@
       },
       "companion_read_parking_position": {
         "name": "Leer posición de aparcamiento"
+      },
+      "companion_read_charging_locations": {
+        "name": "Leer lugares de carga"
       }
     },
     "number": {

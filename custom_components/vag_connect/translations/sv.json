@@ -1624,6 +1624,135 @@
           "immediate_discharging": "Ladda ur nu",
           "timer_charging_climatization": "Tidsstyrd laddning med klimatanläggning"
         }
+      },
+      "charging_location_count": {
+        "name": "Antal laddplatser"
+      },
+      "charging_location_current": {
+        "name": "Aktuell laddplats",
+        "state": {
+          "none": "Ingen"
+        }
+      },
+      "charging_location_1_name": {
+        "name": "Laddplats 1"
+      },
+      "charging_location_1_active_timers": {
+        "name": "Laddplats 1 aktiva timer"
+      },
+      "charging_location_1_timer_1_time": {
+        "name": "Laddplats 1 timer 1 tid"
+      },
+      "charging_location_1_timer_1_weekdays": {
+        "name": "Laddplats 1 timer 1 veckodagar"
+      },
+      "charging_location_1_timer_2_time": {
+        "name": "Laddplats 1 timer 2 tid"
+      },
+      "charging_location_1_timer_2_weekdays": {
+        "name": "Laddplats 1 timer 2 veckodagar"
+      },
+      "charging_location_1_timer_3_time": {
+        "name": "Laddplats 1 timer 3 tid"
+      },
+      "charging_location_1_timer_3_weekdays": {
+        "name": "Laddplats 1 timer 3 veckodagar"
+      },
+      "charging_location_2_name": {
+        "name": "Laddplats 2"
+      },
+      "charging_location_2_active_timers": {
+        "name": "Laddplats 2 aktiva timer"
+      },
+      "charging_location_2_timer_1_time": {
+        "name": "Laddplats 2 timer 1 tid"
+      },
+      "charging_location_2_timer_1_weekdays": {
+        "name": "Laddplats 2 timer 1 veckodagar"
+      },
+      "charging_location_2_timer_2_time": {
+        "name": "Laddplats 2 timer 2 tid"
+      },
+      "charging_location_2_timer_2_weekdays": {
+        "name": "Laddplats 2 timer 2 veckodagar"
+      },
+      "charging_location_2_timer_3_time": {
+        "name": "Laddplats 2 timer 3 tid"
+      },
+      "charging_location_2_timer_3_weekdays": {
+        "name": "Laddplats 2 timer 3 veckodagar"
+      },
+      "charging_location_3_name": {
+        "name": "Laddplats 3"
+      },
+      "charging_location_3_active_timers": {
+        "name": "Laddplats 3 aktiva timer"
+      },
+      "charging_location_3_timer_1_time": {
+        "name": "Laddplats 3 timer 1 tid"
+      },
+      "charging_location_3_timer_1_weekdays": {
+        "name": "Laddplats 3 timer 1 veckodagar"
+      },
+      "charging_location_3_timer_2_time": {
+        "name": "Laddplats 3 timer 2 tid"
+      },
+      "charging_location_3_timer_2_weekdays": {
+        "name": "Laddplats 3 timer 2 veckodagar"
+      },
+      "charging_location_3_timer_3_time": {
+        "name": "Laddplats 3 timer 3 tid"
+      },
+      "charging_location_3_timer_3_weekdays": {
+        "name": "Laddplats 3 timer 3 veckodagar"
+      },
+      "charging_location_4_name": {
+        "name": "Laddplats 4"
+      },
+      "charging_location_4_active_timers": {
+        "name": "Laddplats 4 aktiva timer"
+      },
+      "charging_location_4_timer_1_time": {
+        "name": "Laddplats 4 timer 1 tid"
+      },
+      "charging_location_4_timer_1_weekdays": {
+        "name": "Laddplats 4 timer 1 veckodagar"
+      },
+      "charging_location_4_timer_2_time": {
+        "name": "Laddplats 4 timer 2 tid"
+      },
+      "charging_location_4_timer_2_weekdays": {
+        "name": "Laddplats 4 timer 2 veckodagar"
+      },
+      "charging_location_4_timer_3_time": {
+        "name": "Laddplats 4 timer 3 tid"
+      },
+      "charging_location_4_timer_3_weekdays": {
+        "name": "Laddplats 4 timer 3 veckodagar"
+      },
+      "charging_location_5_name": {
+        "name": "Laddplats 5"
+      },
+      "charging_location_5_active_timers": {
+        "name": "Laddplats 5 aktiva timer"
+      },
+      "charging_location_5_timer_1_time": {
+        "name": "Laddplats 5 timer 1 tid"
+      },
+      "charging_location_5_timer_1_weekdays": {
+        "name": "Laddplats 5 timer 1 veckodagar"
+      },
+      "charging_location_5_timer_2_time": {
+        "name": "Laddplats 5 timer 2 tid"
+      },
+      "charging_location_5_timer_2_weekdays": {
+        "name": "Laddplats 5 timer 2 veckodagar"
+      },
+      "charging_location_5_timer_3_time": {
+        "name": "Laddplats 5 timer 3 tid"
+      },
+      "charging_location_5_timer_3_weekdays": {
+        "name": "Laddplats 5 timer 3 veckodagar"
       }
     },
     "binary_sensor": {
@@ -1956,6 +2085,96 @@
       },
       "connect_contract_active": {
         "name": "Connect-avtal aktivt"
+      },
+      "charging_location_1_active": {
+        "name": "Laddplats 1 aktiv"
+      },
+      "charging_location_1_reduced_ac_current": {
+        "name": "Laddplats 1 minskad AC-laddström"
+      },
+      "charging_location_1_auto_release_connector": {
+        "name": "Laddplats 1 automatisk frigöring av AC-kontakt"
+      },
+      "charging_location_1_timer_1_enabled": {
+        "name": "Laddplats 1 timer 1 aktiverad"
+      },
+      "charging_location_1_timer_2_enabled": {
+        "name": "Laddplats 1 timer 2 aktiverad"
+      },
+      "charging_location_1_timer_3_enabled": {
+        "name": "Laddplats 1 timer 3 aktiverad"
+      },
+      "charging_location_2_active": {
+        "name": "Laddplats 2 aktiv"
+      },
+      "charging_location_2_reduced_ac_current": {
+        "name": "Laddplats 2 minskad AC-laddström"
+      },
+      "charging_location_2_auto_release_connector": {
+        "name": "Laddplats 2 automatisk frigöring av AC-kontakt"
+      },
+      "charging_location_2_timer_1_enabled": {
+        "name": "Laddplats 2 timer 1 aktiverad"
+      },
+      "charging_location_2_timer_2_enabled": {
+        "name": "Laddplats 2 timer 2 aktiverad"
+      },
+      "charging_location_2_timer_3_enabled": {
+        "name": "Laddplats 2 timer 3 aktiverad"
+      },
+      "charging_location_3_active": {
+        "name": "Laddplats 3 aktiv"
+      },
+      "charging_location_3_reduced_ac_current": {
+        "name": "Laddplats 3 minskad AC-laddström"
+      },
+      "charging_location_3_auto_release_connector": {
+        "name": "Laddplats 3 automatisk frigöring av AC-kontakt"
+      },
+      "charging_location_3_timer_1_enabled": {
+        "name": "Laddplats 3 timer 1 aktiverad"
+      },
+      "charging_location_3_timer_2_enabled": {
+        "name": "Laddplats 3 timer 2 aktiverad"
+      },
+      "charging_location_3_timer_3_enabled": {
+        "name": "Laddplats 3 timer 3 aktiverad"
+      },
+      "charging_location_4_active": {
+        "name": "Laddplats 4 aktiv"
+      },
+      "charging_location_4_reduced_ac_current": {
+        "name": "Laddplats 4 minskad AC-laddström"
+      },
+      "charging_location_4_auto_release_connector": {
+        "name": "Laddplats 4 automatisk frigöring av AC-kontakt"
+      },
+      "charging_location_4_timer_1_enabled": {
+        "name": "Laddplats 4 timer 1 aktiverad"
+      },
+      "charging_location_4_timer_2_enabled": {
+        "name": "Laddplats 4 timer 2 aktiverad"
+      },
+      "charging_location_4_timer_3_enabled": {
+        "name": "Laddplats 4 timer 3 aktiverad"
+      },
+      "charging_location_5_active": {
+        "name": "Laddplats 5 aktiv"
+      },
+      "charging_location_5_reduced_ac_current": {
+        "name": "Laddplats 5 minskad AC-laddström"
+      },
+      "charging_location_5_auto_release_connector": {
+        "name": "Laddplats 5 automatisk frigöring av AC-kontakt"
+      },
+      "charging_location_5_timer_1_enabled": {
+        "name": "Laddplats 5 timer 1 aktiverad"
+      },
+      "charging_location_5_timer_2_enabled": {
+        "name": "Laddplats 5 timer 2 aktiverad"
+      },
+      "charging_location_5_timer_3_enabled": {
+        "name": "Laddplats 5 timer 3 aktiverad"
       }
     },
     "switch": {
@@ -2030,6 +2249,9 @@
       },
       "companion_read_parking_position": {
         "name": "Läs parkeringsposition"
+      },
+      "companion_read_charging_locations": {
+        "name": "Läs laddplatser"
       }
     },
     "number": {

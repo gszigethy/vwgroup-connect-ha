@@ -1624,6 +1624,135 @@
           "immediate_discharging": "Vybít nyní",
           "timer_charging_climatization": "Časované nabíjení s klimatizací"
         }
+      },
+      "charging_location_count": {
+        "name": "Počet nabíjecích míst"
+      },
+      "charging_location_current": {
+        "name": "Aktuální nabíjecí místo",
+        "state": {
+          "none": "Žádné"
+        }
+      },
+      "charging_location_1_name": {
+        "name": "Nabíjecí místo 1"
+      },
+      "charging_location_1_active_timers": {
+        "name": "Nabíjecí místo 1 aktivní časovače"
+      },
+      "charging_location_1_timer_1_time": {
+        "name": "Nabíjecí místo 1 časovač 1 čas"
+      },
+      "charging_location_1_timer_1_weekdays": {
+        "name": "Nabíjecí místo 1 časovač 1 dny v týdnu"
+      },
+      "charging_location_1_timer_2_time": {
+        "name": "Nabíjecí místo 1 časovač 2 čas"
+      },
+      "charging_location_1_timer_2_weekdays": {
+        "name": "Nabíjecí místo 1 časovač 2 dny v týdnu"
+      },
+      "charging_location_1_timer_3_time": {
+        "name": "Nabíjecí místo 1 časovač 3 čas"
+      },
+      "charging_location_1_timer_3_weekdays": {
+        "name": "Nabíjecí místo 1 časovač 3 dny v týdnu"
+      },
+      "charging_location_2_name": {
+        "name": "Nabíjecí místo 2"
+      },
+      "charging_location_2_active_timers": {
+        "name": "Nabíjecí místo 2 aktivní časovače"
+      },
+      "charging_location_2_timer_1_time": {
+        "name": "Nabíjecí místo 2 časovač 1 čas"
+      },
+      "charging_location_2_timer_1_weekdays": {
+        "name": "Nabíjecí místo 2 časovač 1 dny v týdnu"
+      },
+      "charging_location_2_timer_2_time": {
+        "name": "Nabíjecí místo 2 časovač 2 čas"
+      },
+      "charging_location_2_timer_2_weekdays": {
+        "name": "Nabíjecí místo 2 časovač 2 dny v týdnu"
+      },
+      "charging_location_2_timer_3_time": {
+        "name": "Nabíjecí místo 2 časovač 3 čas"
+      },
+      "charging_location_2_timer_3_weekdays": {
+        "name": "Nabíjecí místo 2 časovač 3 dny v týdnu"
+      },
+      "charging_location_3_name": {
+        "name": "Nabíjecí místo 3"
+      },
+      "charging_location_3_active_timers": {
+        "name": "Nabíjecí místo 3 aktivní časovače"
+      },
+      "charging_location_3_timer_1_time": {
+        "name": "Nabíjecí místo 3 časovač 1 čas"
+      },
+      "charging_location_3_timer_1_weekdays": {
+        "name": "Nabíjecí místo 3 časovač 1 dny v týdnu"
+      },
+      "charging_location_3_timer_2_time": {
+        "name": "Nabíjecí místo 3 časovač 2 čas"
+      },
+      "charging_location_3_timer_2_weekdays": {
+        "name": "Nabíjecí místo 3 časovač 2 dny v týdnu"
+      },
+      "charging_location_3_timer_3_time": {
+        "name": "Nabíjecí místo 3 časovač 3 čas"
+      },
+      "charging_location_3_timer_3_weekdays": {
+        "name": "Nabíjecí místo 3 časovač 3 dny v týdnu"
+      },
+      "charging_location_4_name": {
+        "name": "Nabíjecí místo 4"
+      },
+      "charging_location_4_active_timers": {
+        "name": "Nabíjecí místo 4 aktivní časovače"
+      },
+      "charging_location_4_timer_1_time": {
+        "name": "Nabíjecí místo 4 časovač 1 čas"
+      },
+      "charging_location_4_timer_1_weekdays": {
+        "name": "Nabíjecí místo 4 časovač 1 dny v týdnu"
+      },
+      "charging_location_4_timer_2_time": {
+        "name": "Nabíjecí místo 4 časovač 2 čas"
+      },
+      "charging_location_4_timer_2_weekdays": {
+        "name": "Nabíjecí místo 4 časovač 2 dny v týdnu"
+      },
+      "charging_location_4_timer_3_time": {
+        "name": "Nabíjecí místo 4 časovač 3 čas"
+      },
+      "charging_location_4_timer_3_weekdays": {
+        "name": "Nabíjecí místo 4 časovač 3 dny v týdnu"
+      },
+      "charging_location_5_name": {
+        "name": "Nabíjecí místo 5"
+      },
+      "charging_location_5_active_timers": {
+        "name": "Nabíjecí místo 5 aktivní časovače"
+      },
+      "charging_location_5_timer_1_time": {
+        "name": "Nabíjecí místo 5 časovač 1 čas"
+      },
+      "charging_location_5_timer_1_weekdays": {
+        "name": "Nabíjecí místo 5 časovač 1 dny v týdnu"
+      },
+      "charging_location_5_timer_2_time": {
+        "name": "Nabíjecí místo 5 časovač 2 čas"
+      },
+      "charging_location_5_timer_2_weekdays": {
+        "name": "Nabíjecí místo 5 časovač 2 dny v týdnu"
+      },
+      "charging_location_5_timer_3_time": {
+        "name": "Nabíjecí místo 5 časovač 3 čas"
+      },
+      "charging_location_5_timer_3_weekdays": {
+        "name": "Nabíjecí místo 5 časovač 3 dny v týdnu"
       }
     },
     "binary_sensor": {
@@ -1956,6 +2085,96 @@
       },
       "connect_contract_active": {
         "name": "Smlouva Connect aktivní"
+      },
+      "charging_location_1_active": {
+        "name": "Nabíjecí místo 1 aktivní"
+      },
+      "charging_location_1_reduced_ac_current": {
+        "name": "Nabíjecí místo 1 snížený nabíjecí proud AC"
+      },
+      "charging_location_1_auto_release_connector": {
+        "name": "Nabíjecí místo 1 automatické uvolnění konektoru AC"
+      },
+      "charging_location_1_timer_1_enabled": {
+        "name": "Nabíjecí místo 1 časovač 1 zapnutý"
+      },
+      "charging_location_1_timer_2_enabled": {
+        "name": "Nabíjecí místo 1 časovač 2 zapnutý"
+      },
+      "charging_location_1_timer_3_enabled": {
+        "name": "Nabíjecí místo 1 časovač 3 zapnutý"
+      },
+      "charging_location_2_active": {
+        "name": "Nabíjecí místo 2 aktivní"
+      },
+      "charging_location_2_reduced_ac_current": {
+        "name": "Nabíjecí místo 2 snížený nabíjecí proud AC"
+      },
+      "charging_location_2_auto_release_connector": {
+        "name": "Nabíjecí místo 2 automatické uvolnění konektoru AC"
+      },
+      "charging_location_2_timer_1_enabled": {
+        "name": "Nabíjecí místo 2 časovač 1 zapnutý"
+      },
+      "charging_location_2_timer_2_enabled": {
+        "name": "Nabíjecí místo 2 časovač 2 zapnutý"
+      },
+      "charging_location_2_timer_3_enabled": {
+        "name": "Nabíjecí místo 2 časovač 3 zapnutý"
+      },
+      "charging_location_3_active": {
+        "name": "Nabíjecí místo 3 aktivní"
+      },
+      "charging_location_3_reduced_ac_current": {
+        "name": "Nabíjecí místo 3 snížený nabíjecí proud AC"
+      },
+      "charging_location_3_auto_release_connector": {
+        "name": "Nabíjecí místo 3 automatické uvolnění konektoru AC"
+      },
+      "charging_location_3_timer_1_enabled": {
+        "name": "Nabíjecí místo 3 časovač 1 zapnutý"
+      },
+      "charging_location_3_timer_2_enabled": {
+        "name": "Nabíjecí místo 3 časovač 2 zapnutý"
+      },
+      "charging_location_3_timer_3_enabled": {
+        "name": "Nabíjecí místo 3 časovač 3 zapnutý"
+      },
+      "charging_location_4_active": {
+        "name": "Nabíjecí místo 4 aktivní"
+      },
+      "charging_location_4_reduced_ac_current": {
+        "name": "Nabíjecí místo 4 snížený nabíjecí proud AC"
+      },
+      "charging_location_4_auto_release_connector": {
+        "name": "Nabíjecí místo 4 automatické uvolnění konektoru AC"
+      },
+      "charging_location_4_timer_1_enabled": {
+        "name": "Nabíjecí místo 4 časovač 1 zapnutý"
+      },
+      "charging_location_4_timer_2_enabled": {
+        "name": "Nabíjecí místo 4 časovač 2 zapnutý"
+      },
+      "charging_location_4_timer_3_enabled": {
+        "name": "Nabíjecí místo 4 časovač 3 zapnutý"
+      },
+      "charging_location_5_active": {
+        "name": "Nabíjecí místo 5 aktivní"
+      },
+      "charging_location_5_reduced_ac_current": {
+        "name": "Nabíjecí místo 5 snížený nabíjecí proud AC"
+      },
+      "charging_location_5_auto_release_connector": {
+        "name": "Nabíjecí místo 5 automatické uvolnění konektoru AC"
+      },
+      "charging_location_5_timer_1_enabled": {
+        "name": "Nabíjecí místo 5 časovač 1 zapnutý"
+      },
+      "charging_location_5_timer_2_enabled": {
+        "name": "Nabíjecí místo 5 časovač 2 zapnutý"
+      },
+      "charging_location_5_timer_3_enabled": {
+        "name": "Nabíjecí místo 5 časovač 3 zapnutý"
       }
     },
     "switch": {
@@ -2030,6 +2249,9 @@
       },
       "companion_read_parking_position": {
         "name": "Číst parkovací polohu"
+      },
+      "companion_read_charging_locations": {
+        "name": "Číst nabíjecí místa"
       }
     },
     "number": {

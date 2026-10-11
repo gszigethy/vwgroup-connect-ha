@@ -138,6 +138,17 @@ _TRIP_KEYS = (
     DRIVING_TILE, *(k for keys in TRIP_CARDS.values() for k in keys), *TRIP_ROWS,
     *TRIP_UNITS, DURATION_HOURS,
 )
+# Charging-location rows and their timer/settings pages.
+CHARGING_PLURAL = "active_chargingtimes_option"
+_CHARGING_KEYS = (
+    "common_charging", "common_status_active", "screen_charging_settings_title",
+    "screen_charging_settings_relatedlocation", "vehiclesettingsscreen_reducedchargingspeed",
+    "vehiclesettingsscreen_automaticplugunlock",
+    "departure_timer_subscreen_every_day", "departure_timer_subscreen_weekdays",
+    "departure_timer_subscreen_weekend",
+    *(f"departure_timer_subscreen_{day}" for day in ("mon", "tue", "wed", "thu", "fri", "sat", "sun")),
+    *(f"weekday_{day}" for day in ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")),
+)
 # Overview tiles opened by a nav read, by their translated label.
 DEPARTURE_TILE = "acc_vehicle_tab_label_departure_times"
 _SINGLE_KEYS = frozenset({
@@ -146,7 +157,7 @@ _SINGLE_KEYS = frozenset({
     DEPARTURE_TILE, TIMER_SAVE, TIMER_CANCEL, *_TRIP_KEYS,
     SYNC_LAST_UPDATE, SYNC_JUST_NOW, SYNC_TOO_OLD, DATA_UNAVAILABLE, *_CLIMA_KEYS,
     *HEALTH_ROWS, HEALTH_NO_ISSUES, HEALTH_ISSUES, *SETTINGS_SWITCHES,
-    *_TILE_KEYS,
+    *_TILE_KEYS, *_CHARGING_KEYS,
 })
 # Android's plural quantity attributes (``android:^attr-private`` ids).
 _QUANTITIES = {
@@ -186,10 +197,10 @@ def _read_plural(
     data: bytes, entry: int, end: int, keys: list[str], strings: list[str],
     out: StringResources,
 ) -> None:
-    """One plurals bag of the sync line, stored as ``name#quantity`` strings."""
+    """One relevant plurals bag, stored as ``name#quantity`` strings."""
     es, ef, key = struct.unpack_from("<HHI", data, entry)
     name = keys[key]
-    if not ef & 1 or es < 16 or entry + 16 > end or name not in SYNC_PLURALS:
+    if not ef & 1 or es < 16 or entry + 16 > end or name not in (*SYNC_PLURALS, CHARGING_PLURAL):
         return
     count = struct.unpack_from("<I", data, entry + 12)[0]
     item = entry + es
@@ -208,7 +219,7 @@ def extract_app_strings(data: bytes) -> StringResources:
 
     A malformed/unsupported table returns no labels. Complex entries (styles,
     bags) and non-string values are deliberately ignored, never interpreted as
-    strings, except the sync line's duration plurals, read per quantity. Dense,
+    strings, except the relevant plurals, read per quantity. Dense,
     sparse, and 16-bit type offset tables are supported.
     """
     out: StringResources = {}

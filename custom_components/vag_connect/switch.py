@@ -509,6 +509,7 @@ COMPANION_READS: tuple[tuple[str, str, str], ...] = (
     ("climate_detail", "companion_read_climate_detail", "mdi:thermometer"),
     ("climate_settings", "companion_read_climate_settings", "mdi:air-conditioner"),
     ("departure_times", "companion_read_departure_times", "mdi:timer-outline"),
+    ("charging_locations", "companion_read_charging_locations", "mdi:ev-plug-type2"),
     ("driving_data", "companion_read_driving_data", "mdi:map-marker-distance"),
     ("parking_position", "companion_read_parking_position", "mdi:map-marker"),
 )

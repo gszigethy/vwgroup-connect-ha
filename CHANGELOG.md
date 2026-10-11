@@ -42,6 +42,9 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+### Added
+- **Companion: optional read of VW charging locations**, including the active location, each location's three departure timers and its AC charging settings, with diagnostic sensors and binary sensors.
+
 ## [4.12.0-5] - 2026-10-10 — Companion: no stuck charging values after a reload
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream

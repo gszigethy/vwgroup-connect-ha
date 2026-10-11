@@ -1624,6 +1624,135 @@
           "immediate_discharging": "Sofort entladen",
           "timer_charging_climatization": "Timer-Laden mit Klimatisierung"
         }
+      },
+      "charging_location_count": {
+        "name": "Anzahl der Ladeorte"
+      },
+      "charging_location_current": {
+        "name": "Aktueller Ladeort",
+        "state": {
+          "none": "Keiner"
+        }
+      },
+      "charging_location_1_name": {
+        "name": "Ladeort 1"
+      },
+      "charging_location_1_active_timers": {
+        "name": "Ladeort 1 aktive Timer"
+      },
+      "charging_location_1_timer_1_time": {
+        "name": "Ladeort 1 Timer 1 Uhrzeit"
+      },
+      "charging_location_1_timer_1_weekdays": {
+        "name": "Ladeort 1 Timer 1 Wochentage"
+      },
+      "charging_location_1_timer_2_time": {
+        "name": "Ladeort 1 Timer 2 Uhrzeit"
+      },
+      "charging_location_1_timer_2_weekdays": {
+        "name": "Ladeort 1 Timer 2 Wochentage"
+      },
+      "charging_location_1_timer_3_time": {
+        "name": "Ladeort 1 Timer 3 Uhrzeit"
+      },
+      "charging_location_1_timer_3_weekdays": {
+        "name": "Ladeort 1 Timer 3 Wochentage"
+      },
+      "charging_location_2_name": {
+        "name": "Ladeort 2"
+      },
+      "charging_location_2_active_timers": {
+        "name": "Ladeort 2 aktive Timer"
+      },
+      "charging_location_2_timer_1_time": {
+        "name": "Ladeort 2 Timer 1 Uhrzeit"
+      },
+      "charging_location_2_timer_1_weekdays": {
+        "name": "Ladeort 2 Timer 1 Wochentage"
+      },
+      "charging_location_2_timer_2_time": {
+        "name": "Ladeort 2 Timer 2 Uhrzeit"
+      },
+      "charging_location_2_timer_2_weekdays": {
+        "name": "Ladeort 2 Timer 2 Wochentage"
+      },
+      "charging_location_2_timer_3_time": {
+        "name": "Ladeort 2 Timer 3 Uhrzeit"
+      },
+      "charging_location_2_timer_3_weekdays": {
+        "name": "Ladeort 2 Timer 3 Wochentage"
+      },
+      "charging_location_3_name": {
+        "name": "Ladeort 3"
+      },
+      "charging_location_3_active_timers": {
+        "name": "Ladeort 3 aktive Timer"
+      },
+      "charging_location_3_timer_1_time": {
+        "name": "Ladeort 3 Timer 1 Uhrzeit"
+      },
+      "charging_location_3_timer_1_weekdays": {
+        "name": "Ladeort 3 Timer 1 Wochentage"
+      },
+      "charging_location_3_timer_2_time": {
+        "name": "Ladeort 3 Timer 2 Uhrzeit"
+      },
+      "charging_location_3_timer_2_weekdays": {
+        "name": "Ladeort 3 Timer 2 Wochentage"
+      },
+      "charging_location_3_timer_3_time": {
+        "name": "Ladeort 3 Timer 3 Uhrzeit"
+      },
+      "charging_location_3_timer_3_weekdays": {
+        "name": "Ladeort 3 Timer 3 Wochentage"
+      },
+      "charging_location_4_name": {
+        "name": "Ladeort 4"
+      },
+      "charging_location_4_active_timers": {
+        "name": "Ladeort 4 aktive Timer"
+      },
+      "charging_location_4_timer_1_time": {
+        "name": "Ladeort 4 Timer 1 Uhrzeit"
+      },
+      "charging_location_4_timer_1_weekdays": {
+        "name": "Ladeort 4 Timer 1 Wochentage"
+      },
+      "charging_location_4_timer_2_time": {
+        "name": "Ladeort 4 Timer 2 Uhrzeit"
+      },
+      "charging_location_4_timer_2_weekdays": {
+        "name": "Ladeort 4 Timer 2 Wochentage"
+      },
+      "charging_location_4_timer_3_time": {
+        "name": "Ladeort 4 Timer 3 Uhrzeit"
+      },
+      "charging_location_4_timer_3_weekdays": {
+        "name": "Ladeort 4 Timer 3 Wochentage"
+      },
+      "charging_location_5_name": {
+        "name": "Ladeort 5"
+      },
+      "charging_location_5_active_timers": {
+        "name": "Ladeort 5 aktive Timer"
+      },
+      "charging_location_5_timer_1_time": {
+        "name": "Ladeort 5 Timer 1 Uhrzeit"
+      },
+      "charging_location_5_timer_1_weekdays": {
+        "name": "Ladeort 5 Timer 1 Wochentage"
+      },
+      "charging_location_5_timer_2_time": {
+        "name": "Ladeort 5 Timer 2 Uhrzeit"
+      },
+      "charging_location_5_timer_2_weekdays": {
+        "name": "Ladeort 5 Timer 2 Wochentage"
+      },
+      "charging_location_5_timer_3_time": {
+        "name": "Ladeort 5 Timer 3 Uhrzeit"
+      },
+      "charging_location_5_timer_3_weekdays": {
+        "name": "Ladeort 5 Timer 3 Wochentage"
       }
     },
     "binary_sensor": {
@@ -1956,6 +2085,96 @@
       },
       "connect_contract_active": {
         "name": "Connect-Vertrag aktiv"
+      },
+      "charging_location_1_active": {
+        "name": "Ladeort 1 aktiv"
+      },
+      "charging_location_1_reduced_ac_current": {
+        "name": "Ladeort 1 reduzierter AC-Ladestrom"
+      },
+      "charging_location_1_auto_release_connector": {
+        "name": "Ladeort 1 AC-Ladestecker automatisch entriegeln"
+      },
+      "charging_location_1_timer_1_enabled": {
+        "name": "Ladeort 1 Timer 1 aktiviert"
+      },
+      "charging_location_1_timer_2_enabled": {
+        "name": "Ladeort 1 Timer 2 aktiviert"
+      },
+      "charging_location_1_timer_3_enabled": {
+        "name": "Ladeort 1 Timer 3 aktiviert"
+      },
+      "charging_location_2_active": {
+        "name": "Ladeort 2 aktiv"
+      },
+      "charging_location_2_reduced_ac_current": {
+        "name": "Ladeort 2 reduzierter AC-Ladestrom"
+      },
+      "charging_location_2_auto_release_connector": {
+        "name": "Ladeort 2 AC-Ladestecker automatisch entriegeln"
+      },
+      "charging_location_2_timer_1_enabled": {
+        "name": "Ladeort 2 Timer 1 aktiviert"
+      },
+      "charging_location_2_timer_2_enabled": {
+        "name": "Ladeort 2 Timer 2 aktiviert"
+      },
+      "charging_location_2_timer_3_enabled": {
+        "name": "Ladeort 2 Timer 3 aktiviert"
+      },
+      "charging_location_3_active": {
+        "name": "Ladeort 3 aktiv"
+      },
+      "charging_location_3_reduced_ac_current": {
+        "name": "Ladeort 3 reduzierter AC-Ladestrom"
+      },
+      "charging_location_3_auto_release_connector": {
+        "name": "Ladeort 3 AC-Ladestecker automatisch entriegeln"
+      },
+      "charging_location_3_timer_1_enabled": {
+        "name": "Ladeort 3 Timer 1 aktiviert"
+      },
+      "charging_location_3_timer_2_enabled": {
+        "name": "Ladeort 3 Timer 2 aktiviert"
+      },
+      "charging_location_3_timer_3_enabled": {
+        "name": "Ladeort 3 Timer 3 aktiviert"
+      },
+      "charging_location_4_active": {
+        "name": "Ladeort 4 aktiv"
+      },
+      "charging_location_4_reduced_ac_current": {
+        "name": "Ladeort 4 reduzierter AC-Ladestrom"
+      },
+      "charging_location_4_auto_release_connector": {
+        "name": "Ladeort 4 AC-Ladestecker automatisch entriegeln"
+      },
+      "charging_location_4_timer_1_enabled": {
+        "name": "Ladeort 4 Timer 1 aktiviert"
+      },
+      "charging_location_4_timer_2_enabled": {
+        "name": "Ladeort 4 Timer 2 aktiviert"
+      },
+      "charging_location_4_timer_3_enabled": {
+        "name": "Ladeort 4 Timer 3 aktiviert"
+      },
+      "charging_location_5_active": {
+        "name": "Ladeort 5 aktiv"
+      },
+      "charging_location_5_reduced_ac_current": {
+        "name": "Ladeort 5 reduzierter AC-Ladestrom"
+      },
+      "charging_location_5_auto_release_connector": {
+        "name": "Ladeort 5 AC-Ladestecker automatisch entriegeln"
+      },
+      "charging_location_5_timer_1_enabled": {
+        "name": "Ladeort 5 Timer 1 aktiviert"
+      },
+      "charging_location_5_timer_2_enabled": {
+        "name": "Ladeort 5 Timer 2 aktiviert"
+      },
+      "charging_location_5_timer_3_enabled": {
+        "name": "Ladeort 5 Timer 3 aktiviert"
       }
     },
     "switch": {
@@ -2030,6 +2249,9 @@
       },
       "companion_read_parking_position": {
         "name": "Parkposition lesen"
+      },
+      "companion_read_charging_locations": {
+        "name": "Ladeorte lesen"
       }
     },
     "number": {

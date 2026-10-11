@@ -1624,6 +1624,135 @@
           "immediate_discharging": "Aflad nu",
           "timer_charging_climatization": "Timer-opladning med klimaanlæg"
         }
+      },
+      "charging_location_count": {
+        "name": "Antal ladesteder"
+      },
+      "charging_location_current": {
+        "name": "Aktuelt ladested",
+        "state": {
+          "none": "Intet"
+        }
+      },
+      "charging_location_1_name": {
+        "name": "Ladested 1"
+      },
+      "charging_location_1_active_timers": {
+        "name": "Ladested 1 aktive timere"
+      },
+      "charging_location_1_timer_1_time": {
+        "name": "Ladested 1 timer 1 tid"
+      },
+      "charging_location_1_timer_1_weekdays": {
+        "name": "Ladested 1 timer 1 ugedage"
+      },
+      "charging_location_1_timer_2_time": {
+        "name": "Ladested 1 timer 2 tid"
+      },
+      "charging_location_1_timer_2_weekdays": {
+        "name": "Ladested 1 timer 2 ugedage"
+      },
+      "charging_location_1_timer_3_time": {
+        "name": "Ladested 1 timer 3 tid"
+      },
+      "charging_location_1_timer_3_weekdays": {
+        "name": "Ladested 1 timer 3 ugedage"
+      },
+      "charging_location_2_name": {
+        "name": "Ladested 2"
+      },
+      "charging_location_2_active_timers": {
+        "name": "Ladested 2 aktive timere"
+      },
+      "charging_location_2_timer_1_time": {
+        "name": "Ladested 2 timer 1 tid"
+      },
+      "charging_location_2_timer_1_weekdays": {
+        "name": "Ladested 2 timer 1 ugedage"
+      },
+      "charging_location_2_timer_2_time": {
+        "name": "Ladested 2 timer 2 tid"
+      },
+      "charging_location_2_timer_2_weekdays": {
+        "name": "Ladested 2 timer 2 ugedage"
+      },
+      "charging_location_2_timer_3_time": {
+        "name": "Ladested 2 timer 3 tid"
+      },
+      "charging_location_2_timer_3_weekdays": {
+        "name": "Ladested 2 timer 3 ugedage"
+      },
+      "charging_location_3_name": {
+        "name": "Ladested 3"
+      },
+      "charging_location_3_active_timers": {
+        "name": "Ladested 3 aktive timere"
+      },
+      "charging_location_3_timer_1_time": {
+        "name": "Ladested 3 timer 1 tid"
+      },
+      "charging_location_3_timer_1_weekdays": {
+        "name": "Ladested 3 timer 1 ugedage"
+      },
+      "charging_location_3_timer_2_time": {
+        "name": "Ladested 3 timer 2 tid"
+      },
+      "charging_location_3_timer_2_weekdays": {
+        "name": "Ladested 3 timer 2 ugedage"
+      },
+      "charging_location_3_timer_3_time": {
+        "name": "Ladested 3 timer 3 tid"
+      },
+      "charging_location_3_timer_3_weekdays": {
+        "name": "Ladested 3 timer 3 ugedage"
+      },
+      "charging_location_4_name": {
+        "name": "Ladested 4"
+      },
+      "charging_location_4_active_timers": {
+        "name": "Ladested 4 aktive timere"
+      },
+      "charging_location_4_timer_1_time": {
+        "name": "Ladested 4 timer 1 tid"
+      },
+      "charging_location_4_timer_1_weekdays": {
+        "name": "Ladested 4 timer 1 ugedage"
+      },
+      "charging_location_4_timer_2_time": {
+        "name": "Ladested 4 timer 2 tid"
+      },
+      "charging_location_4_timer_2_weekdays": {
+        "name": "Ladested 4 timer 2 ugedage"
+      },
+      "charging_location_4_timer_3_time": {
+        "name": "Ladested 4 timer 3 tid"
+      },
+      "charging_location_4_timer_3_weekdays": {
+        "name": "Ladested 4 timer 3 ugedage"
+      },
+      "charging_location_5_name": {
+        "name": "Ladested 5"
+      },
+      "charging_location_5_active_timers": {
+        "name": "Ladested 5 aktive timere"
+      },
+      "charging_location_5_timer_1_time": {
+        "name": "Ladested 5 timer 1 tid"
+      },
+      "charging_location_5_timer_1_weekdays": {
+        "name": "Ladested 5 timer 1 ugedage"
+      },
+      "charging_location_5_timer_2_time": {
+        "name": "Ladested 5 timer 2 tid"
+      },
+      "charging_location_5_timer_2_weekdays": {
+        "name": "Ladested 5 timer 2 ugedage"
+      },
+      "charging_location_5_timer_3_time": {
+        "name": "Ladested 5 timer 3 tid"
+      },
+      "charging_location_5_timer_3_weekdays": {
+        "name": "Ladested 5 timer 3 ugedage"
       }
     },
     "binary_sensor": {
@@ -1956,6 +2085,96 @@
       },
       "connect_contract_active": {
         "name": "Connect-kontrakt aktiv"
+      },
+      "charging_location_1_active": {
+        "name": "Ladested 1 aktivt"
+      },
+      "charging_location_1_reduced_ac_current": {
+        "name": "Ladested 1 reduceret AC-ladestrøm"
+      },
+      "charging_location_1_auto_release_connector": {
+        "name": "Ladested 1 automatisk frigivelse af AC-stik"
+      },
+      "charging_location_1_timer_1_enabled": {
+        "name": "Ladested 1 timer 1 aktiveret"
+      },
+      "charging_location_1_timer_2_enabled": {
+        "name": "Ladested 1 timer 2 aktiveret"
+      },
+      "charging_location_1_timer_3_enabled": {
+        "name": "Ladested 1 timer 3 aktiveret"
+      },
+      "charging_location_2_active": {
+        "name": "Ladested 2 aktivt"
+      },
+      "charging_location_2_reduced_ac_current": {
+        "name": "Ladested 2 reduceret AC-ladestrøm"
+      },
+      "charging_location_2_auto_release_connector": {
+        "name": "Ladested 2 automatisk frigivelse af AC-stik"
+      },
+      "charging_location_2_timer_1_enabled": {
+        "name": "Ladested 2 timer 1 aktiveret"
+      },
+      "charging_location_2_timer_2_enabled": {
+        "name": "Ladested 2 timer 2 aktiveret"
+      },
+      "charging_location_2_timer_3_enabled": {
+        "name": "Ladested 2 timer 3 aktiveret"
+      },
+      "charging_location_3_active": {
+        "name": "Ladested 3 aktivt"
+      },
+      "charging_location_3_reduced_ac_current": {
+        "name": "Ladested 3 reduceret AC-ladestrøm"
+      },
+      "charging_location_3_auto_release_connector": {
+        "name": "Ladested 3 automatisk frigivelse af AC-stik"
+      },
+      "charging_location_3_timer_1_enabled": {
+        "name": "Ladested 3 timer 1 aktiveret"
+      },
+      "charging_location_3_timer_2_enabled": {
+        "name": "Ladested 3 timer 2 aktiveret"
+      },
+      "charging_location_3_timer_3_enabled": {
+        "name": "Ladested 3 timer 3 aktiveret"
+      },
+      "charging_location_4_active": {
+        "name": "Ladested 4 aktivt"
+      },
+      "charging_location_4_reduced_ac_current": {
+        "name": "Ladested 4 reduceret AC-ladestrøm"
+      },
+      "charging_location_4_auto_release_connector": {
+        "name": "Ladested 4 automatisk frigivelse af AC-stik"
+      },
+      "charging_location_4_timer_1_enabled": {
+        "name": "Ladested 4 timer 1 aktiveret"
+      },
+      "charging_location_4_timer_2_enabled": {
+        "name": "Ladested 4 timer 2 aktiveret"
+      },
+      "charging_location_4_timer_3_enabled": {
+        "name": "Ladested 4 timer 3 aktiveret"
+      },
+      "charging_location_5_active": {
+        "name": "Ladested 5 aktivt"
+      },
+      "charging_location_5_reduced_ac_current": {
+        "name": "Ladested 5 reduceret AC-ladestrøm"
+      },
+      "charging_location_5_auto_release_connector": {
+        "name": "Ladested 5 automatisk frigivelse af AC-stik"
+      },
+      "charging_location_5_timer_1_enabled": {
+        "name": "Ladested 5 timer 1 aktiveret"
+      },
+      "charging_location_5_timer_2_enabled": {
+        "name": "Ladested 5 timer 2 aktiveret"
+      },
+      "charging_location_5_timer_3_enabled": {
+        "name": "Ladested 5 timer 3 aktiveret"
       }
     },
     "switch": {
@@ -2030,6 +2249,9 @@
       },
       "companion_read_parking_position": {
         "name": "Læs parkeringsposition"
+      },
+      "companion_read_charging_locations": {
+        "name": "Læs ladesteder"
       }
     },
     "number": {
