@@ -42,8 +42,20 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.13.0-1] - 2026-10-11 — Volkswagen Companion (ADB) on upstream 4.13.0, with charging locations
+
+> Fork pre-release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.13.0** plus fork release **1**, on top of 4.12.0-5.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** a pre-release. Turn on *Show beta versions* for this repository, select `v4.13.0-1`,
+> download, and restart Home Assistant.
+
+### Changed
+- **Based on upstream 4.13.0.** Its changes are listed under [4.13.0] below. (#86)
+
 ### Added
-- **Companion: optional read of VW charging locations**, including the active location, each location's three departure timers and its AC charging settings, with diagnostic sensors and binary sensors.
+- **Companion: optional read of VW charging locations.** A new *Read charging locations* switch on the Settings device (off by default) reads up to five charging locations from the app's Departure times screen. For each location it reads the name, whether the car is parked there, the number of active departure times, its three charging timers (on/off, time, days), and two AC settings: reduced charging current and automatically release connector. There are also sensors for the number of locations and the current location. The read is read-only and never changes a setting. The two charge-level sliders of a location can't be read: the app draws their values without any readable text. A Departure times screen that shows no locations, as the app does while the car's request limit is reached, leaves the last values in place. (#85)
 
 ## [4.13.0] - 2026-10-10 — Six reporters' diagnostic readings, and two accounts that read the same car
 
