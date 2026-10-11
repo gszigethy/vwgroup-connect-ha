@@ -42,6 +42,10 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+### Changed / Geändert
+
+- **Companion (ADB): the vehicle sync interval counts from the car's last data.** The interval now runs from the newest of the last sync attempt, the car's last data and the last command tap. A car that sent data on its own (for example while driven) gets no extra tap, and after a Home Assistant restart an overdue sync runs right away instead of waiting a full interval. A restart still never wakes the car when the last sync is recent.
+
 ## [4.13.0-3] - 2026-10-11 — Companion safety fixes and request-limit recovery
 
 ### Fixed
