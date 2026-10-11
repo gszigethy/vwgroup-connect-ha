@@ -42,6 +42,156 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.13.0-2] - 2026-10-11 — Volkswagen Companion (ADB): first full release, on upstream 4.13.0
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.13.0** plus fork release **2**.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors. App captures came
+> from @plainmad (Mk8 Golf GTE), @kgroshert (ID.4, e-up!) and @gszigethy (Tiguan eHybrid) (#968, #1684).
+>
+> **Installing with HACS:** select `v4.13.0-2`, download, and restart Home Assistant.
+
+This is the fork's first complete release. It lists every functional change the fork adds to upstream 4.13.0, including everything from the earlier fork releases (4.11.0-1 to 4.13.0-1), in its final form. Fork PR numbers are in brackets.
+
+### Added
+
+#### Reads from the VW app
+
+The Companion channel drives the VW app on a spare Android phone over ADB and reads what the app shows. All reads are phone navigation only and never wake the car. Labels are matched against the installed app's own string table, so the reads work in any app language; the English and German patterns stay as the fallback.
+
+- **Overview, every poll:**
+  - Battery level, separate from the charge limit.
+  - Electric range, and petrol range on plug-in hybrids, which also enables the combustion sensors.
+  - Charging state, read as a state ("Currently charging") (#7).
+  - Lock and climate tiles (#11).
+  - **Last vehicle sync**: when the car last sent the app data, from the app's "Synchronised … ago" line. It counts any reason the car sent data, only moves forward, and starts from the last known time after a restart or reload (#79).
+  - **App request status**: *Available* or *Restricted*. A request-limit pause still running after a restart shows as *Restricted* straight away.
+- **Charge sheet:**
+  - Charge limit, power, speed and remaining time. Spelled-out hours are counted ("One hour and 40 minutes" = 100 min) (#39).
+  - **Charging Mode** sensor, from the range sheet's charging method (#13). It becomes unavailable 24 h after its last read (#90).
+- **Air Conditioning sheet:**
+  - Whether climatisation is running, window heating, remaining time, target and outside temperature.
+  - **Climate Start Mode**: whether the app's Start starts the air conditioning or the window heating.
+- **Air Conditioning Settings:**
+  - Climate at unlock, automatic window heating, air conditioning on battery.
+  - **Climate zones** front left and front right.
+- **Vehicle Health Report:**
+  - Odometer, and service and oil-service due **in days and in km**. Miles are converted (#8).
+  - **Warnings**: active, count and the categories that carry one (#14).
+- **Vehicle Settings:** *Automatically release AC connector* (#9).
+- **Departure times** (opt-in): each timer's time, on/off, weekdays and Repeat (#15, #42).
+- **Charging locations** (opt-in, new in 4.13.0-1): up to five locations from the app's Departure times screen (#85).
+  - For each location: the name, whether the car is parked there, the number of active departure times, its three charging timers (on/off, time, days), and two AC settings (reduced charging current, automatically release connector).
+  - Sensors for the number of locations and the current location.
+  - Read-only; it never changes a setting.
+  - A location's two charge-level sliders can't be read: the app draws their values without any readable text.
+  - A Departure times screen that shows no locations, as the app does while the car's request limit is reached, leaves the last values in place.
+- **Driving data** (opt-in): the last trip and the trip since charging or refuelling. Covers distance, consumption, average speed and driving time; miles are converted (#16).
+- **Parking position** (opt-in), read from the share preview.
+
+#### Read switches
+
+Each deeper read is a switch on the *VW Group Connect Settings* device: charge detail, Vehicle Health & Settings, climate detail, climate settings, parking position, departure times, charging locations and driving data (#18, #85).
+- A change applies on the next poll, without a restart.
+- Turning a read off drops the values it supplied.
+- The switches are also available in Read-only Mode.
+
+#### Controls
+
+Every control is refused:
+- in Read-only Mode;
+- on an app version not verified for commands (currently 4.6.4);
+- within 60 s of the previous command;
+- while the car's request limit is paused.
+
+Every control starts from the overview and checks the result on screen.
+
+| Control | Behaviour | PRs |
+|---|---|---|
+| Start / Stop charging | Taps the charge sheet's Start or Stop. A greyed-out Start is never pressed. | #49 |
+| Charge limit | 50–100 % in 10 % steps. Moves the Settings slider and presses Save only when the screen shows exactly the requested value; otherwise cancels. | #49 |
+| Climate on / off | Start or Stop from the Air Conditioning sheet, including window-heating-only Start and Stop. | |
+| **Desired Climate Start Mode** and **Desired Temperature** | Values held in Home Assistant that survive a restart. Start sets the app's mode picker and dial, reads both back, and presses Start only if they match. A dial changed in the app updates the slider. | #40, #64 |
+| **Temperature change on a running climate** | While the air conditioning runs, a change moves the dial of the Air Conditioning sheet and reads it back; the app sends the new temperature to the car. One step is a tap on the next label, 1 °C is one slow drag. A change takes at most two moves (2 °C, two car requests); a larger change is refused before anything moves. With the climate off, or on window heating alone, a change is stored for the next Start. | #73, #76 |
+| Climate Settings switches | Auxiliary air conditioning, automatic window heating, zone front left and front right. Taps Save and reads the page back; a value already in place sends nothing. | #41 |
+| Departure timers (switch, time and `set_departure_timer`) | On/off, time, days and Repeat. A timer is found by its content, not its row; two timers with the same time are refused. Saves only when the page shows exactly what was asked. | #42, #55 |
+| **Force vehicle refresh** button | Taps vehicle Settings → *Synchronise now*, then re-reads the app after 3 minutes. A refused sync is reported at once. | #25 |
+| **Vehicle sync interval** | Runs *Synchronise now* on a timer. Off by default, minimum 60 min. Each sync wakes the car. | #54 |
+
+Lock and unlock are deliberately not offered. They would need the S-PIN over ADB, the slider has no reliable target, and a wrong tap risks the opposite command or an S-PIN lockout (#36).
+
+#### VW app 4.6.4
+
+VW app 4.6.4 is supported (#28, #37). Reads also accept newer app builds (#31). Commands run only on builds verified for them (#51).
+
+### Changed
+
+- **Based on upstream 4.13.0.** Its changes are listed under [4.13.0] below. (#86)
+- **Car request budget:**
+  - The car's "Too many requests" and "Request limit reached" alerts are recognised in any app language.
+  - Either alert always pauses commands for 12 h, even when it appears late. The pause and the 60 s command gap survive a restart (#50).
+  - Screen reads continue during the pause; only commands wait.
+  - The battery level is read from the charge sheet during the pause, when the overview hides it.
+  - A sync never probes through a backend "too many requests" pause (#54).
+- **Synchronise now is opt-in.** It is off by default and never turned on by an upgrade. An interval you set yourself is kept (#54).
+- **Read cadence:**
+  - Detail-screen reads follow the poll slider (#38).
+  - A command no longer triggers a re-read of every screen.
+  - The Air Conditioning sheet and its Settings are read on one walk (#6).
+  - Driving data, the parking position, charging locations and Vehicle Health are read only when they can have changed (#80, #85): driving data and the parking position when a trip has ended or the car sent new data and the range dropped; Vehicle Health when the car sent new data (the *Synchronised … ago* time moved and then stood still for 10 minutes); charging locations on a trip change. All are also read on the first poll after a start, when their switch is turned on, every 12 hours, on **Refresh data** and after **Force vehicle refresh**. Vehicle Settings (the charge limit) is still read on every poll.
+- **Faster phone navigation:**
+  - Fewer screen dumps per walk.
+  - One ADB shell call per dump.
+  - Shorter waits after a tap or BACK.
+- **Stale values:** health, parking, driving, charging-location and Charging Mode values become unavailable after 24 h without a successful read (#59, #90).
+- **Startup:** setup no longer waits for the first app-screen read; that read runs in the background (#44).
+- **Reloads:** a reload waits for a running walk to finish (#60). Wake/sleep and close-app options apply without a reload (#59).
+- **App prompts:** the Google Maps consent is accepted only during the parking read (#56). The app's rating prompt is closed with BACK, never answered (#29).
+- **App string table:** fetched only when the app version changes. Without it, commands and sync are refused unless the UI language can be confirmed (#58).
+- **One entity per value:**
+  - The read-only sensor and binary sensor that repeated a control's value are removed. This covers climate at unlock, window heating, the zones, climatisation, charging, charge target and the departure timers.
+  - The app's own target temperature and start mode readings move to *Diagnostic* (#65).
+- **Cloud-only diagnostics removed from companion entries:** push event, API observer findings and wake count today (#66).
+- **Data source label:** shows the companion transport (`companion_adb`) instead of "Volkswagen EU (WeConnect ID)" (#67).
+- **Companion entity ids carry "adb"** (for example `sensor.tiguan_adb_battery_level`, named "Tiguan Battery Level"), so companion and EU Data Act entities can be told apart. Existing entity ids are unchanged (#68, #81).
+- **The vehicle sync warning is translated.** The note that each sync wakes the car appears in every supported language.
+- **Relay errors are reported only as fixed codes**, never as free text from the phone.
+
+### Fixed
+
+- **Missing entities when the car is also in an EU Data Act entry.**
+  - Battery, range, charging and lock entities from the companion were dropped as duplicates.
+  - Companion entities now have their own unique ids (`{vin}_companion_{key}`). A one-time migration keeps the existing entity ids and history (#47).
+- **No stuck charging values after a reload.** A screen read still running while the entry unloaded could create the charging power, charging speed, remaining time and vehicle status sensors on the unloading entry, where they kept their last value and blocked the reloaded entry's own sensors. A read that finishes during an unload now creates nothing (#83).
+- **Commands for a car in several entries** go to the entry that can send them (#48).
+- **An idle car no longer reads as climate on.** The running state now comes from the Start/Stop button.
+- **The walk back** recognises the 4.3.2 overview and no longer presses BACK out of the app.
+- **A broken ADB connection** ("Broken pipe") is reopened on the next read (#27).
+- **Climate:**
+  - The dial is walked only when its labels show °C; a reading outside 15.5–30 °C is never tapped (#61).
+  - An unrecognised mode refuses Start.
+  - Error messages no longer quote screen text (#52).
+- **An interrupted walk** discards any setting it left unsaved instead of sending it with the next command (#53).
+- **The window heating switch** shows off while the air conditioning runs, instead of unknown.
+- **Departure timers** that were not read show unknown, not off (#10).
+- **Vehicle Settings** is read even when the charge target is already known (#9).
+
+#### Fixes in shared code (all channels)
+
+- **Charging switch during conservation charging.** The switch showed off while the car was conservation charging; it now shows on.
+- **Charging session with an unknown plug state.** A session is no longer cancelled when the channel cannot see the plug.
+- **Climate `set_hvac_mode` / `set_temperature`.** A mode the entity does not list raises a validation error instead of being treated as off (#52).
+- **`set_departure_timer`.** `enabled` is optional. The companion can change only the time or the days; the cloud channels return a clear error if `enabled` is left out (#55).
+
+### Security
+
+- **Tokens:**
+  - New ADB Bridge add-on setups require a token.
+  - The relay token form suggests a random token, and a custom token needs at least 32 characters with enough variety.
+  - Existing entries keep their tokens.
+- **Diagnostics:** the add-on token, the agent token and the phone's host address are redacted.
+- **Screen dumps:** a dump that contains an XML DOCTYPE or ENTITY declaration is refused before it is parsed (#57).
+
 ## [4.13.0-1] - 2026-10-11 — Volkswagen Companion (ADB) on upstream 4.13.0, with charging locations
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
