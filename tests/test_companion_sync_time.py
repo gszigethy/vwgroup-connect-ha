@@ -252,3 +252,48 @@ def test_setup_seeds_nothing_for_a_cloud_client():
     coordinator = SimpleNamespace(_cariad_client=object(),
                                   vehicles={"VIN1": {"companion_app_synced_at": "2026-10-05T09:27:50+00:00"}})
     VagConnectCoordinator._seed_companion_synced_at(coordinator, ["VIN1"])
+
+
+# ── new car data ends a request-limit pause ───────────────────────────────────
+
+def _paused_channel(phone, clock):
+    from custom_components.vag_connect.companion.channel import _RATE_LIMIT_BACKOFF_S
+
+    channel = CompanionChannel(phone, PRESETS["volkswagen"], time_fn=lambda: 0.0,
+                               wall_clock_fn=lambda: clock[0])
+    # A pause restored after a restart: its start is the deadline minus 12 h.
+    channel.restore_rate_limit(T0.timestamp() + _RATE_LIMIT_BACKOFF_S)
+    return channel
+
+
+@pytest.mark.asyncio
+async def test_a_sync_after_the_alert_lifts_the_pause():
+    phone, clock = OverviewPhone(), [T0.timestamp() + 3 * H]
+    channel = _paused_channel(phone, clock)
+    phone.line = "Synchronised 2 hours ago"  # the car was started after the alert
+    await channel.read()
+    assert channel.rate_limited_until == 0.0
+    assert channel.request_state == "available"
+
+
+@pytest.mark.parametrize("line", [
+    "Synchronised 3 hours ago",   # data from before the alert
+    "Synchronised 2 hours 59 minutes ago",  # could still be the minute of the alert
+    "Currently synchronising",    # no time on screen
+])
+@pytest.mark.asyncio
+async def test_older_or_unknown_car_data_keeps_the_pause(line):
+    phone, clock = OverviewPhone(), [T0.timestamp() + 3 * H]
+    channel = _paused_channel(phone, clock)
+    phone.line = line
+    await channel.read()
+    assert channel.rate_limited_until > clock[0]
+    assert channel.request_state == "restricted"
+
+
+@pytest.mark.asyncio
+async def test_a_restored_sync_time_alone_does_not_lift_the_pause():
+    phone, clock = OverviewPhone(), [T0.timestamp() + 3 * H]
+    channel = _paused_channel(phone, clock)
+    channel.restore_synced_at(T0 + timedelta(hours=1))  # not read off the screen
+    assert channel.rate_limited_until > clock[0]

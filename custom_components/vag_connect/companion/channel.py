@@ -742,6 +742,29 @@ class CompanionChannel:
         self._seen_precision_s = line.precision_s
         if self._seen_at is None or seen > self._seen_at:
             self._seen_at = seen
+        self._lift_pause_on_new_car_data(seen)
+
+    def _lift_pause_on_new_car_data(self, seen: datetime) -> None:
+        """End a request-limit pause once the car has sent data since it began.
+
+        The app's limit alerts say starting the car makes everything available
+        again, and a car that sent data after the alert is reachable. ``seen``
+        is the earliest time the sync line can mean, so an older sync never
+        lifts it. The start is derived from the deadline, so a pause restored
+        after a restart lifts the same way.
+        """
+        if not self._is_rate_limited():
+            return
+        started = self._rate_limited_until - _RATE_LIMIT_BACKOFF_S
+        if seen.timestamp() <= started:
+            return
+        self._rate_limited_until = 0.0
+        self._limit_kind = None
+        self._request_state = REQUESTS_AVAILABLE
+        _LOGGER.info(
+            "companion %s: the car sent new data after the request-limit alert; "
+            "pause lifted", self._preset.brand,
+        )
 
     async def _augment_via_nav(self, fields: dict[str, object]) -> None:
         """Fill missing nav-read targets by opening their detail screen.

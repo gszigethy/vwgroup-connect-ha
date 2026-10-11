@@ -18,7 +18,11 @@ import pytest
 
 from custom_components.vag_connect.cariad.exceptions import VehicleCommandError
 from custom_components.vag_connect.companion.app_sync import find_sync_button
-from custom_components.vag_connect.companion.channel import CompanionChannel, CompanionWriteBlocked
+from custom_components.vag_connect.companion.channel import (
+    _RATE_LIMIT_BACKOFF_S,
+    CompanionChannel,
+    CompanionWriteBlocked,
+)
 from custom_components.vag_connect.companion.client import CompanionClient
 from custom_components.vag_connect.companion.presets import ACTION_TO_COMMAND, PRESETS
 from custom_components.vag_connect.companion.screen import find_node_for, parse_ui_dump
@@ -853,7 +857,8 @@ def test_the_overview_tile_does_not_narrate_the_battery_level():
 async def test_the_charge_sheet_is_still_read_during_the_request_limit_pause():
     phone = TilePhone()
     channel = CompanionChannel(phone, VW, time_fn=time.monotonic, nav_opt_ins={"charge_detail"})
-    channel.restore_rate_limit(time.time() + 3600)
+    # Tripped just now, after the car's last sync: new car data would end it.
+    channel.restore_rate_limit(time.time() + _RATE_LIMIT_BACKOFF_S)
     channel._nav_cache = {"battery_soc": 81}  # the value from before the pause
     fields = await channel.read()
     assert fields["battery_soc"] == 70  # read off the sheet, not the cache
