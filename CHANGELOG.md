@@ -45,6 +45,104 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 ### Added
 - **Companion: optional read of VW charging locations**, including the active location, each location's three departure timers and its AC charging settings, with diagnostic sensors and binary sensors.
 
+## [4.13.0] - 2026-10-10 — Six reporters' diagnostic readings, and two accounts that read the same car
+
+### Hinzugefügt / Added
+- **Doors, windows, boot and bonnet now read from a one-time export.** The 15-minute feed and
+  the one-time export describe the car's body in two different dialects: the feed sends numeric
+  codes, the export sends words under per-part containers. We only ever understood the feed, so
+  a reporter whose Audi delivers these fields only in the export watched those entities sit at
+  `unknown` while his own downloaded file said CLOSED and LOCKED for every one of them. Both
+  dialects are now read, per door and per window, plus the boot's lock, the bonnet, the window
+  opening percentage and the parking lights. The export never overwrites a live reading — it
+  only fills what the feed left empty — and a part the car reports as unsupported or invalid
+  stays unknown rather than being called closed (#1780, thanks @kmeinderink, whose own
+  correction after checking his diagnostics is what made the cause findable).
+
+### Geändert / Changed
+- **A car park no longer means a login each.** One portal connection serves every vehicle on
+  an account, and the integration reads the cars at the same time — so a three-car account
+  could ask the portal to log the same person in three times at once, and any car hitting an
+  expired session added another. Now the first login runs and the others simply wait for it:
+  one identity, one login. A failure is shared with whoever was waiting instead of being tried
+  again by each of them, because seven attempts with a wrong password is how an account gets
+  locked out by a fix. Nothing is cached — the next poll still logs in normally, so an expired
+  session is still replaced. This was not our finding: two other portal readers shipped the
+  same change within two days of each other after running into it, and we are in the middle of
+  a conversation with the portal's operator about request volume (#1778).
+
+### Behoben / Fixed
+- **Two accounts no longer end up reading the same car.** If you run two config entries for
+  two different portal accounts, both could show both cars with neither working. The portal
+  identifies you by cookie rather than by a token, and Home Assistant gives every integration
+  one shared connection to the internet — so the second account's login wrote its cookies over
+  the first one's, and from then on both entries read whichever car had logged in last. Each
+  entry now gets its own cookie storage for the portal, and only for the portal: everything
+  else keeps sharing, because nothing else is identified that way. If you removed one of your
+  entries to work around this, you can add it back (#1774, thanks @kalwados, whose "both hubs
+  still show both cars" is what pinned it down, and who tested the release that did not fix it
+  so we would know).
+- **231 field names the car sends could never be discovered.** Fields whose name ends in a
+  generic word — `…value`, `…unit`, `…state` — were treated as envelope packaging and dropped
+  before the Vehicle Data Scout could report them. That rule is right for a bare `timestamp`
+  and wrong for an official field name that happens to end that way, and it silenced an entire
+  family: every per-door and per-window state, the unit companions that let us map a quantity
+  without guessing its scale, the low-voltage battery level, the per-tyre state. It is also why
+  nobody had ever reported them — discovery could not see them, and the one reporter who found
+  them had to read his export by hand. A generic ending now only counts as packaging when the
+  whole name is generic. Expect the Scout to start reporting fields it was previously blind to;
+  that is the point, and it is how the next ones get mapped (#1780).
+- **Importing a one-time export could not create a single electric entity, and a reload threw
+  the import away.** Two faults with one symptom: you ran the import, it reported success, and
+  nothing appeared. The flag every electric entity is gated on is a plain true/false rather
+  than "unknown", and the merge only fills a field it has no value for at all — so the export
+  handed over a state of charge and the flag in the same breath, the reading landed and the
+  flag was refused. That gate is checked before the one that hides empty entities, which is why
+  there was no battery entity to find rather than an empty one, and why switching "hide entities
+  without data" off changed nothing. The flag is now re-derived through the same rule the
+  multi-channel merge has always used — it can only ever add a drivetrain, never take one away,
+  so a plug-in hybrid cannot be turned into an electric car by an export that says nothing about
+  fuel. Second: the merged values are now saved. They had only ever been written to disk by the
+  regular poll, so the advice to reload afterwards discarded them unless a poll happened to land
+  in between (#1776, found grounding @placidcasual98's report on #1403).
+- **A command your car refuses now says what it refused.** On some older cars the gateway
+  accepts your S-PIN and then declines the request anyway, and until now that arrived as an
+  unexplained error — which reads like a wrong password or a lapsed subscription. Both had
+  been verified fine in the case this comes from: the subscription active until 2027, the
+  car's own service list granting the operation, the S-PIN handshake completed. The message
+  now rules those out by name and says plainly that some cars only accept commands from the
+  manufacturer's own app, which an open-source client cannot imitate, and that reading data
+  is unaffected. A second, different refusal is kept separate rather than lumped in: when the
+  car calls the request *invalid* instead of forbidden, that means this model's software does
+  not take that particular setting at all — so the control stays available, because the
+  account is allowed to send it (#584, thanks @Joassens, who instrumented all three
+  authorisation steps and then captured the official app to settle which of the two
+  explanations it was).
+- **Eight readings an electric car already sends were being thrown away over a single
+  space.** In the diagnostic and battery-module field families the portal appends a unit
+  token to each value, and does so even when the unit is empty — so a base64 diagnostic
+  envelope arrives with a trailing separator.
+  Our decoder rejected the whole envelope because of it, which silently cost one ID.4 every
+  one of the eight diagnostic responses we know how to read: both high-voltage battery
+  temperature extremes, both cell-voltage extremes, the 12 V battery cluster, the outside
+  humidity sensor, the standard ambient conditions and the range the instrument cluster
+  displays. The leading token is now taken as the payload, the same way the plain scalar
+  readings have been handled since #1622. Strictness is unchanged otherwise: a genuinely
+  corrupt value still produces no reading and stays visible on the raw-fields sensor rather
+  than half-parsing into something plausible (#1772, thanks @HeBraun; the deciding evidence
+  came from @derschneewolf's attachment on #1769).
+- **Four tyre-sensor fields now show their official name instead of nothing.** The field
+  catalogue is extracted from the official PDF, and the extraction left line-wrap spaces
+  inside 43 field names — so the tyre-pressure-sensor service-life family is catalogued
+  twice, once broken and once with every space removed, while cars send a third spelling.
+  All three missed each other, so those fields reported no official name at all even though
+  the catalogue describes them. Names are now matched with whitespace collapsed on both
+  sides, as a last resort after the exact lookups, so nothing that already resolved changes.
+  No unit is invented along the way: where the catalogue publishes none — as it does for
+  this family — none is shown, and a name whose space-free form is shared by entries with
+  different units stays deliberately unresolved rather than inheriting one of them
+  (#1767, thanks @zdimic1; same four fields on @derschneewolf's car in #1769).
+
 ## [4.12.0-5] - 2026-10-10 — Companion: no stuck charging values after a reload
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
