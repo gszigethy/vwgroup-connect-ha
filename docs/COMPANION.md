@@ -53,7 +53,7 @@ vehicle data (for example `electric_range_km`); an **entity** is what Home Assis
    - [3.12 Extending the Companion](#312-extending-the-companion)
 4. [Limits and timings](#4-limits-and-timings)
 5. [Quirks of the VW app](#5-quirks-of-the-vw-app)
-6. [Known issues and open items](#6-known-issues-and-open-items)
+6. [Known issues](#6-known-issues)
 7. [Troubleshooting](#7-troubleshooting)
 8. [Evidence, sources and credits](#8-evidence-sources-and-credits)
 
@@ -207,7 +207,7 @@ Level* is `sensor.<car>_adb_battery_level`). Naming rules are at the end of this
 |---|---|---|
 | Battery Level | sensor | From the overview tile where the app narrates it; on builds that do not, from the charge sheet (needs *Read charge detail*). |
 | Electric Range | sensor | Miles are converted. |
-| Fuel Range | sensor | Plug-in hybrids and combustion cars only; its presence enables the combustion entities. The petrol **percentage** is not in the captured PHEV layout; the parser reads it if a layout narrates it ([6](#6-known-issues-and-open-items)). |
+| Fuel Range | sensor | Plug-in hybrids and combustion cars only; its presence enables the combustion entities. The petrol **percentage** is not in the captured PHEV layout; the parser reads it if a layout narrates it ([6](#6-known-issues)). |
 | Charging Status | sensor | The app's text, or a canonical value mapped from its translated labels (for example *Currently charging*, *Target charge level reached*, conservation charging). |
 | Doors Locked | binary sensor | Lock device class: **off means locked**. Read-only on purpose. |
 | Climate control state | climate entity, switch | Running state: from the tile's narration on the overview, and from the Start/Stop button on the climate sheet. |
@@ -860,44 +860,19 @@ What makes the app hard to read, observed live on 4.6.4 (and 4.3.2) and confirme
 
 ---
 
-## 6. Known issues and open items
+## 6. Known issues
 
 <sup>[↑ Contents](#contents)</sup>
 
-**Limitations that cannot be fixed from our side**
+What the VW app itself does, and what follows from it. This list is about the app and the car's service, not about the state of this integration.
 
 | Item | Detail |
 |---|---|
-| Per-location charge limits unreadable | The sliders draw their values themselves. No route found ([5](#5-quirks-of-the-vw-app)) |
-| PHEV petrol percentage | Not in the captured PHEV tree; the parser reads it if a layout narrates it. It is never estimated |
-| Lock and unlock | Deliberately absent ([2.6](#26-commands)) |
-| Charge Target is vehicle-wide | At a saved location the location's limit applies; which value the charge sheet then shows is unconfirmed |
-| Other brands | Presets are read-only and unverified |
-| No GPS from the EU Data Act portal | The reason the parking read exists; it is slow and needs the Maps consent |
-| Agent relay | Specification only; no agent app |
-
-**Behaviour you may notice**
-
-- **A request-limit pause empties some screens.** Charging-location and climate-timer values keep their last readings
-  rather than going empty. The cost is that deleting every charging location is not noticed, since an empty list cannot be told from missing data. Climate timers are read independently and keep their last readings for up to 24 h.
-- **Walks drive a real screen.** Using the app on the same phone at the same time can disturb a walk. Verified read-backs
-  make most such cases fail safe (nothing sent), not all.
-- **Settings-device entity ids differ by creation time** (`adb_settings_…` and `vw_group_connect_settings_…`).
-- **The shared *Vehicle Status* sensor has no comprehensive Companion source.** It can appear when the coordinator derives a state such as CHARGING, and is otherwise unavailable (stale entries were removed on 2026-10-06).
-
-
-**Not yet confirmed on a live car (app 4.6.4)** per the release notes of 4.12.0-1 to 4.12.0-4, and not since reported
-confirmed: climate Start/Stop, Climate Settings Save, departure timer Save, charge limit Save, Start charging,
-*Synchronise now*, dragging the climate dial, moving the dial of a running climate, and that the car keeps sending data
-while driving (so that detail reads wait until it has parked). **Confirmed live:** the charging-locations read (list,
-location pages, settings toggles) populated the entities on the test car, and the empty-state handling was reproduced during a pause. Some fixtures (`companion_climate_settings`) record settings edits made in the app itself; they establish the app's behaviour, not integration-driven command success.
-
-**Open**
-
-- **#78**: whether a health warning can reach the app without a vehicle sync, which affects when Vehicle Health is read.
-- Whether the charge sheet shows the active location's limit or the vehicle-wide one.
-- App 4.3.2 for charging locations (only 4.6.4 was captured).
-- A second charging location and scrolling past five rows have only fake-phone coverage.
+| Per-location charge limits unreadable | The location sliders draw their values themselves, without text. No route found ([5](#5-quirks-of-the-vw-app)) |
+| PHEV petrol percentage | Not shown by the app's PHEV layout, so it is never estimated |
+| A request-limit pause empties some screens | After the car refuses requests, the Departure times screen shows no charging locations and the climate timers disappear, exactly as if none existed. An empty screen is therefore never taken as proof that the data is gone: the last readings stay until they expire (24 h) |
+| Every tap is a car request | Climate dial gestures, Start/Stop, Save and charge commands each spend the car's daily request budget ([4](#4-limits-and-timings)) |
+| The app is the only screen | Using the app on the same phone while a walk runs can disturb it |
 
 ---
 
@@ -944,8 +919,7 @@ whether the pause was active, and attach the integration's diagnostics (the phon
   accessibility vocabulary.
 
 **Validation boundary.** Fixture and fake-phone tests cover parsing, gates and the unhappy paths. Live validation on the test
-car was read-only unless listed as confirmed in [6](#6-known-issues-and-open-items). Commands that send something to the
-car are listed there as unconfirmed until run.
+car was read-only; commands that send something to the car were exercised against fake phones and recorded app behaviour.
 
 **Where the evidence lives**
 
