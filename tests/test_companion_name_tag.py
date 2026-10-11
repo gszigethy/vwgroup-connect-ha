@@ -17,7 +17,7 @@ import pytest
 from custom_components.vag_connect.const import CONF_STRATEGY, STRATEGY_COMPANION_ADB
 from custom_components.vag_connect.sensor import SENSOR_DESCRIPTIONS, VagConnectSensor
 
-VIN = "WVGZZZCT8VW400704"
+VIN = "WVGZZZ1KZAW123456"
 SOC = next(d for d in SENSOR_DESCRIPTIONS if d.key == "battery_soc")
 
 

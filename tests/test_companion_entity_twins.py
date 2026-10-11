@@ -19,7 +19,7 @@ from custom_components.vag_connect import sensor as sn
 from custom_components.vag_connect.companion.entity_twins import _TWINS, has_control_twin
 from custom_components.vag_connect.const import vehicle_unique_id
 
-VIN = "WVGZZZCT8VW400704"
+VIN = "WVGZZZ1KZAW123456"
 BINARY_TWINS = {key for platform, key in _TWINS if platform == "binary_sensor"}
 SENSOR_TWINS = {key for platform, key in _TWINS if platform == "sensor"}
 

@@ -17,7 +17,7 @@ from custom_components.vag_connect import event as ev
 from custom_components.vag_connect import sensor as sn
 from custom_components.vag_connect.const import vehicle_unique_id
 
-VIN = "WVGZZZCT8VW400704"
+VIN = "WVGZZZ1KZAW123456"
 
 
 def _coordinator(*, companion):

@@ -64,3 +64,14 @@ async def test_a_poll_finishing_during_shutdown_pushes_nothing() -> None:
     await coordinator._async_push_update({}, success=False)
     coordinator.async_set_updated_data.assert_not_called()
     coordinator.async_update_listeners.assert_not_called()
+
+
+def test_the_unload_guard_tolerates_a_core_without_the_state(monkeypatch) -> None:
+    # hacs.json allows cores older than ConfigEntryState.UNLOAD_IN_PROGRESS.
+    from custom_components.vag_connect import entity_base
+
+    monkeypatch.setattr(entity_base, "_UNLOAD_IN_PROGRESS", None)
+    entry, coordinator, listeners, added = _spawner(ConfigEntryState.LOADED)
+    coordinator.vehicles = {"VIN1": {"charging_power_kw": 2.0}}
+    listeners[0]()
+    assert [e.unique_id for e in added] == ["VIN1_charging_power_kw"]

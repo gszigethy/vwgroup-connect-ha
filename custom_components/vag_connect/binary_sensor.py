@@ -1161,6 +1161,10 @@ _CLOSED_INVERT_KEYS: frozenset[str] = frozenset({
 
 # v1.11.0 — same phantom-entity-prevention pattern as sensor.py.
 _DATA_PRESENT_REQUIRED: frozenset[str] = frozenset({
+    # Companion (ADB) only: the timer page's Repeat switch. No cloud parser fills it.
+    "departure_timer_1_repeat",
+    "departure_timer_2_repeat",
+    "departure_timer_3_repeat",
     # Companion only: unread location slots must not create entities.
     "charging_location_1_active",
     "charging_location_1_reduced_ac_current",
