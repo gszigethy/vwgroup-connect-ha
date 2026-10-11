@@ -42,6 +42,8 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.13.0-3] - 2026-10-11 — Companion safety fixes and request-limit recovery
+
 ### Fixed
 
 - Refuse commands from already loaded controls after Read-only Mode is enabled, including commands queued on the command lock (#92).
@@ -54,6 +56,12 @@ The four fixes and their regression tests are identical to the submission in [up
 ### Changed / Geändert
 
 - **Companion (ADB): the request-limit pause ends when the car sends new data.** The app's limit alerts say starting the car makes everything available again; once the overview's sync time is later than the alert, or the Driving data tile shows a new trip, controls and *Synchronise now* work again and *App request status* returns to *available*, instead of waiting out the full 12 h.
+
+### Documentation
+
+- Explain that charging locations deleted in the car remain visible in the VW app and Companion entities until the app is closed and restarted; a vehicle sync does not refresh the list (#97).
+
+Fork PRs: [#96](https://github.com/gszigethy/vwgroup-connect-ha/pull/96), [#97](https://github.com/gszigethy/vwgroup-connect-ha/pull/97), [#98](https://github.com/gszigethy/vwgroup-connect-ha/pull/98).
 
 ## [4.13.0-2] - 2026-10-11 — Volkswagen Companion (ADB): first full release, on upstream 4.13.0
 
