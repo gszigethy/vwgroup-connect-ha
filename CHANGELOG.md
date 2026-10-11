@@ -42,6 +42,17 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [4.13.0-2] - 2026-10-11 — Volkswagen Companion (ADB) on upstream 4.13.0
+
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> **4.13.0** plus fork release **2**.
+> Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
+>
+> **Installing with HACS:** select `v4.13.0-2`, download, and restart Home Assistant.
+
+### Fixed
+- **Companion: the Charging Mode sensor now goes unavailable 24 h after its last read**, like the other values read from the app, instead of keeping an old value indefinitely. (#90)
+
 ## [4.13.0-1] - 2026-10-11 — Volkswagen Companion (ADB) on upstream 4.13.0, with charging locations
 
 > Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
