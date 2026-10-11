@@ -1,5 +1,10 @@
 # Volkswagen Companion: Air Conditioning tile
 
+> **Historical write-up.** This is the original description of the Air Conditioning mapping, kept for its evidence and contributor
+> credits. Where it says "this change", "draft" or commands armed for app 4.3.2 only, read it as the state on 2026-10-04. The climate
+> dial now moves by a tap or a slow drag, a temperature change reaches a running climate, and commands run on the builds listed in the
+> **[Companion design](COMPANION.md#26-commands)**.
+
 This builds on Prash Balan's (@its-me-prash) Companion channel: its transport,
 nav-read walk, overlay and rate-limit handling, version gate, and the existing
 Home Assistant climate entities. It is a stand-alone change against upstream
