@@ -44,12 +44,11 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [4.13.0-1] - 2026-10-11 — Volkswagen Companion (ADB) on upstream 4.13.0, with charging locations
 
-> Fork pre-release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
+> Fork release from [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha): upstream
 > **4.13.0** plus fork release **1**, on top of 4.12.0-5.
 > Credit for the integration belongs to Prash Balan (@its-me-prash) and upstream contributors.
 >
-> **Installing with HACS:** a pre-release. Turn on *Show beta versions* for this repository, select `v4.13.0-1`,
-> download, and restart Home Assistant.
+> **Installing with HACS:** select `v4.13.0-1`, download, and restart Home Assistant.
 
 ### Changed
 - **Based on upstream 4.13.0.** Its changes are listed under [4.13.0] below. (#86)
