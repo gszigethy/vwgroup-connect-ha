@@ -111,3 +111,12 @@ async def test_walk_runs_only_when_opted_in_and_until_all_six_values_are_known()
 
 async def _noop(*_a, **_k):
     return None
+
+
+def test_repeat_sensors_need_a_companion_value_to_appear() -> None:
+    # No cloud parser fills the Repeat switch, so a cloud entry that shows
+    # empty entities must not get three permanently unknown sensors.
+    from custom_components.vag_connect.binary_sensor import _DATA_PRESENT_REQUIRED
+
+    for n in (1, 2, 3):
+        assert f"departure_timer_{n}_repeat" in _DATA_PRESENT_REQUIRED

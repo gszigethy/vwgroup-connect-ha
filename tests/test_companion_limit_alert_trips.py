@@ -12,6 +12,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from homeassistant.exceptions import ServiceValidationError
 
 from custom_components.vag_connect.companion.channel import (
     LIMIT_POWER_BUDGET,
@@ -236,6 +237,7 @@ def _written(c):
 @pytest.mark.asyncio
 async def test_a_command_that_trips_the_limit_is_persisted_without_a_poll():
     c = _coord({CONF_STRATEGY: STRATEGY_COMPANION_ADB}, until=WALL + 43200, last=WALL)
+    c.is_read_only = lambda: False
     c._get_command_lock = lambda vin, cls: asyncio.Lock()
     c._dispatch_cmd_locked = AsyncMock(side_effect=RuntimeError("limit"))
     c.async_request_refresh = AsyncMock()
@@ -245,6 +247,19 @@ async def test_a_command_that_trips_the_limit_is_persisted_without_a_poll():
     data = _written(c)
     assert data[CONF_COMPANION_RATE_LIMIT_UNTIL] == WALL + 43200
     assert data[CONF_COMPANION_LAST_WRITE_AT] == WALL
+
+
+@pytest.mark.asyncio
+async def test_read_only_mode_stops_a_command_from_a_control_created_before_it():
+    # Read-only Mode applies without a reload, so a control created while the
+    # entry was writable can still call in; the dispatch refuses it.
+    c = _coord({CONF_STRATEGY: STRATEGY_COMPANION_ADB})
+    c.is_read_only = lambda: True
+    c._get_command_lock = lambda vin, cls: asyncio.Lock()
+    c._dispatch_cmd_locked = AsyncMock()
+    with pytest.raises(ServiceValidationError):
+        await c._cariad_cmd("VIN", "command_start_charging")
+    c._dispatch_cmd_locked.assert_not_awaited()
 
 
 def test_the_last_write_is_persisted_on_its_own():

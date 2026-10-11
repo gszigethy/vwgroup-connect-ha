@@ -21,6 +21,10 @@ from .const import (
 )
 from .coordinator import VagConnectCoordinator
 
+# Added in Home Assistant 2025.x; older cores (hacs.json allows 2024.4) lack it,
+# and there no state can match it.
+_UNLOAD_IN_PROGRESS = getattr(ConfigEntryState, "UNLOAD_IN_PROGRESS", None)
+
 
 # #1316 — brands whose slug title-cases badly (underscores / mixed case). This
 # display override keeps the device page + entity names clean; every other brand
@@ -445,7 +449,7 @@ def register_dynamic_spawner(
     def _spawn() -> None:
         # The entry's listeners outlive its unload, so data pushed meanwhile
         # must not add entities to the platform HA has just cleared.
-        if entry.state is ConfigEntryState.UNLOAD_IN_PROGRESS:
+        if entry.state is _UNLOAD_IN_PROGRESS:
             return
         new_entities: list[Any] = []
         for vin, vehicle in coordinator.vehicles.items():

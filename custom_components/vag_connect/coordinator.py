@@ -9294,6 +9294,16 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 "in progress"
             ) from None
         try:
+            # Read-only Mode applies without a reload, so a control created
+            # before it was switched on (or a command queued on this lock)
+            # still lands here: refuse it at the last step before the car.
+            if self.is_read_only():
+                raise ServiceValidationError(
+                    "Read-only mode is enabled. Disable it in the integration "
+                    "options to send vehicle commands.",
+                    translation_domain=DOMAIN,
+                    translation_key="read_only_mode_active",
+                )
             await self._dispatch_cmd_locked(vin, method, **kwargs)
         finally:
             lock.release()

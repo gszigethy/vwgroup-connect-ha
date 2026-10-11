@@ -42,6 +42,15 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+### Fixed
+
+- Refuse commands from already loaded controls after Read-only Mode is enabled, including commands queued on the command lock (#92).
+- Keep entity spawning compatible with Home Assistant cores without `ConfigEntryState.UNLOAD_IN_PROGRESS` (#93).
+- Require a Companion value before creating departure-timer Repeat binary sensors, preventing empty sensors on cloud entries (#94).
+- Replace full real VINs in three Companion test files with synthetic test data (#95).
+
+The four fixes and their regression tests are identical to the submission in [upstream PR #1796](https://github.com/its-me-prash/vwgroup-connect-ha/pull/1796).
+
 ### Changed / Geändert
 
 - **Companion (ADB): the request-limit pause ends when the car sends new data.** The app's limit alerts say starting the car makes everything available again; once the overview's sync time is later than the alert, or the Driving data tile shows a new trip, controls and *Synchronise now* work again and *App request status* returns to *available*, instead of waiting out the full 12 h.
