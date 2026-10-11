@@ -1,5 +1,9 @@
 # Volkswagen Companion battery tile
 
+> **Historical write-up.** This is the original description of the battery-tile mapping, kept for its evidence and contributor
+> credits. Where it says "this PR", "draft" or app 4.3.2 only, read it as the state on 2026-10-04. How the Companion works
+> today (4.6.4 baseline, controls, limits, known issues) is in the **[Companion design](COMPANION.md)**.
+
 This change builds on Prash Balan's (@its-me-prash) Companion transport,
 screen selectors, navigation, and Home Assistant entity model. It is a single
 battery feature against upstream `b13d764`; it does not require another PR,

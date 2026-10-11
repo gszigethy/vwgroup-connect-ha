@@ -1,5 +1,9 @@
 # Volkswagen app map for the ADB Companion
 
+> **Reference.** This is the screen-by-screen map of the VW app. The **[Companion design](COMPANION.md)** is the place to start: it covers
+> the entities, polling, commands, limits and known issues. The baseline app is now **4.6.4**; the intro below and the tables that cite
+> 4.3.2 are the original 2026-10-06 mapping, and 4.6.4 reads the same unless a row says otherwise.
+
 A screen-by-screen map of the Volkswagen app (`com.volkswagen.weconnect` 4.3.2)
 as the Companion channel sees it: what each screen shows, how the channel reaches
 it, which app string keys identify it, and which Home Assistant field it feeds.
