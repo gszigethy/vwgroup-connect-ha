@@ -42,10 +42,12 @@ provide the real state. Real vehicle command testing is still pending.
   and out of the app. The Air Conditioning PR carries the same fix, byte for
   byte, so either PR can land first.
 
-- **Plug safeguard.** The coordinator's "unplugged means not charging"
-  safeguard (fix gszigethy/vwgroup-connect-ha#32) now acts only on a known `plug_connected=False`. The
-  companion cannot see the plug and leaves it `None`, which used to reset a
-  live charging reading to off.
+- **Plug safeguard.** On companion entries the coordinator's "unplugged
+  means not charging" safeguard (Fix #32) acts only on a known
+  `plug_connected=False`. The companion cannot see the plug and leaves it
+  `None`, which used to reset a live charging reading to off. Cloud entries
+  keep the original rule, so a poll without the plug block still clears a
+  stuck charging state.
 - **Command readback.** After a charge command only the charge sheet's own
   cached values are dropped, and only that path is re-read on the next poll.
   The other opted-in paths (Vehicle Health, map, …) keep their cadence, so a
