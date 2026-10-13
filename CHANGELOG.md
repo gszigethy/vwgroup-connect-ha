@@ -42,6 +42,10 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+### Changed / Geändert
+
+- **Companion (ADB): charge target, automatic window heating and climate at unlock move to Controls.** They are day-to-day controls, not setup. Entity ids are unchanged, and cloud entries keep the charge target in Configuration.
+
 ## [4.13.0-3] - 2026-10-11 — Companion safety fixes and request-limit recovery
 
 ### Fixed

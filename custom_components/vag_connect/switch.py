@@ -461,6 +461,12 @@ COMPANION_CLIMATE_SETTINGS: tuple[tuple[str, str, str, str], ...] = (
 )
 
 
+_COMPANION_CLIMATE_CONTROL_KEYS = frozenset({
+    "window_heating_auto_switch",
+    "climate_at_unlock_switch",
+})
+
+
 class VagCompanionClimateSettingSwitch(VagConnectEntity, SwitchEntity):
     """One switch of the app's Air Conditioning Settings page (companion).
 
@@ -469,13 +475,15 @@ class VagCompanionClimateSettingSwitch(VagConnectEntity, SwitchEntity):
     nothing. The state is the climate settings read.
     """
 
-    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_category: EntityCategory | None = EntityCategory.CONFIG
 
     def __init__(
         self, coordinator: VagConnectCoordinator, vin: str,
         key: str, field: str, command_id: str, icon: str,
     ) -> None:
         super().__init__(coordinator, vin, key)
+        if key in _COMPANION_CLIMATE_CONTROL_KEYS:
+            self._attr_entity_category = None
         self._attr_translation_key = key
         self._attr_icon = icon
         self._field = field
