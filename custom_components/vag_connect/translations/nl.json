@@ -2313,11 +2313,14 @@
       "historical_export_button": {
         "name": "Historische export aanvragen"
       },
+      "companion_refresh_button": {
+        "name": "App-schermgegevens vernieuwen"
+      },
       "companion_reset_button": {
         "name": "Companion-verbinding resetten"
       },
       "companion_force_refresh_button": {
-        "name": "Voertuigupdate forceren"
+        "name": "Voertuiggegevens vernieuwen"
       }
     },
     "climate": {

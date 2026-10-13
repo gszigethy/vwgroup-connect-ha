@@ -8539,11 +8539,14 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         Independent of ``_poll_loop``: that one re-reads the app screen, this
         one makes the car send fresh data, then polls once the app has had time
         to receive it. Wakes at least once a minute so a slider change applies
-        without a reload. The first sync waits a full interval, so an HA
-        restart never wakes the car on its own, and turning the slider from 0
-        back on starts a fresh interval. The interval counts from the last
-        sync attempt, the Force vehicle refresh button's included, so the two
-        never wake the car minutes apart.
+        without a reload. The interval counts from the newest of: the last
+        sync attempt (the Force vehicle refresh button's included, so the two
+        never wake the car minutes apart), the car's last data (a car that
+        sent data on its own, say while driven, needs no tap) and the last
+        command tap. The last two survive a restart, so a restart neither
+        delays an overdue sync by a full interval nor wakes the car when the
+        last sync is recent. With neither known, the first sync waits a full
+        interval. Turning the slider from 0 back on starts a fresh interval.
 
         Every attempt is followed by a screen read, so the App request status
         sensor shows its outcome: after an accepted sync once the car has had
@@ -8551,14 +8554,25 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         """
         import time  # noqa: PLC0415
 
-        self._companion_last_sync_mono = time.monotonic()
+        # A restart counts as a sync only when nothing tells when the car
+        # last sent data or was last asked.
+        self._companion_last_sync_mono = (
+            time.monotonic() if self._companion_sync_basis_age_s() is None else None
+        )
         while self._started:
             interval = self.companion_app_sync_interval_s()
             if interval <= 0:
                 self._companion_last_sync_mono = time.monotonic()
                 await asyncio.sleep(60.0)
                 continue
-            remaining = interval - (time.monotonic() - self._companion_last_sync_mono)
+            since = [
+                age for age in (
+                    None if self._companion_last_sync_mono is None
+                    else time.monotonic() - self._companion_last_sync_mono,
+                    self._companion_sync_basis_age_s(),
+                ) if age is not None
+            ]
+            remaining = interval - min(since, default=interval)
             if remaining > 0:
                 await asyncio.sleep(min(remaining, 60.0))
                 continue
@@ -8573,6 +8587,38 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 await asyncio.sleep(_APP_SYNC_READBACK_S)
             if self._started:
                 await self.async_request_refresh()
+
+    def _companion_sync_basis_age_s(self) -> float | None:
+        """#968 — seconds since the car last sent data or was last tapped.
+
+        From what survives a restart: the car's sync time in the snapshot (kept
+        current by every read) and the persisted last command time, which every
+        *Synchronise now* tap sets. None when neither is known. A time in the
+        future (a clock step) counts as just now.
+        """
+        from homeassistant.util import dt as dt_util  # noqa: PLC0415
+
+        from .const import CONF_COMPANION_LAST_WRITE_AT  # noqa: PLC0415
+
+        newest: float | None = None
+        for vehicle in self.vehicles.values():
+            raw = vehicle.get("companion_app_synced_at") if isinstance(vehicle, dict) else None
+            seen = raw if isinstance(raw, datetime) else (
+                dt_util.parse_datetime(raw) if isinstance(raw, str) else None
+            )
+            if seen is not None and seen.tzinfo is not None:
+                newest = max(newest or 0.0, seen.timestamp())
+        client = getattr(self, "_cariad_client", None)
+        written = getattr(client, "companion_last_write_at", 0.0)
+        if not isinstance(written, (int, float)) or not written:
+            written = self.entry.data.get(CONF_COMPANION_LAST_WRITE_AT) or 0.0
+        if isinstance(written, (int, float)) and written:
+            newest = max(newest or 0.0, float(written))
+        if newest is None:
+            return None
+        import time  # noqa: PLC0415
+
+        return max(0.0, time.time() - newest)
 
     async def async_companion_sync_vehicle(self) -> bool | None:
         """#968 — one "Synchronise now".

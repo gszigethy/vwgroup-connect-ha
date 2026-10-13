@@ -58,6 +58,8 @@ Automations that start window heating: `climate.set_preset_mode` (*window_heatin
 
 ### Changed / Geändert
 
+- **Companion (ADB): the refresh buttons are renamed and moved to Configuration.** *Refresh Data* is now *Refresh app screen data* and *Force vehicle refresh* is now *Refresh vehicle data*. Both join *Reset companion connection* in the device's Configuration section, because they maintain the data rather than operate the car. Entity ids and automations are unchanged; cards that rely on the auto-generated dashboard no longer show the two buttons. Cloud entries keep *Refresh Data* as before.
+- **Companion (ADB): the vehicle sync interval counts from the car's last data.** The interval now runs from the newest of the last sync attempt, the car's last data and the last command tap. A car that sent data on its own (for example while driven) gets no extra tap, and after a Home Assistant restart an overdue sync runs right away instead of waiting a full interval. A restart still never wakes the car when the last sync is recent.
 - **Companion (ADB): charge target, automatic window heating and climate at unlock move to Controls.** They are day-to-day controls, not setup. Entity ids are unchanged, and cloud entries keep the charge target in Configuration.
 
 ## [4.13.0-3] - 2026-10-11 — Companion safety fixes and request-limit recovery
