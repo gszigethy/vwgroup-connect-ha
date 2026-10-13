@@ -161,7 +161,7 @@ supersedes them as the place to start; the others stay as references.
 
 **Controls** (each one taps the app and is verified on screen): start/stop charging, charge limit,
 start/stop climate and window heating, desired temperature and start mode, four Climate Settings
-switches, departure timers (switch, time, days, Repeat), *Force vehicle refresh*, and an optional
+switches, departure timers (switch, time, days, Repeat), *Refresh vehicle data*, and an optional
 *Vehicle sync interval*. All controls are listed in [2.6](#26-commands).
 
 ### 2.2 Setting it up
@@ -282,9 +282,11 @@ share preview of the app's map, and nothing is shared.
 
 | Entity | What it does |
 |---|---|
-| Refresh Data | Reads now, including every detail screen that is otherwise gated. |
-| Force vehicle refresh | Taps *Synchronise now* once and re-reads the app 3 minutes later ([2.5](#25-polling-and-refresh-behaviour)). Wakes the car. |
+| Refresh app screen data | Reads now, including every detail screen that is otherwise gated. |
+| Refresh vehicle data | Taps *Synchronise now* once and re-reads the app 3 minutes later ([2.5](#25-polling-and-refresh-behaviour)). Wakes the car. |
 | Reset companion connection | Clears the failure cooldown and the request-limit pause and reads at once. |
+
+All three are in the device's Configuration section: they maintain the data and do not operate the car.
 
 **Naming and ids**
 
@@ -373,12 +375,12 @@ Target* as the vehicle-wide limit.
 
 - *Vehicle sync interval* (0 = off, 60–240 min in steps of 5) taps *Synchronise now* on a timer. The
   first sync waits a full interval, so a Home Assistant restart never wakes the car by itself.
-- *Force vehicle refresh* is one such tap on demand. Both restart the same interval clock, so the two
+- *Refresh vehicle data* is one such tap on demand. Both restart the same interval clock, so the two
   never wake the car minutes apart.
 - *Last vehicle sync* is the timestamp of the car's data, inferred from the app's age text. It is also what the walk gates
   watch ([2.5](#25-polling-and-refresh-behaviour)): a sync counts as "new car data".
 - *App request status* is the outcome of the last sync attempt or the pause ([2.7](#27-the-cars-request-budget)).
-- *Refresh Data* re-reads but does not sync.
+- *Refresh app screen data* re-reads but does not sync.
 
 **The pause cluster.** A request-limit alert in the app sets a 12 h pause. During it every control and every sync is refused (a pause identified as the local power-budget alert allows one probe sync per 4 h), and *App request status* reads *restricted*. The pause ends when the car sends new data after the alert (it was started or woke up) or the overview shows a new trip, at its deadline, on *Reset companion connection*, or when a permitted probe is accepted.
 Reads continue, but see [5](#5-quirks-of-the-vw-app) for what the app shows meanwhile.
@@ -414,10 +416,10 @@ alert or nag screen; confirm the overview is on screen; parse; then run the due 
 | Driving data, parking position, charging locations | when a **trip ended**: the overview's Driving data tile text changed; or the car sent new data and the electric or petrol range dropped while not charging (this catches two identical trips) |
 
 Every gated walk **also** runs: on the first poll after a start or reload, when its switch is turned on,
-every 12 hours, on *Refresh Data*, and on the read that follows *Force vehicle refresh*. Trip walks also
+every 12 hours, on *Refresh app screen data*, and on the read that follows *Refresh vehicle data*. Trip walks also
 run every 6 hours while the Driving data tile is not on the overview.
 
-**Sync and read-back.** An accepted scheduled sync is followed 3 minutes later by an ordinary refresh (the car needs time to answer); *Force vehicle refresh* additionally forces every opted-in detail walk at that read. A refused sync is read at once so *App request status* shows why.
+**Sync and read-back.** An accepted scheduled sync is followed 3 minutes later by an ordinary refresh (the car needs time to answer); *Refresh vehicle data* additionally forces every opted-in detail walk at that read. A refused sync is read at once so *App request status* shows why.
 
 **When the phone fails.** A failure in the initial read stage (connect, foreground, version, first dump: phone off, ADB gone, secured screen) starts a cooldown of 30 minutes that doubles per consecutive failure up to 6 hours; during it the poll does nothing and is not counted as a failed poll. Failures inside a detail walk are skipped without a cooldown. A broken ADB connection ("Broken pipe") is reopened on the next read. *Reset
 companion connection* clears the cooldown. An overview that cannot be recognised (a stray screen, a nag
@@ -447,7 +449,7 @@ that cannot be closed) yields no values rather than wrong ones, and the last val
 | Climate at unlock, Automatic window heating, Climate zones | Air Conditioning Settings → toggle → Save | 4.6.4 | The page is read back; a value already in place sends nothing |
 | Departure Timer switches | Taps the row's switch (the app sends at once) | 4.6.4, 4.3.2 | Watched for a flip back (the car did not accept it) |
 | Departure Timer time, `set_departure_timer` | The timer's page: time wheels, weekdays, Repeat → Save | 4.6.4 | Saved only when the page shows exactly what was asked; the timer is matched by content; two timers with the same time are refused; `enabled: false` with an edit is refused (Save switches the timer on) |
-| Force vehicle refresh, Vehicle sync interval | Vehicle Settings → *Synchronise now* | 4.6.4, 4.3.2 | A power-budget pause allows one probe per 4 h; a backend pause allows none |
+| Refresh vehicle data, Vehicle sync interval | Vehicle Settings → *Synchronise now* | 4.6.4, 4.3.2 | A power-budget pause allows one probe per 4 h; a backend pause allows none |
 
 **How a command runs.** One command at a time, sharing the screen lock with polls. The channel brings
 the app forward, refreshes the version gate, passes the gate above, taps along the shortest path, reads

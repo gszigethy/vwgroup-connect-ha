@@ -42,6 +42,10 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+### Changed / Geändert
+
+- **Companion (ADB): the refresh buttons are renamed and moved to Configuration.** *Refresh Data* is now *Refresh app screen data* and *Force vehicle refresh* is now *Refresh vehicle data*. Both join *Reset companion connection* in the device's Configuration section, because they maintain the data rather than operate the car. Entity ids and automations are unchanged; cards that rely on the auto-generated dashboard no longer show the two buttons. Cloud entries keep *Refresh Data* as before.
+
 ## [4.13.0-3] - 2026-10-11 — Companion safety fixes and request-limit recovery
 
 ### Fixed
