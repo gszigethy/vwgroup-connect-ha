@@ -248,8 +248,15 @@ def build_unexpected_keys_report(
     lines.append("---")
     lines.append("")
     lines.append(
+        # The promise below is about what WE generate, and it holds: the
+        # per-record VIN is masked and _safe_model refuses a model field
+        # that contains one. But it prints directly above the box people
+        # drag a file into, so it read as covering those too. Measured on
+        # the live tracker: 6 of 58 open issues carried a full VIN, every
+        # one inside the filename of a portal export someone attached.
         "_Privacy: VINs masked to last 6 chars, GPS rounded to 1 decimal, "
-        "userIDs/JWTs/emails stripped. No raw API response is included._"
+        "userIDs/JWTs/emails stripped. No raw API response is included. "
+        "A file you attach yourself is not covered by this: a portal export is named with your full VIN, so rename it first if you would rather not publish it._"
     )
     return "\n".join(lines)
 
@@ -289,6 +296,13 @@ def build_error_report(
 
     for idx, r in enumerate(records_list, start=1):
         lines.append(f"### {idx}. `{r.exception_type}` at {r.timestamp}")
+        # #1808 — a persistent failure is now one record with a count,
+        # so say how persistent it is instead of hiding it in the buffer.
+        if getattr(r, "repeat_count", 1) > 1:
+            lines.append(
+                f"- **Seen:** {r.repeat_count} times in a row "
+                "(the timestamp above is the first occurrence)"
+            )
         if r.endpoint:
             lines.append(f"- **Endpoint:** `{r.endpoint}`")
         rec_model = _safe_model(r.model)
@@ -313,7 +327,8 @@ def build_error_report(
     lines.append("")
     lines.append(
         "_Privacy: VINs masked, Bearer/JWT/UUID/email tokens stripped from "
-        "messages and tracebacks. No credentials are included._"
+        "messages and tracebacks. No credentials are included. "
+        "A file you attach yourself is not covered by this: a portal export is named with your full VIN, so rename it first if you would rather not publish it._"
     )
     return "\n".join(lines)
 
