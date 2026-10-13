@@ -155,6 +155,13 @@ VW app 4.6.4 is supported (gszigethy/vwgroup-connect-ha#28, gszigethy/vwgroup-co
 
 ### Geändert / Changed
 
+- **Some cars that the legacy MBB host turns away now get their service list from the EU-DP
+  host.** When the legacy host answers `401 gw.error.authentication`, the operationList is now
+  requested once from the EU-DP host before the car is marked "no legacy". That list is used
+  only if it parses and contains services; an empty or error body records the verdict exactly
+  as before. Read-only: commands stay hidden for these cars and are refused before any S-PIN
+  step, because the S-PIN host has not been checked yet. Diagnostics show such cars under
+  `mbb_eudp_oplist`, and the debug log names the host each service points to (#1766).
 - **Car request budget:**
   - The car's "Too many requests" and "Request limit reached" alerts are recognised in any app language.
   - Either alert always pauses commands for 12 h, even when it appears late. The pause and the 60 s command gap survive a restart (gszigethy/vwgroup-connect-ha#50).
@@ -188,6 +195,17 @@ VW app 4.6.4 is supported (gszigethy/vwgroup-connect-ha#28, gszigethy/vwgroup-co
 - **Relay errors are reported only as fixed codes**, never as free text from the phone.
 
 ### Behoben / Fixed
+
+- **A car whose service list comes from the read-only host keeps its remote commands blocked
+  even right after a restart.** That block was already there and already correct, but it was
+  checked a moment too early: the integration looked at its own note of which cars are affected
+  before the step that writes that note, so on the first command after a restart the note was
+  still empty and the block did not catch. The entity for the command stays hidden either way,
+  so this only mattered to someone calling the service directly from an automation, and only
+  until the first data refresh of that session. It is checked again at the right moment now.
+  The reason it is worth a separate fix rather than a footnote: what gets lost when the block
+  misses is an attempt at your vehicle PIN, and the car locks the PIN after a few wrong ones.
+  Groundwork and the original block are @fschulte2812's (#1807).
 
 - **Your tyre pressures show their decimal again.** The portal sends a value like 2.8 bar, and
   every tyre-pressure sensor was showing 2. The number was being read as a whole number and the
