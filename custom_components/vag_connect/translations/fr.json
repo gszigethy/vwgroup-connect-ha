@@ -2325,7 +2325,15 @@
     },
     "climate": {
       "climate": {
-        "name": "Climatisation"
+        "name": "Climatisation",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "air_conditioning": "Climatisation",
+              "window_heating": "Dégivrage des vitres uniquement"
+            }
+          }
+        }
       }
     },
     "device_tracker": {
@@ -2858,6 +2866,12 @@
     },
     "hvac_mode_not_supported": {
       "message": "Le mode CVC {hvac_mode} n'est pas pris en charge ; utilisez l'un de : {modes}. Rien n'a été envoyé."
+    },
+    "climate_preset_while_running": {
+      "message": "Arrêtez d'abord la climatisation : le mode ne peut pas changer pendant qu'elle fonctionne. Rien n'a été envoyé."
+    },
+    "climate_preset_not_supported": {
+      "message": "Le mode {preset} n'est pas pris en charge ; utilisez l'un de : {presets}. Rien n'a été envoyé."
     }
   },
   "selector": {

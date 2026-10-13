@@ -1,12 +1,11 @@
 # Copyright 2026 Prash Balan (@its-me-prash) — GNU AGPL v3.0-or-later
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Companion climate Start: mode select + temperature number held in HA.
+"""Companion climate Start: mode and temperature held in HA by the climate entity.
 
 The 4.6.4 Air Conditioning sheet has no Save; Start applies the selected mode
 and the dial. So both are HA-held values: changing them only stores them (no
-phone or car traffic), they are restored across restarts, a poll of an
-unchanged dial never overwrites them (a dial changed in the app does), and the
-temperature is unavailable in window heating only.
+phone or car traffic), they are restored across restarts, and a poll of an
+unchanged dial never overwrites them (a dial changed in the app does).
 """
 from __future__ import annotations
 
@@ -17,14 +16,9 @@ import pytest
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.vag_connect.companion.client import CompanionClient
-from custom_components.vag_connect.number import (
-    NUMBER_DESCRIPTIONS,
-    VagCompanionClimateTemperatureNumber,
-)
-from custom_components.vag_connect.select import VagCompanionClimateModeSelect
+from custom_components.vag_connect.climate import VagCompanionClimate
 
 VIN = "WVWZZZTESTVIN0001"
-TEMP_DESC = next(d for d in NUMBER_DESCRIPTIONS if d.key == "target_temperature")
 
 
 class _TrippedChannel:
@@ -59,96 +53,36 @@ def _coordinator(client: CompanionClient, vehicle: dict | None = None):
     return coord
 
 
-def _number(coord):
-    n = VagCompanionClimateTemperatureNumber(coord, VIN, TEMP_DESC)
-    n.async_write_ha_state = MagicMock()
-    return n
-
-
-def _select(coord):
-    s = VagCompanionClimateModeSelect(coord, VIN)
-    s.async_write_ha_state = MagicMock()
-    return s
+def _climate(coord):
+    coord.command_method_available = MagicMock(return_value=True)
+    e = VagCompanionClimate(coord, VIN)
+    e.async_write_ha_state = MagicMock()
+    return e
 
 
 @pytest.mark.asyncio
-async def test_changing_the_number_and_select_only_stores():
+async def test_changing_the_temperature_and_preset_while_off_only_stores():
     client = _client()
     coord = _coordinator(client)
-    number, select = _number(coord), _select(coord)
-    await number.async_set_native_value(23.2)
-    await select.async_select_option("window_heating")
+    climate = _climate(coord)
+    await climate.async_set_temperature(temperature=23.2)
+    await climate.async_set_preset_mode("window_heating")
     assert client.climate_targets.temp_c == 23.0  # snapped to the dial's grid
     assert client.climate_targets.window_heating_only is True
-    assert select.current_option == "window_heating"
+    assert climate.preset_mode == "window_heating"
     coord._cariad_cmd.assert_not_called()
     coord.async_request_refresh.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_temperature_is_unavailable_in_window_heating_only():
-    client = _client()
-    coord = _coordinator(client)
-    number, select = _number(coord), _select(coord)
-    with patch.object(CoordinatorEntity, "available", new=True):
-        assert number.available is True
-        await select.async_select_option("window_heating")
-        assert number.available is False
-        coord.async_update_listeners.assert_called()  # the number re-renders
-        await select.async_select_option("air_conditioning")
-        assert number.available is True
 
 
 def test_the_poll_never_overwrites_the_held_values():
     client = _client()
     client.store_climate_target_temperature(21.0)
-    # What the app shows arrives with the poll; the entities keep HA's values.
+    # What the app shows arrives with the poll; the entity keeps HA's values.
     coord = _coordinator(client, {"target_temperature": 25.5,
                                   "climate_start_mode": "window_heating"})
-    assert _number(coord).native_value == 21.0
-    assert _select(coord).current_option == "air_conditioning"
-
-
-@pytest.mark.asyncio
-async def test_restore_after_a_restart():
-    client = _client()
-    coord = _coordinator(client)
-    number, select = _number(coord), _select(coord)
-    number.async_get_last_number_data = AsyncMock(
-        return_value=SimpleNamespace(native_value=22.5)
-    )
-    number.async_get_last_extra_data = AsyncMock(return_value=None)
-    select.async_get_last_state = AsyncMock(
-        return_value=SimpleNamespace(state="window_heating")
-    )
-    with patch.object(CoordinatorEntity, "async_added_to_hass", new=AsyncMock()):
-        await number.async_added_to_hass()
-        await select.async_added_to_hass()
-    assert client.climate_targets.temp_c == 22.5
-    assert client.climate_targets.window_heating_only is True
-
-
-@pytest.mark.asyncio
-async def test_restore_falls_back_to_the_last_state_and_ignores_unknown():
-    client = _client()
-    coord = _coordinator(client)
-    number, select = _number(coord), _select(coord)
-    # An entity from before this change has no number extra data.
-    number.async_get_last_number_data = AsyncMock(return_value=None)
-    number.async_get_last_state = AsyncMock(return_value=SimpleNamespace(state="21.5"))
-    select.async_get_last_state = AsyncMock(return_value=SimpleNamespace(state="unknown"))
-    with patch.object(CoordinatorEntity, "async_added_to_hass", new=AsyncMock()):
-        await number.async_added_to_hass()
-        await select.async_added_to_hass()
-    assert client.climate_targets.temp_c == 21.5
-    assert client.climate_targets.window_heating_only is False
-
-    number.async_get_last_state = AsyncMock(return_value=SimpleNamespace(state="unavailable"))
-    fresh = _client()
-    number.coordinator = _coordinator(fresh)
-    with patch.object(CoordinatorEntity, "async_added_to_hass", new=AsyncMock()):
-        await number.async_added_to_hass()
-    assert fresh.climate_targets.temp_c is None  # Start then leaves the dial alone
+    climate = _climate(coord)
+    assert climate.target_temperature == 21.0
+    assert climate.preset_mode == "air_conditioning"
 
 
 def test_not_companion_entries_get_no_targets():
@@ -161,37 +95,6 @@ def test_not_companion_entries_get_no_targets():
     assert climate_targets_of(coord) is None
 
 
-@pytest.mark.asyncio
-async def test_spawn_uses_the_held_number_and_adds_the_mode_select():
-    from custom_components.vag_connect import number as number_mod
-    from custom_components.vag_connect import select as select_mod
-
-    client = _client()
-    coord = _coordinator(client)
-    coord.is_read_only = MagicMock(return_value=False)
-    coord.command_capability_supported = MagicMock(return_value=None)
-    coord.command_method_available = MagicMock(return_value=True)
-    coord.read_capability_hidden = MagicMock(return_value=False)
-    entry = MagicMock()
-    entry.runtime_data = coord
-    entry.data = {"brand": "volkswagen"}
-    built: dict[str, list] = {}
-
-    def capture(name):
-        def spawner(_entry, _coord, _add, build):
-            built[name] = build(VIN, {"has_battery": True})
-        return spawner
-
-    with patch.object(number_mod, "register_dynamic_spawner", capture("number")), \
-            patch.object(number_mod, "_companion_can_sync", return_value=False), \
-            patch.object(select_mod, "register_dynamic_spawner", capture("select")):
-        await number_mod.async_setup_entry(MagicMock(), entry, MagicMock())
-        await select_mod.async_setup_entry(MagicMock(), entry, MagicMock())
-    temps = [e for e in built["number"] if e.entity_description.key == "target_temperature"]
-    assert len(temps) == 1 and isinstance(temps[0], VagCompanionClimateTemperatureNumber)
-    assert any(isinstance(e, VagCompanionClimateModeSelect) for e in built["select"])
-
-
 def test_climate_entity_shows_the_held_temperature():
     from custom_components.vag_connect.climate import VagClimate
 
@@ -202,33 +105,17 @@ def test_climate_entity_shows_the_held_temperature():
     assert VagClimate(coord, VIN).target_temperature == 24.0
 
 
-def test_with_nothing_held_the_number_shows_the_dial():
-    # Live: number unknown while the sensor and the climate entity show 22.
+def test_with_nothing_held_the_climate_shows_the_dial():
     # Nothing held means Start leaves the dial, so the dial is what it applies.
     client = _client()
     coord = _coordinator(client, {"target_temperature": 22.0})
-    number = _number(coord)
-    assert number.native_value == 22.0
+    climate = _climate(coord)
+    assert climate.target_temperature == 22.0
     # Shown, not held: a restart must not turn the dial reading into a target.
-    assert number.extra_restore_state_data.native_value is None
+    assert climate.extra_restore_state_data.held_temp_c is None
     assert client.climate_targets.temp_c is None
     client.store_climate_target_temperature(23.0)
-    assert number.extra_restore_state_data.native_value == 23.0
-
-
-@pytest.mark.asyncio
-async def test_restore_with_number_data_but_nothing_held_stores_nothing():
-    client = _client()
-    coord = _coordinator(client)
-    number = _number(coord)
-    number.async_get_last_number_data = AsyncMock(
-        return_value=SimpleNamespace(native_value=None)
-    )
-    number.async_get_last_extra_data = AsyncMock(return_value=None)
-    number.async_get_last_state = AsyncMock(return_value=SimpleNamespace(state="22.0"))
-    with patch.object(CoordinatorEntity, "async_added_to_hass", new=AsyncMock()):
-        await number.async_added_to_hass()
-    assert client.climate_targets.temp_c is None
+    assert climate.extra_restore_state_data.held_temp_c == 23.0
 
 
 @pytest.mark.asyncio
@@ -317,15 +204,14 @@ def _read(client: CompanionClient, value: float) -> None:
 
 
 def test_a_dial_changed_in_the_app_replaces_the_held_value():
-    # Live: the app showed 20 while the number and the climate entity kept 22.
+    # Live: the app showed 20 while the climate entity kept 22.
     client = _client()
     _read(client, 22.0)
     client.store_climate_target_temperature(22.0)
     coord = _coordinator(client, {"target_temperature": 20.0})
-    number = _number(coord)
     _read(client, 20.0)  # the dial was turned in the app
     assert client.climate_targets.temp_c == 20.0
-    assert number.native_value == 20.0
+    assert _climate(coord).target_temperature == 20.0
     from custom_components.vag_connect.climate import VagClimate
 
     coord.command_method_available = MagicMock(return_value=True)
@@ -366,20 +252,19 @@ def test_the_dial_is_saved_with_the_held_value():
     client = _client()
     _read(client, 20.0)
     client.store_climate_target_temperature(23.0)
-    data = _number(_coordinator(client)).extra_restore_state_data
-    assert data.native_value == 23.0
+    data = _climate(_coordinator(client)).extra_restore_state_data
+    assert data.held_temp_c == 23.0
     assert data.as_dict()["app_dial_c"] == 20.0
 
 
-async def _restore(client, held, dial, *, with_extra=True):
-    number = _number(_coordinator(client))
-    number.async_get_last_number_data = AsyncMock(
-        return_value=SimpleNamespace(native_value=held)
-    )
-    extra = SimpleNamespace(as_dict=lambda: {"native_value": held, "app_dial_c": dial})
-    number.async_get_last_extra_data = AsyncMock(return_value=extra if with_extra else None)
+async def _restore(client, held, dial):
+    climate = _climate(_coordinator(client))
+    extra = SimpleNamespace(as_dict=lambda: {
+        "held_temp_c": held, "app_dial_c": dial, "window_heating_only": False,
+    })
+    climate.async_get_last_extra_data = AsyncMock(return_value=extra)
     with patch.object(CoordinatorEntity, "async_added_to_hass", new=AsyncMock()):
-        await number.async_added_to_hass()
+        await climate.async_added_to_hass()
 
 
 @pytest.mark.asyncio
@@ -397,7 +282,7 @@ async def test_restore_then_read(first_read, held):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("first_read", "held"), [(20.0, 23.0), (19.0, None)])
 async def test_read_then_restore(first_read, held):
-    # The first read can land before the number is restored.
+    # The first read can land before the climate entity is restored.
     client = _client()
     _read(client, first_read)
     await _restore(client, 23.0, 20.0)

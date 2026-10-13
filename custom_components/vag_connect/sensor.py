@@ -5153,9 +5153,9 @@ class VagCompanionChargeModeSensor(VagConnectEntity, SensorEntity):
 # this MODULE-level constant (an entity attr is a no-op).
 PARALLEL_UPDATES = 0
 
-# Companion: sensors reading the app's value of a setting HA holds for the next
-# climate Start (the desired temperature number, the start mode select).
-_COMPANION_READ_OF_HELD = frozenset({"target_temperature", "climate_start_mode"})
+# Companion: the app dial's reading next to the temperature the climate entity
+# holds for the next Start.
+_COMPANION_READ_OF_HELD = frozenset({"target_temperature"})
 
 
 async def async_setup_entry(
@@ -5186,6 +5186,7 @@ async def async_setup_entry(
     # slider (the preset maps "Synchronise now", outside Read-only Mode).
     from .companion.app_sync import preset_can_sync  # noqa: PLC0415
     from .companion.entity_twins import (  # noqa: PLC0415
+        RETIRED_COMPANION_CLIMATE,
         has_control_twin,
         is_cloud_only,
         remove_twin,
@@ -5209,6 +5210,11 @@ async def async_setup_entry(
                 continue
             if is_cloud_only(coordinator, "sensor", desc.key) or has_control_twin(
                 coordinator, vin, vehicle, "sensor", desc.key,
+            ) or (
+                # The climate entity's preset shows it; without one (Read-only
+                # Mode) the sensor stays, like any twin.
+                coordinator.is_companion() and not coordinator.is_read_only()
+                and ("sensor", desc.key) in RETIRED_COMPANION_CLIMATE
             ):
                 remove_twin(hass, "sensor", vin, desc.key)
                 continue

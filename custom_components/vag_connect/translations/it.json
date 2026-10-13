@@ -2325,7 +2325,15 @@
     },
     "climate": {
       "climate": {
-        "name": "Climatizzazione"
+        "name": "Climatizzazione",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "air_conditioning": "Aria condizionata",
+              "window_heating": "Solo riscaldamento cristalli"
+            }
+          }
+        }
       }
     },
     "device_tracker": {
@@ -2858,6 +2866,12 @@
     },
     "hvac_mode_not_supported": {
       "message": "La modalità HVAC {hvac_mode} non è supportata; usa una tra: {modes}. Non è stato inviato nulla."
+    },
+    "climate_preset_while_running": {
+      "message": "Arresta prima la climatizzazione: la modalità non può cambiare mentre è attiva. Non è stato inviato nulla."
+    },
+    "climate_preset_not_supported": {
+      "message": "La modalità {preset} non è supportata; usa una tra: {presets}. Non è stato inviato nulla."
     }
   },
   "selector": {

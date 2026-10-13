@@ -4,6 +4,10 @@
 > credits. Where it says "this change", "draft" or commands armed for app 4.3.2 only, read it as the state on 2026-10-04. The climate
 > dial now moves by a tap or a slow drag, a temperature change reaches a running climate, and commands run on the builds listed in the
 > **[Companion design](COMPANION.md#26-commands)**.
+>
+> Since the climate rationalisation, the climate entity runs all of this: its presets *Air conditioning* and
+> *Window heating* replace the start mode select, the window heating switch and the climatisation switch,
+> and its temperature replaces the desired temperature number.
 
 This builds on Prash Balan's (@its-me-prash) Companion channel: its transport,
 nav-read walk, overlay and rate-limit handling, version gate, and the existing
@@ -14,9 +18,9 @@ Home Assistant climate entities. It is a stand-alone change against upstream
 
 | App element | HA field → existing entity | Source on screen |
 |---|---|---|
-| Climate running | `climatisation_active` → climate entity, climatisation switch, binary sensor | `cta_start`/`cta_stop` id, then the row description / mode title |
-| Window heating running on its own | `window_heating_front` → window heating switch | Picker title "Window heating" + `cta_stop`, or Mk8 `window_heating_description` |
-| Target temperature | `target_temperature` → climate entity, number, sensor | Centre label of `clima_compose_view` (15.5 = LO … 30.0 = HI) |
+| Climate running | `climatisation_active` → climate entity | `cta_start`/`cta_stop` id, then the row description / mode title |
+| Window heating running on its own | `window_heating_front` → climate entity, preset *Window heating* | Picker title "Window heating" + `cta_stop`, or Mk8 `window_heating_description` |
+| Target temperature | `target_temperature` → climate entity, sensor | Centre label of `clima_compose_view` (15.5 = LO … 30.0 = HI) |
 | Outside temperature | `outside_temp` → sensor, climate current temperature | "<place>: 22°C" line |
 | Remaining time | `climate_remaining_time_min` → sensor | " • N min" after "Active"; 0 when idle |
 | Automatic window heating (setting) | `window_heating_enabled` → binary sensor | "Autom." on the sheet; `WindowHeatingEnabled` on Settings |
