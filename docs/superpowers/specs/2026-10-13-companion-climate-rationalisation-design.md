@@ -48,7 +48,10 @@ the Companion code is not in upstream yet, so the risk is limited to fork users.
 | Climate zone front left / right | no zone concept in HA climate | Configuration → Controls (changes what the next start does) |
 | Climate at unlock | car setting | Controls (Codex PR) |
 | Automatic window heating | car setting | Controls (Codex PR) |
-| Climate ETA sensor, climatisation / window-heating binary sensors | read-only | unchanged |
+| Climate ETA sensor | read-only | unchanged |
+
+The climatisation and window-heating binary sensors stay hidden on Companion entries, as today: the
+climate entity shows both (existing twin rule in `companion/entity_twins.py`).
 
 Configuration keeps only the *Read …* switches, the sync interval and the three refresh/reset buttons.
 

@@ -42,6 +42,20 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+### ⚠️ Breaking — Companion (ADB) climate in one entity
+
+Climate on Companion entries is now run from the climate entity alone: on/off, temperature, and the presets *Air conditioning* and *Window heating*. Window heating is one-shot, as in the app: after a run the preset returns to *Air conditioning*. These entities are removed on Companion entries:
+
+| Removed | Use instead |
+|---|---|
+| `switch.<car>_adb_climate_control` | climate entity on / off |
+| `switch.<car>_adb_window_heating` | preset *Window heating*, then turn on |
+| `select.<car>_adb_desired_climate_start_mode` | climate entity preset (while off) |
+| `sensor.<car>_adb_climate_start_mode` | climate entity `preset_mode` |
+| `number.<car>_adb_desired_temperature` | climate entity temperature |
+
+Automations that start window heating: `climate.set_preset_mode` (*window_heating*), then `climate.turn_on`. A temperature or mode held by the removed number or select is not carried over; set it once on the climate entity. The climate zone switches move to Controls. Cloud entries are unchanged.
+
 ### Changed / Geändert
 
 - **Companion (ADB): charge target, automatic window heating and climate at unlock move to Controls.** They are day-to-day controls, not setup. Entity ids are unchanged, and cloud entries keep the charge target in Configuration.

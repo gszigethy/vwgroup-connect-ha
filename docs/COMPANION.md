@@ -212,7 +212,7 @@ the Read switches, intervals and Reset stay in **Configuration**.
 | Fuel Range | sensor | Plug-in hybrids and combustion cars only; its presence enables the combustion entities. The petrol **percentage** is not in the captured PHEV layout; the parser reads it if a layout narrates it ([6](#6-known-issues)). |
 | Charging Status | sensor | The app's text, or a canonical value mapped from its translated labels (for example *Currently charging*, *Target charge level reached*, conservation charging). |
 | Doors Locked | binary sensor | Lock device class: **off means locked**. Read-only on purpose. |
-| Climate control state | climate entity, switch | Running state: from the tile's narration on the overview, and from the Start/Stop button on the climate sheet. |
+| Climate control state | climate entity | Running state: from the tile's narration on the overview, and from the Start/Stop button on the climate sheet. |
 | Last vehicle sync | sensor (timestamp) | A timestamp inferred from the app's *Synchronised … ago* text: when the car last sent data to the app. Only moves forward ([5](#5-quirks-of-the-vw-app)). |
 | App request status | sensor (diagnostic) | *available* or *restricted* ([2.7](#27-the-cars-request-budget)); exists only outside Read-only Mode, and can be unknown until a sync result or a limit is recorded. |
 | Last Update, Data source channel, Source: Companion app (ADB) | sensor, binary sensor | Where the data comes from; the label is the Companion transport. |
@@ -239,13 +239,11 @@ the Read switches, intervals and Reset stay in **Configuration**.
 
 | Entity | Platform | Notes |
 |---|---|---|
-| Climate Control, Window Heating | switch (+ climate entity) | Start and stop. |
+| Climate Control | climate (Controls) | The one place to run climate: on / off, the temperature, and the presets *Air conditioning* and *Window heating*. Mode and temperature are **held in Home Assistant** for the next Start ([2.4](#24-how-the-entities-depend-on-each-other)) and restored after a restart. Window heating alone counts as on. |
 | Climate ETA | sensor | Remaining minutes; 0 when idle. |
-| Target Temperature, Climate Start Mode | sensors (diagnostic) | What the app's dial and mode picker show now. |
-| Desired Temperature, Desired Climate Start Mode | number, select | Values **held in Home Assistant** and applied by the next Start ([2.4](#24-how-the-entities-depend-on-each-other)). Restored after a restart. |
+| Target Temperature | sensor (diagnostic) | What the app's dial shows now. |
 | Outside Temperature | sensor | |
-| Climate at unlock, Automatic window heating | switches (Controls) | The Air Conditioning Settings. |
-| Climate zone front left / front right | switches (Configuration) | The Air Conditioning Settings. |
+| Climate at unlock, Automatic window heating, Climate zone front left / front right | switches (Controls) | The Air Conditioning Settings. |
 
 **Departure times** (*Read departure times*)
 
@@ -338,18 +336,22 @@ control exists the read-only entity is not created, and one left by an earlier v
 | Control | Read-only entity it replaces |
 |---|---|
 | Climate at unlock, Automatic window heating, Climate zone switches | the binary sensors of the same names |
-| Window Heating, Climate Control switches | window-heating and climatisation binary sensors, the climatisation state sensor |
+| Climate Control (climate entity) | window-heating and climatisation binary sensors, the climatisation state sensor, the *Climate Start Mode* sensor |
 | Charging switch | the *Currently Charging* binary sensor |
 | Charge Target number | the *Charge Target* sensor |
 | Departure Timer switches and Time entities | the timer enabled binary sensors and time sensors |
 
 Without the control (Read-only Mode, or a command the preset does not map) the sensor stays.
 
-**Held values and the controls built on them.** *Desired Temperature* and *Desired Climate Start Mode*
-are stored in Home Assistant, not written to the car. A climate Start sets the app's mode picker and
-dial from them, reads both back, and presses Start only if they match. Two rules keep them honest:
+**Held values on the climate entity.** The climate entity's temperature and preset are stored in Home
+Assistant, not written to the car. A climate Start sets the app's mode picker and dial from them, reads
+both back, and presses Start only if they match. These rules keep them honest:
 
-- A dial changed in the app moves *Desired Temperature* too (the app saves every dial change to the
+- The preset mirrors the app, where the picker is one-shot and falls back to air conditioning after a
+  stop. *Window heating* chosen while off applies to the next Start only: once a window-heating run has
+  been seen and has ended (Stop, the car's timer or the app), the preset returns to *Air conditioning*. A
+  choice never started is kept. While climate runs, the preset shows what runs and cannot be changed.
+- A dial changed in the app moves the held temperature too (the app saves every dial change to the
   car). A value set in Home Assistant applies until the app's dial changes again.
 - While the air conditioning **runs**, changing the temperature moves the app's dial at once (one car
   request per gesture, at most two gestures, so at most 2 °C per change). With the climate off, or
@@ -447,8 +449,8 @@ that cannot be closed) yields no values rather than wrong ones, and the last val
 |---|---|---|---|
 | Charging switch, start/stop charging | Opens the charge sheet and taps Start or Stop once. A greyed-out Start is never pressed | 4.6.4, 4.3.2 | The CTA's disabled hint is checked (Compose can report `enabled=true`); the next poll supplies the real state |
 | Charge Target number | Vehicle Settings → moves the *Charging up to* slider (50–100 %, steps of 10) → Save | 4.6.4, 4.3.2 | Each slider tap is read back from the row's "NN %"; up to 3 taps; unreachable → the app's X cancels, nothing is sent; Save is accepted when the synchronisation ends and the overview returns, or when the Settings row shows the target without a Save button |
-| Climate Control, Window Heating switches, climate entity | Air Conditioning sheet → Start or Stop (mode picker only to switch to or from window-heating-only) | 4.6.4, 4.3.2 | Mode and dial read back before Start; stopping window heating while the air conditioning runs is refused (the app's single Stop ends both); an unknown mode refuses Start |
-| Desired Temperature on a running climate | Moves the dial: one step is a tap on the next label, two steps one slow drag | same | The dial must show °C and be inside 15.5–30 °C; read back after every gesture; more than 2 °C is refused before anything moves |
+| Climate Control (climate entity: on / off, preset) | Air Conditioning sheet → Start or Stop (mode picker only to switch to or from window-heating-only) | 4.6.4, 4.3.2 | Mode and dial read back before Start; off is the app's single Stop, which ends either mode; a preset change while running is refused; an unknown mode refuses Start |
+| Climate temperature on a running climate | Moves the dial: one step is a tap on the next label, two steps one slow drag | same | The dial must show °C and be inside 15.5–30 °C; read back after every gesture; more than 2 °C is refused before anything moves |
 | Climate at unlock, Automatic window heating, Climate zones | Air Conditioning Settings → toggle → Save | 4.6.4 | The page is read back; a value already in place sends nothing |
 | Departure Timer switches | Taps the row's switch (the app sends at once) | 4.6.4, 4.3.2 | Watched for a flip back (the car did not accept it) |
 | Departure Timer time, `set_departure_timer` | The timer's page: time wheels, weekdays, Repeat → Save | 4.6.4 | Saved only when the page shows exactly what was asked; the timer is matched by content; two timers with the same time are refused; `enabled: false` with an edit is refused (Save switches the timer on) |
@@ -604,8 +606,11 @@ Outside the package: `coordinator.py` (poll loop, app-sync loop, persistence of 
 placeholders at startup), `entity_base.py` (availability and `companion_read_at`), `switch.py`, `number.py`,
 `button.py`, `select.py`, `time.py`, `climate.py` (platform), `const.py` (options, limits, id helpers),
 `config_flow.py` (setup and options).
-`number.py` makes only Companion Charge Target a Control; `switch.py` selects Automatic window
-heating and Climate at unlock by key. Climate zones, Read switches, intervals and Reset stay Configuration.
+`number.py` makes only Companion Charge Target a Control; `switch.py` puts the four Air Conditioning
+Settings switches in Controls by key. Read switches, intervals and the refresh/reset buttons stay Configuration.
+`climate.py` holds `VagCompanionClimate`: the presets, the restore of the held mode and temperature, and the
+one-shot window-heating fallback. `companion/entity_twins.py` lists the climate entities it replaced
+(`RETIRED_COMPANION_CLIMATE`), which are not created and are removed from the registry.
 
 ### 3.3 The read pipeline
 
@@ -693,7 +698,7 @@ exception); 60 s minimum gap; language/limit-detection prerequisite; overview on
 | State | Where | Lifetime |
 |---|---|---|
 | Request-limit pause (`companion_rate_limit_until`) and last command time (`companion_last_write_at`) | config entry data | survives restarts |
-| Held *Desired Temperature* and start mode, with the dial they were held against | restored entity state | survives restarts |
+| Held climate temperature and start mode, with the dial they were held against | restored state of the climate entity | survives restarts |
 | Vehicle snapshot (last values, last vehicle sync time) | coordinator | restored on reload and start until the first read |
 | Nav cache | memory | 24 h without a successful read, then the entity is unavailable |
 | Per-field read times (`companion_nav_read_at`) | persisted with the vehicle snapshot | carried with restored values |
