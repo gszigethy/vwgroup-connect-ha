@@ -300,6 +300,9 @@ All three are in the device's Configuration section: they maintain the data and 
   `vw_group_connect_settings_…` ids, depending on when they were created. They are the same device.
 - Cloud-only diagnostics (push event, API observer findings, wake count today) are not created on a
   companion entry.
+- Where the companion needs another name or section for a shared entity, it uses a companion subclass
+  with the same unique id: `VagCompanionRefreshButton` (`button.py`) is the shared refresh button with
+  the name *Refresh app screen data* and the Configuration category.
 
 ### 2.4 How the entities depend on each other
 
@@ -599,7 +602,7 @@ device so most of it is tested without hardware.
 
 Outside the package: `coordinator.py` (poll loop, app-sync loop, persistence of the pause, force refresh,
 placeholders at startup), `entity_base.py` (availability and `companion_read_at`), `switch.py`, `number.py`,
-`button.py`, `select.py`, `time.py`, `climate.py` (platform), `const.py` (options, limits, id helpers),
+`button.py` (the three companion buttons, all Configuration), `select.py`, `time.py`, `climate.py` (platform), `const.py` (options, limits, id helpers),
 `config_flow.py` (setup and options).
 
 ### 3.3 The read pipeline
