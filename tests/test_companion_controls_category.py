@@ -31,8 +31,6 @@ def test_climate_setting_category(key: str, field: str, command_id: str, icon: s
         coordinator, "VIN1", key, field, command_id, icon,
     )
 
-    expected = (
-        None if key in {"window_heating_auto_switch", "climate_at_unlock_switch"}
-        else EntityCategory.CONFIG
-    )
-    assert entity.entity_category is expected
+    # All four Air Conditioning Settings switches are Controls: the zones
+    # change what the next climate start does.
+    assert entity.entity_category is None

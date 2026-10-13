@@ -3,11 +3,13 @@
 """Companion climate entity: one place for on/off, temperature and the mode."""
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.components.climate import HVACMode
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from custom_components.vag_connect.climate import (
     PRESET_AIR_CONDITIONING,
@@ -135,10 +137,6 @@ async def test_turn_on_with_window_heating_chosen_uses_the_held_mode():
     assert client.climate_targets.window_heating_only is True
 
 
-from types import SimpleNamespace
-from unittest.mock import patch
-
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 
 def _read(client, value):

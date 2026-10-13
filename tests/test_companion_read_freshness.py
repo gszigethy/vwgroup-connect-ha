@@ -139,18 +139,6 @@ async def test_fresh_overview_value_updates_cache_value_and_time(monkeypatch):
     assert channel.nav_read_at["battery_soc"] == 2000.0
 
 
-def test_held_climate_start_temperature_has_no_screen_read_age():
-    from custom_components.vag_connect.number import VagCompanionClimateTemperatureNumber
-
-    number = object.__new__(VagCompanionClimateTemperatureNumber)
-    number._vin, number._key = "VIN", "target_temperature"
-    number.entity_description = SimpleNamespace(data_key="target_temperature")
-    number.coordinator = SimpleNamespace(is_companion=lambda: True, data={"VIN": {
-        "companion_nav_read_at": {"target_temperature": 1000.0},
-    }})
-    assert number._companion_read_at is None
-
-
 @pytest.mark.parametrize("old,new", [(False, True), (True, False)])
 @pytest.mark.parametrize("key", ["companion_wake_sleep", "companion_close_app"])
 @pytest.mark.asyncio

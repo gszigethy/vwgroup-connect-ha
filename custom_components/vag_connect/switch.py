@@ -10,6 +10,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .companion.entity_twins import drop_retired_climate
 from .coordinator import VagConnectCoordinator
 from .entity_base import VagConnectEntity, register_dynamic_spawner
 
@@ -50,10 +51,14 @@ async def async_setup_entry(
         entities: list = []
         if _supported(vin, "command_lock"):
             entities.append(VagLockSwitch(coordinator, vin))
-        if _supported(vin, "command_start_climate"):
-            entities.append(VagClimatisationSwitch(coordinator, vin))
-        if _supported(vin, "command_start_window_heating"):
-            entities.append(VagWindowHeatingSwitch(coordinator, vin))
+        if coordinator.is_companion():
+            # The climate entity runs both (its presets); see entity_twins.
+            drop_retired_climate(hass, coordinator, "switch", vin)
+        else:
+            if _supported(vin, "command_start_climate"):
+                entities.append(VagClimatisationSwitch(coordinator, vin))
+            if _supported(vin, "command_start_window_heating"):
+                entities.append(VagWindowHeatingSwitch(coordinator, vin))
         if _supported(vin, "command_start_ventilation"):
             entities.append(VagVentilationSwitch(coordinator, vin))
         # Aux heating (fuel-fired Standheizung). Gated like every other switch:
@@ -464,6 +469,8 @@ COMPANION_CLIMATE_SETTINGS: tuple[tuple[str, str, str, str], ...] = (
 _COMPANION_CLIMATE_CONTROL_KEYS = frozenset({
     "window_heating_auto_switch",
     "climate_at_unlock_switch",
+    "climate_zone_front_left_switch",
+    "climate_zone_front_right_switch",
 })
 
 

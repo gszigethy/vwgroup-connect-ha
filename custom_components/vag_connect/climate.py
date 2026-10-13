@@ -188,7 +188,7 @@ class VagCompanionClimate(VagClimate, RestoreEntity):
     what runs and cannot be changed. Same unique id as the shared entity.
     """
 
-    _attr_preset_modes = [PRESET_AIR_CONDITIONING, PRESET_WINDOW_HEATING]
+    _attr_preset_modes: list[str] = [PRESET_AIR_CONDITIONING, PRESET_WINDOW_HEATING]
 
     def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
         super().__init__(coordinator, vin)
@@ -267,12 +267,12 @@ class VagCompanionClimate(VagClimate, RestoreEntity):
         return PRESET_AIR_CONDITIONING
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
-        if preset_mode not in self.preset_modes:
+        if preset_mode not in self._attr_preset_modes:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="climate_preset_not_supported",
                 translation_placeholders={
-                    "preset": str(preset_mode), "presets": ", ".join(self.preset_modes),
+                    "preset": str(preset_mode), "presets": ", ".join(self._attr_preset_modes),
                 },
             )
         if self._running():
