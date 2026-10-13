@@ -45,7 +45,10 @@ async def async_setup_entry(
     def _build_for_vin(vin: str, vehicle: dict) -> list:  # noqa: ARG001
         entities: list = []
         # Refresh button never gates — coordinator-level operation.
-        entities.append(VagRefreshButton(coordinator, vin))
+        if coordinator.is_companion():
+            entities.append(VagCompanionRefreshButton(coordinator, vin))
+        else:
+            entities.append(VagRefreshButton(coordinator, vin))
         # v2.26.0 — companion (ADB) entries have no portal, so they must NOT
         # get the EU-Data-Act request button (it would call a portal that
         # isn't there). Instead they get a reset button to clear a stuck
@@ -134,6 +137,18 @@ class VagRefreshButton(VagConnectEntity, ButtonEntity):
         await self.coordinator.async_request_refresh()
 
 
+class VagCompanionRefreshButton(VagRefreshButton):
+    """The companion's Refresh: re-reads the app's screens, nothing reaches the car.
+
+    Same unique id as the shared Refresh button, so entity ids are kept. It
+    maintains the data rather than using the car, so it sits in the device's
+    Configuration section, next to the reset button.
+    """
+
+    _attr_translation_key = "companion_refresh_button"
+    _attr_entity_category = EntityCategory.CONFIG
+
+
 class VagWakeButton(VagConnectEntity, ButtonEntity):
     """Wake the vehicle from sleep."""
 
@@ -213,6 +228,7 @@ class VagCompanionForceRefreshButton(VagConnectEntity, ButtonEntity):
 
     _attr_translation_key = "companion_force_refresh_button"
     _attr_icon = "mdi:car-clock"
+    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
         super().__init__(coordinator, vin, "force_refresh_button")

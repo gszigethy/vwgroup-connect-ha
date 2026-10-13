@@ -2328,11 +2328,14 @@
       "historical_export_button": {
         "name": "Richiedi esportazione storica"
       },
+      "companion_refresh_button": {
+        "name": "Aggiorna dati della schermata dell'app"
+      },
       "companion_reset_button": {
         "name": "Reimposta connessione companion"
       },
       "companion_force_refresh_button": {
-        "name": "Forza aggiornamento del veicolo"
+        "name": "Aggiorna dati del veicolo"
       }
     },
     "climate": {

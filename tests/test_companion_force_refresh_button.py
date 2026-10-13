@@ -61,7 +61,7 @@ class TestSpawn:
     def test_read_only_entry_does_not(self) -> None:
         names = _buttons(_coord(read_only=True))
         assert "VagCompanionForceRefreshButton" not in names
-        assert "VagRefreshButton" in names
+        assert "VagCompanionRefreshButton" in names
 
 
 class TestPress:
@@ -112,3 +112,53 @@ class TestPress:
         coord.async_companion_force_refresh = AsyncMock()
         await VagCompanionForceRefreshButton(coord, "VINX").async_press()
         coord.async_companion_force_refresh.assert_awaited_once()
+
+
+class TestPlacementAndNames:
+    """The companion's two refresh buttons sit in Configuration, next to the
+    reset button, under names that say what each refreshes."""
+
+    def _entities(self, coord) -> dict:
+        from custom_components.vag_connect.button import async_setup_entry
+
+        entry = MagicMock()
+        entry.data = coord.entry.data
+        entry.runtime_data = coord
+        added: list = []
+        asyncio.run(async_setup_entry(MagicMock(), entry, added.extend))
+        return {type(e).__name__: e for e in added}
+
+    def test_all_three_companion_buttons_are_config(self) -> None:
+        from homeassistant.const import EntityCategory
+
+        found = self._entities(_coord())
+        for name in (
+            "VagCompanionRefreshButton",
+            "VagCompanionForceRefreshButton",
+            "VagCompanionResetButton",
+        ):
+            assert found[name].entity_category is EntityCategory.CONFIG, name
+        assert "VagRefreshButton" not in found
+
+    def test_companion_refresh_keeps_the_shared_unique_id(self) -> None:
+        from custom_components.vag_connect.button import (
+            VagCompanionRefreshButton,
+            VagRefreshButton,
+        )
+
+        coord = _coord()
+        assert (
+            VagCompanionRefreshButton(coord, "VINX").unique_id
+            == VagRefreshButton(coord, "VINX").unique_id
+        )
+
+    def test_names(self) -> None:
+        import json
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[1] / "custom_components" / "vag_connect"
+        for path in (root / "strings.json", root / "translations" / "en.json"):
+            names = json.loads(path.read_text(encoding="utf-8"))["entity"]["button"]
+            assert names["companion_refresh_button"]["name"] == "Refresh app screen data"
+            assert names["companion_force_refresh_button"]["name"] == "Refresh vehicle data"
+            assert names["refresh_button"]["name"] == "Refresh Data"
