@@ -2340,7 +2340,15 @@
     },
     "climate": {
       "climate": {
-        "name": "Ilmastointi"
+        "name": "Ilmastointi",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "air_conditioning": "Ilmastointi",
+              "window_heating": "Vain ikkunalämmitys"
+            }
+          }
+        }
       }
     },
     "device_tracker": {
@@ -2877,6 +2885,12 @@
     },
     "hvac_mode_not_supported": {
       "message": "HVAC-tilaa {hvac_mode} ei tueta; käytä jotakin näistä: {modes}. Mitään ei lähetetty."
+    },
+    "climate_preset_while_running": {
+      "message": "Pysäytä ilmastointi ensin: tilaa ei voi vaihtaa sen ollessa käynnissä. Mitään ei lähetetty."
+    },
+    "climate_preset_not_supported": {
+      "message": "Tilaa {preset} ei tueta; käytä jotakin näistä: {presets}. Mitään ei lähetetty."
     }
   },
   "selector": {

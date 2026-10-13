@@ -2340,7 +2340,15 @@
     },
     "climate": {
       "climate": {
-        "name": "Klimatyzacja postojowa"
+        "name": "Klimatyzacja postojowa",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "air_conditioning": "Klimatyzacja",
+              "window_heating": "Tylko ogrzewanie szyb"
+            }
+          }
+        }
       }
     },
     "device_tracker": {
@@ -2877,6 +2885,12 @@
     },
     "hvac_mode_not_supported": {
       "message": "Tryb HVAC {hvac_mode} nie jest obsługiwany; użyj jednego z: {modes}. Nic nie zostało wysłane."
+    },
+    "climate_preset_while_running": {
+      "message": "Najpierw zatrzymaj klimatyzację: trybu nie można zmienić podczas pracy. Nic nie zostało wysłane."
+    },
+    "climate_preset_not_supported": {
+      "message": "Tryb {preset} nie jest obsługiwany; użyj jednego z: {presets}. Nic nie zostało wysłane."
     }
   },
   "selector": {

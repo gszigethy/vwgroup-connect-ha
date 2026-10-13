@@ -114,7 +114,8 @@ def test_an_entry_from_an_earlier_version_is_removed():
 
 def test_the_read_of_a_held_value_is_a_diagnostic():
     keys = _added(sn, _coordinator())
-    for key in ("target_temperature", "climate_start_mode"):
-        assert keys[key].entity_description.entity_category is EntityCategory.DIAGNOSTIC
+    assert keys["target_temperature"].entity_description.entity_category is EntityCategory.DIAGNOSTIC
+    # The start mode is the climate entity's preset now: no sensor for it.
+    assert "climate_start_mode" not in keys
     other = _added(sn, _coordinator(companion=False))
     assert other["target_temperature"].entity_description.entity_category is None

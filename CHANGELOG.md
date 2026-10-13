@@ -42,7 +42,7 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
-- **Volkswagen Companion (ADB): VW app 4.6.4 mapping, controls, more reads and safety gates.** Developed against a Tiguan eHybrid (reads verified on the car) in [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha) (fork releases 4.11.0-1 to 4.13.0-2; PR numbers below refer to that repository). Thanks @gszigethy; app captures from @plainmad (Mk8 Golf GTE), @kgroshert (ID.4, e-up!) and @WEZANGO (CUPRA Born) ([#968](https://github.com/its-me-prash/vwgroup-connect-ha/issues/968)). Functional and technical design: [docs/COMPANION.md](docs/COMPANION.md).
+- **Volkswagen Companion (ADB): VW app 4.6.4 mapping, controls, more reads and safety gates.** Developed against a Tiguan eHybrid (reads verified on the car) in [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha) (fork releases 4.11.0-1 to 4.13.0-4, plus the fixes from this PR's review; PR numbers below refer to that repository). Thanks @gszigethy; app captures from @plainmad (Mk8 Golf GTE), @kgroshert (ID.4, e-up!) and @WEZANGO (CUPRA Born) ([#968](https://github.com/its-me-prash/vwgroup-connect-ha/issues/968)). Functional and technical design: [docs/COMPANION.md](docs/COMPANION.md).
 
 ### Hinzugefügt / Added
 
@@ -97,7 +97,7 @@ The Companion channel drives the VW app on a spare Android phone over ADB and re
   - **Charging Mode** sensor, from the range sheet's charging method (gszigethy/vwgroup-connect-ha#13). It becomes unavailable 24 h after its last read (gszigethy/vwgroup-connect-ha#90).
 - **Air Conditioning sheet:**
   - Whether climatisation is running, window heating, remaining time, target and outside temperature.
-  - **Climate Start Mode**: whether the app's Start starts the air conditioning or the window heating.
+  - **Climate mode**: whether the app's Start starts the air conditioning or the window heating, shown as the climate entity's preset (a sensor in Read-only Mode).
 - **Air Conditioning Settings:**
   - Climate at unlock, automatic window heating, air conditioning on battery.
   - **Climate zones** front left and front right.
@@ -137,8 +137,7 @@ Every control starts from the overview and checks the result on screen.
 |---|---|---|
 | Start / Stop charging | Taps the charge sheet's Start or Stop. A greyed-out Start is never pressed. | gszigethy/vwgroup-connect-ha#49 |
 | Charge limit | 50–100 % in 10 % steps. Moves the Settings slider and presses Save only when the screen shows exactly the requested value; otherwise cancels. | gszigethy/vwgroup-connect-ha#49 |
-| Climate on / off | Start or Stop from the Air Conditioning sheet, including window-heating-only Start and Stop. | |
-| **Desired Climate Start Mode** and **Desired Temperature** | Values held in Home Assistant that survive a restart. Start sets the app's mode picker and dial, reads both back, and presses Start only if they match. A dial changed in the app updates the slider. | gszigethy/vwgroup-connect-ha#40, gszigethy/vwgroup-connect-ha#64 |
+| **Climate entity** | On/off, target temperature 15.5–30 °C (LO–HI) and the presets *Air conditioning* and *Window heating*. While off, the preset and temperature are held in Home Assistant, survive a restart and send nothing. Turning on sets the app's mode picker and dial, reads both back, and presses Start only if they match; turning off is the app's single Stop. Window heating is one-shot, as in the app: after a run the preset returns to *Air conditioning*. The preset cannot change while climate runs. A dial changed in the app updates the entity. | gszigethy/vwgroup-connect-ha#40, gszigethy/vwgroup-connect-ha#64, gszigethy/vwgroup-connect-ha#103 |
 | **Temperature change on a running climate** | While the air conditioning runs, a change moves the dial of the Air Conditioning sheet and reads it back; the app sends the new temperature to the car. One step is a tap on the next label, 1 °C is one slow drag. A change takes at most two moves (2 °C, two car requests); a larger change is refused before anything moves. With the climate off, or on window heating alone, a change is stored for the next Start. | gszigethy/vwgroup-connect-ha#73, gszigethy/vwgroup-connect-ha#76 |
 | Climate Settings switches | Auxiliary air conditioning, automatic window heating, zone front left and front right. Taps Save and reads the page back; a value already in place sends nothing. | gszigethy/vwgroup-connect-ha#41 |
 | Departure timers (switch, time and `set_departure_timer`) | On/off, time, days and Repeat. A timer is found by its content, not its row; two timers with the same time are refused. Saves only when the page shows exactly what was asked. | gszigethy/vwgroup-connect-ha#42, gszigethy/vwgroup-connect-ha#55 |
@@ -146,7 +145,7 @@ Every control starts from the overview and checks the result on screen.
 | **Refresh app screen data** button | Re-reads the app's screens now; the car is not asked for new data. With *Refresh vehicle data* and *Reset companion connection* it sits in the device's Configuration section, as all three maintain the data rather than operate the car. Cloud entries keep *Refresh Data*. | gszigethy/vwgroup-connect-ha#101 |
 | **Vehicle sync interval** | Runs *Synchronise now* on a timer. Off by default, minimum 60 min. The interval counts from the newest of the last sync attempt, the car's last data and the last command tap, so a car that sent data on its own (for example while driven) gets no extra tap. After a restart an overdue sync runs at once; a recent one is never repeated. Each sync wakes the car. | gszigethy/vwgroup-connect-ha#54, gszigethy/vwgroup-connect-ha#100 |
 
-Charge limit, automatic window heating and climate at unlock sit in the device's Controls section; cloud entries keep the charge limit in Configuration (gszigethy/vwgroup-connect-ha#102).
+Charge limit, automatic window heating, climate at unlock and the climate zones sit in the device's Controls section; cloud entries keep the charge limit in Configuration (gszigethy/vwgroup-connect-ha#102).
 
 Lock and unlock are deliberately not offered. They would need the S-PIN over ADB, the slider has no reliable target, and a wrong tap risks the opposite command or an S-PIN lockout (gszigethy/vwgroup-connect-ha#36).
 
@@ -180,7 +179,8 @@ VW app 4.6.4 is supported (gszigethy/vwgroup-connect-ha#28, gszigethy/vwgroup-co
 - **App string table:** fetched only when the app version changes. Without it, commands and sync are refused unless the UI language can be confirmed (gszigethy/vwgroup-connect-ha#58).
 - **One entity per value (breaking for automations that use the removed sensors):**
   - The read-only sensor and binary sensor that repeated a control's value are removed. This covers climate at unlock, window heating, the zones, climatisation, charging, charge target and the departure timers.
-  - The app's own target temperature and start mode readings move to *Diagnostic* (gszigethy/vwgroup-connect-ha#65).
+  - The app's own target temperature and start mode readings are shown by the climate entity (gszigethy/vwgroup-connect-ha#65, gszigethy/vwgroup-connect-ha#103).
+  - Climate runs from the climate entity alone. The climate switch is no longer created on companion entries; use the climate entity's on/off. Its registry entry is removed at setup (gszigethy/vwgroup-connect-ha#103).
 - **Cloud-only diagnostics removed from companion entries:** push event, API observer findings and wake count today (gszigethy/vwgroup-connect-ha#66).
 - **Data source label:** shows the companion transport (`companion_adb`) instead of "Volkswagen EU (WeConnect ID)" (gszigethy/vwgroup-connect-ha#67).
 - **Companion entity ids carry "adb"** (for example `sensor.tiguan_adb_battery_level`, named "Tiguan Battery Level"), so companion and EU Data Act entities can be told apart. Existing entity ids are unchanged (gszigethy/vwgroup-connect-ha#68, gszigethy/vwgroup-connect-ha#81).
@@ -355,7 +355,6 @@ VW app 4.6.4 is supported (gszigethy/vwgroup-connect-ha#28, gszigethy/vwgroup-co
   - An unrecognised mode refuses Start.
   - Error messages no longer quote screen text (gszigethy/vwgroup-connect-ha#52).
 - **An interrupted walk** discards any setting it left unsaved instead of sending it with the next command (gszigethy/vwgroup-connect-ha#53).
-- **The window heating switch** shows off while the air conditioning runs, instead of unknown.
 - **Departure timers** that were not read show unknown, not off (gszigethy/vwgroup-connect-ha#10).
 - **Vehicle Settings** is read even when the charge target is already known (gszigethy/vwgroup-connect-ha#9).
 

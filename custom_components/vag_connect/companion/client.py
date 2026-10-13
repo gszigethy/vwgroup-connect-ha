@@ -336,8 +336,9 @@ class CompanionClient:
     def climate_targets(self) -> ClimateTargets:
         """The mode and temperature the next climate Start applies.
 
-        Set by the HA select / number (restored across restarts by those
-        entities); never written by a poll. Storing them sends nothing.
+        Set by the climate entity (restored across restarts by it); a poll
+        only replaces the temperature when the dial was changed in the app.
+        Storing them sends nothing.
         """
         targets = self.__dict__.get("_climate_targets")
         if targets is None:

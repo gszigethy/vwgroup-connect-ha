@@ -25,7 +25,7 @@ _TWINS: dict[tuple[str, str], tuple[str, bool]] = {
     ("binary_sensor", "climate_zone_front_right"): (
         "command_set_climate_zone_front_right", False,
     ),
-    # Window heating and climate switches (the climate entity shows the same).
+    # Window heating and climate running state (the climate entity shows the same).
     ("binary_sensor", "window_heating_front"): ("command_start_window_heating", False),
     ("binary_sensor", "climatisation_active"): ("command_start_climate", False),
     ("sensor", "climatisation_state"): ("command_start_climate", False),
@@ -52,6 +52,19 @@ _CLOUD_ONLY: frozenset[tuple[str, str]] = frozenset({
     ("event", "push_event"),
     ("sensor", "api_observer_findings"),
     ("sensor", "wake_count_today"),
+})
+
+
+# Climate entities the Companion's climate entity replaced: the climate and
+# window heating switches, the start mode select and sensor, and the desired
+# temperature number. Not created on a Companion entry, and an entry left by
+# an earlier version is removed.
+RETIRED_COMPANION_CLIMATE: frozenset[tuple[str, str]] = frozenset({
+    ("switch", "climatisation_switch"),
+    ("switch", "window_heating_switch"),
+    ("select", "companion_climate_start_mode"),
+    ("number", "target_temperature"),
+    ("sensor", "climate_start_mode"),
 })
 
 
@@ -91,3 +104,12 @@ def remove_twin(hass: HomeAssistant, platform: str, vin: str, key: str) -> None:
     )
     if entity_id is not None:
         registry.async_remove(entity_id)
+
+
+def drop_retired_climate(hass: HomeAssistant, coordinator: Any, platform: str, vin: str) -> None:
+    """Companion: remove the registry entries of the entities the climate entity replaced."""
+    if not coordinator.is_companion():
+        return
+    for plat, key in RETIRED_COMPANION_CLIMATE:
+        if plat == platform:
+            remove_twin(hass, plat, vin, key)

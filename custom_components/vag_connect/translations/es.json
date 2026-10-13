@@ -2340,7 +2340,15 @@
     },
     "climate": {
       "climate": {
-        "name": "Climatización"
+        "name": "Climatización",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "air_conditioning": "Aire acondicionado",
+              "window_heating": "Solo calefacción de lunas"
+            }
+          }
+        }
       }
     },
     "device_tracker": {
@@ -2877,6 +2885,12 @@
     },
     "hvac_mode_not_supported": {
       "message": "El modo HVAC {hvac_mode} no es compatible; usa uno de: {modes}. No se ha enviado nada."
+    },
+    "climate_preset_while_running": {
+      "message": "Detén primero la climatización: el modo no puede cambiar mientras funciona. No se envió nada."
+    },
+    "climate_preset_not_supported": {
+      "message": "El modo {preset} no es compatible; usa uno de: {presets}. No se envió nada."
     }
   },
   "selector": {
