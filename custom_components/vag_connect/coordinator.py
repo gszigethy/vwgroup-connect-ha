@@ -7403,10 +7403,14 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         # Fix #32: Defensive is_charging reset.
         # When plug is disconnected, charging MUST be False regardless of API state.
         # Prevents is_charging staying stuck on "True" after charging ends.
-        # Only a KNOWN disconnect counts: a channel that cannot see the plug
-        # (the companion app screens never show it) leaves it None, and a None
-        # here used to force a live charging session to "not charging".
-        if data.get("plug_connected") is False and data.get("is_charging"):
+        # On a companion entry only a KNOWN disconnect counts: the app screens
+        # never show the plug, so it stays None there, and a None used to force
+        # a live charging session to "not charging". Cloud channels keep the
+        # original rule, so a poll without the plug block still clears a stuck
+        # is_charging.
+        _plug = data.get("plug_connected")
+        _unplugged = _plug is False if self.is_companion() else not _plug
+        if _unplugged and data.get("is_charging"):
             data["is_charging"] = False
             _LOGGER.debug(
                 "is_charging reset to False — plug not connected (defensive fix #32)"
