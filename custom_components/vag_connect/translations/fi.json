@@ -2313,11 +2313,14 @@
       "historical_export_button": {
         "name": "Pyydä historiatietojen vienti"
       },
+      "companion_refresh_button": {
+        "name": "Päivitä sovelluksen näytön tiedot"
+      },
       "companion_reset_button": {
         "name": "Nollaa companion-yhteys"
       },
       "companion_force_refresh_button": {
-        "name": "Pakota ajoneuvon päivitys"
+        "name": "Päivitä ajoneuvon tiedot"
       }
     },
     "climate": {

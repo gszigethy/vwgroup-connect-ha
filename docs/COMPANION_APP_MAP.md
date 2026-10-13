@@ -61,7 +61,7 @@ All three are also read:
 - every 12 hours, well before the 24-hour expiry above;
 - driving data and the parking position, every 6 hours while the Driving data
   tile is not on the overview;
-- on **Refresh data**, and on the read that follows **Force vehicle refresh**.
+- on **Refresh app screen data**, and on the read that follows **Refresh vehicle data**.
 
 Vehicle Settings shares the health switch but holds the charge limit, which can
 change in the app at any time, so it is still read on every poll. Whether a
@@ -171,7 +171,7 @@ Nav read `charging_locations`, controlled by **Read charging locations**
 app 4.6.4 captures in `tests/fixtures/companion_charging_locations/`; 4.3.2
 has not been verified. It shares the Departure times tile with
 `departure_times`, so both opt-ins use one trip into that screen. It refreshes
-when a trip ends, every 12 hours, and on Refresh data / Force vehicle refresh.
+when a trip ends, every 12 hours, and on Refresh app screen data / Refresh vehicle data.
 
 Up to five locations are created in the car's infotainment. Slots `N = 1..5`
 follow the list's top-to-bottom order; timers `M = 1..3` follow their page's
@@ -282,7 +282,7 @@ units; durations by `duration_hours` / `duration_minutes`.
 | Charging up to (50–100 %) | `80%` | `target_soc` + Charge Target number | — | Mapped (read and set) |
 | Reduced AC charging current | off | — (`vw_eu` has amps, not on/off) | `vehiclesettingsscreen_reducedchargingspeed` | Not mapped |
 | Automatically release AC connector | on | `auto_unlock_when_charged` → binary sensor | `vehiclesettingsscreen_automaticplugunlock` | Mapped (#9) |
-| Synchronise now | button | `command_sync_vehicle` → App sync interval number, Force vehicle refresh button | — | Mapped (command); the button syncs once, then re-reads the app after 3 minutes |
+| Synchronise now | button | `command_sync_vehicle` → App sync interval number, Refresh vehicle data button | — | Mapped (command); the button syncs once, then re-reads the app after 3 minutes |
 | Plug & Charge, users, notifications, contracts | links | — | — | Not mapped (account) |
 
 ## Other tabs

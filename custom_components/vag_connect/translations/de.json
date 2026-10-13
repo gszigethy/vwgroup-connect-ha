@@ -2313,11 +2313,14 @@
       "historical_export_button": {
         "name": "Historischen Export anfragen"
       },
+      "companion_refresh_button": {
+        "name": "App-Bildschirmdaten aktualisieren"
+      },
       "companion_reset_button": {
         "name": "Companion-Verbindung zurücksetzen"
       },
       "companion_force_refresh_button": {
-        "name": "Fahrzeugaktualisierung erzwingen"
+        "name": "Fahrzeugdaten aktualisieren"
       }
     },
     "climate": {

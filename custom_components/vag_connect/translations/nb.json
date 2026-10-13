@@ -2313,11 +2313,14 @@
       "historical_export_button": {
         "name": "Be om historisk eksport"
       },
+      "companion_refresh_button": {
+        "name": "Oppdater data fra app-skjermen"
+      },
       "companion_reset_button": {
         "name": "Tilbakestill companion-tilkobling"
       },
       "companion_force_refresh_button": {
-        "name": "Tving oppdatering av kjøretøy"
+        "name": "Oppdater kjøretøydata"
       }
     },
     "climate": {

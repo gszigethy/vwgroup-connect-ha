@@ -161,7 +161,7 @@ supersedes them as the place to start; the others stay as references.
 
 **Controls** (each one taps the app and is verified on screen): start/stop charging, charge limit,
 start/stop climate and window heating, desired temperature and start mode, four Climate Settings
-switches, departure timers (switch, time, days, Repeat), *Force vehicle refresh*, and an optional
+switches, departure timers (switch, time, days, Repeat), *Refresh vehicle data*, and an optional
 *Vehicle sync interval*. All controls are listed in [2.6](#26-commands).
 
 ### 2.2 Setting it up
@@ -285,9 +285,11 @@ share preview of the app's map, and nothing is shared.
 
 | Entity | What it does |
 |---|---|
-| Refresh Data | Reads now, including every detail screen that is otherwise gated. |
-| Force vehicle refresh | Taps *Synchronise now* once and re-reads the app 3 minutes later ([2.5](#25-polling-and-refresh-behaviour)). Wakes the car. |
+| Refresh app screen data | Reads now, including every detail screen that is otherwise gated. |
+| Refresh vehicle data | Taps *Synchronise now* once and re-reads the app 3 minutes later ([2.5](#25-polling-and-refresh-behaviour)). Wakes the car. |
 | Reset companion connection | Clears the failure cooldown and the request-limit pause and reads at once. |
+
+All three are in the device's Configuration section: they maintain the data and do not operate the car.
 
 **Naming and ids**
 
@@ -303,6 +305,9 @@ Moving the three controls out of Configuration changes no names, unique ids or e
   `vw_group_connect_settings_…` ids, depending on when they were created. They are the same device.
 - Cloud-only diagnostics (push event, API observer findings, wake count today) are not created on a
   companion entry.
+- Where the companion needs another name or section for a shared entity, it uses a companion subclass
+  with the same unique id: `VagCompanionRefreshButton` (`button.py`) is the shared refresh button with
+  the name *Refresh app screen data* and the Configuration category.
 
 ### 2.4 How the entities depend on each other
 
@@ -377,13 +382,17 @@ Target* as the vehicle-wide limit.
 **The synchronisation cluster.** Five things belong together:
 
 - *Vehicle sync interval* (0 = off, 60–240 min in steps of 5) taps *Synchronise now* on a timer. The
-  first sync waits a full interval, so a Home Assistant restart never wakes the car by itself.
-- *Force vehicle refresh* is one such tap on demand. Both restart the same interval clock, so the two
+  interval counts from the newest of the last sync attempt, the car's last data (*Last vehicle sync*) and
+  the last command tap. A car that sent data on its own, for example while driven, therefore gets no tap
+  until a full interval after that data. The last two survive a restart, so after a Home Assistant restart
+  an overdue sync runs right away, a recent one is waited out, and a restart never wakes the car by itself.
+  With neither known (a new entry), the first sync waits a full interval.
+- *Refresh vehicle data* is one such tap on demand. Both restart the same interval clock, so the two
   never wake the car minutes apart.
 - *Last vehicle sync* is the timestamp of the car's data, inferred from the app's age text. It is also what the walk gates
   watch ([2.5](#25-polling-and-refresh-behaviour)): a sync counts as "new car data".
 - *App request status* is the outcome of the last sync attempt or the pause ([2.7](#27-the-cars-request-budget)).
-- *Refresh Data* re-reads but does not sync.
+- *Refresh app screen data* re-reads but does not sync.
 
 **The pause cluster.** A request-limit alert in the app sets a 12 h pause. During it every control and every sync is refused (a pause identified as the local power-budget alert allows one probe sync per 4 h), and *App request status* reads *restricted*. The pause ends when the car sends new data after the alert (it was started or woke up) or the overview shows a new trip, at its deadline, on *Reset companion connection*, or when a permitted probe is accepted.
 Reads continue, but see [5](#5-quirks-of-the-vw-app) for what the app shows meanwhile.
@@ -419,10 +428,10 @@ alert or nag screen; confirm the overview is on screen; parse; then run the due 
 | Driving data, parking position, charging locations | when a **trip ended**: the overview's Driving data tile text changed; or the car sent new data and the electric or petrol range dropped while not charging (this catches two identical trips) |
 
 Every gated walk **also** runs: on the first poll after a start or reload, when its switch is turned on,
-every 12 hours, on *Refresh Data*, and on the read that follows *Force vehicle refresh*. Trip walks also
+every 12 hours, on *Refresh app screen data*, and on the read that follows *Refresh vehicle data*. Trip walks also
 run every 6 hours while the Driving data tile is not on the overview.
 
-**Sync and read-back.** An accepted scheduled sync is followed 3 minutes later by an ordinary refresh (the car needs time to answer); *Force vehicle refresh* additionally forces every opted-in detail walk at that read. A refused sync is read at once so *App request status* shows why.
+**Sync and read-back.** An accepted scheduled sync is followed 3 minutes later by an ordinary refresh (the car needs time to answer); *Refresh vehicle data* additionally forces every opted-in detail walk at that read. A refused sync is read at once so *App request status* shows why.
 
 **When the phone fails.** A failure in the initial read stage (connect, foreground, version, first dump: phone off, ADB gone, secured screen) starts a cooldown of 30 minutes that doubles per consecutive failure up to 6 hours; during it the poll does nothing and is not counted as a failed poll. Failures inside a detail walk are skipped without a cooldown. A broken ADB connection ("Broken pipe") is reopened on the next read. *Reset
 companion connection* clears the cooldown. An overview that cannot be recognised (a stray screen, a nag
@@ -452,7 +461,7 @@ that cannot be closed) yields no values rather than wrong ones, and the last val
 | Climate at unlock, Automatic window heating, Climate zones | Air Conditioning Settings → toggle → Save | 4.6.4 | The page is read back; a value already in place sends nothing |
 | Departure Timer switches | Taps the row's switch (the app sends at once) | 4.6.4, 4.3.2 | Watched for a flip back (the car did not accept it) |
 | Departure Timer time, `set_departure_timer` | The timer's page: time wheels, weekdays, Repeat → Save | 4.6.4 | Saved only when the page shows exactly what was asked; the timer is matched by content; two timers with the same time are refused; `enabled: false` with an edit is refused (Save switches the timer on) |
-| Force vehicle refresh, Vehicle sync interval | Vehicle Settings → *Synchronise now* | 4.6.4, 4.3.2 | A power-budget pause allows one probe per 4 h; a backend pause allows none |
+| Refresh vehicle data, Vehicle sync interval | Vehicle Settings → *Synchronise now* | 4.6.4, 4.3.2 | A power-budget pause allows one probe per 4 h; a backend pause allows none |
 
 **How a command runs.** One command at a time, sharing the screen lock with polls. The channel brings
 the app forward, refreshes the version gate, passes the gate above, taps along the shortest path, reads
@@ -600,9 +609,10 @@ device so most of it is tested without hardware.
 | `entity_twins.py` | The control-versus-sensor rules; the list of cloud-only diagnostics. |
 | `transport.py`, `addon_transport.py`, `relay_transport.py`, `relay.py` | The three ways to reach the phone ([3.9](#39-transports)). |
 
-Outside the package: `coordinator.py` (poll loop, app-sync loop, persistence of the pause, force refresh,
+Outside the package: `coordinator.py` (poll loop, app-sync loop and its due time from the car's sync time and
+the persisted last tap (`_companion_sync_basis_age_s`), persistence of the pause, force refresh,
 placeholders at startup), `entity_base.py` (availability and `companion_read_at`), `switch.py`, `number.py`,
-`button.py`, `select.py`, `time.py`, `climate.py` (platform), `const.py` (options, limits, id helpers),
+`button.py` (the three companion buttons, all Configuration), `select.py`, `time.py`, `climate.py` (platform), `const.py` (options, limits, id helpers),
 `config_flow.py` (setup and options).
 `number.py` makes only Companion Charge Target a Control; `switch.py` selects Automatic window
 heating and Climate at unlock by key. Climate zones, Read switches, intervals and Reset stay Configuration.
@@ -788,7 +798,7 @@ To add a value or a screen:
 |---|---|---|
 | Poll interval | slider 5–240 min, step 5 (setup default 10); hard floor 3 min | Screen walks are slow and tap a real phone |
 | Nightly doubling (22:00–05:00) | only with *wake the screen* on | Fewer overnight screen wakes; a dedicated phone keeps its cadence |
-| Vehicle sync interval | 0 (off) or 60–240 min, step 5; first sync waits a full interval | Each sync wakes the car and spends budget |
+| Vehicle sync interval | 0 (off) or 60–240 min, step 5; counted from the newest of the last attempt, the car's last data and the last tap, also across a restart | Each sync wakes the car and spends budget |
 | Read-back after a sync | 3 min | The car needs time to answer |
 | Gap between commands | 60 s, kept across restarts | Never drive into a backend limit |
 | Request-limit pause | 12 h, persisted; ends early when the car sends data or a new trip shows after the alert | The car's daily power budget |
