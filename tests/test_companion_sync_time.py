@@ -252,3 +252,109 @@ def test_setup_seeds_nothing_for_a_cloud_client():
     coordinator = SimpleNamespace(_cariad_client=object(),
                                   vehicles={"VIN1": {"companion_app_synced_at": "2026-10-05T09:27:50+00:00"}})
     VagConnectCoordinator._seed_companion_synced_at(coordinator, ["VIN1"])
+
+
+# ── new car data ends a request-limit pause ───────────────────────────────────
+
+def _paused_channel(phone, clock):
+    from custom_components.vag_connect.companion.channel import _RATE_LIMIT_BACKOFF_S
+
+    channel = CompanionChannel(phone, PRESETS["volkswagen"], time_fn=lambda: 0.0,
+                               wall_clock_fn=lambda: clock[0])
+    # A pause restored after a restart: its start is the deadline minus 12 h.
+    channel.restore_rate_limit(T0.timestamp() + _RATE_LIMIT_BACKOFF_S)
+    return channel
+
+
+@pytest.mark.asyncio
+async def test_a_sync_after_the_alert_lifts_the_pause():
+    phone, clock = OverviewPhone(), [T0.timestamp() + 3 * H]
+    channel = _paused_channel(phone, clock)
+    phone.line = "Synchronised 2 hours ago"  # the car was started after the alert
+    await channel.read()
+    assert channel.rate_limited_until == 0.0
+    assert channel.request_state == "available"
+
+
+@pytest.mark.parametrize("line", [
+    "Synchronised 3 hours ago",   # data from before the alert
+    "Synchronised 2 hours 59 minutes ago",  # could still be the minute of the alert
+    "Currently synchronising",    # no time on screen
+])
+@pytest.mark.asyncio
+async def test_older_or_unknown_car_data_keeps_the_pause(line):
+    phone, clock = OverviewPhone(), [T0.timestamp() + 3 * H]
+    channel = _paused_channel(phone, clock)
+    phone.line = line
+    await channel.read()
+    assert channel.rate_limited_until > clock[0]
+    assert channel.request_state == "restricted"
+
+
+@pytest.mark.asyncio
+async def test_a_restored_sync_time_alone_does_not_lift_the_pause():
+    phone, clock = OverviewPhone(), [T0.timestamp() + 3 * H]
+    channel = _paused_channel(phone, clock)
+    channel.restore_synced_at(T0 + timedelta(hours=1))  # not read off the screen
+    assert channel.rate_limited_until > clock[0]
+
+
+# ── a new trip ends a request-limit pause ─────────────────────────────────────
+
+class TripPhone(OverviewPhone):
+    """The overview with a Driving data tile, the line older than the pause."""
+
+    def __init__(self):
+        super().__init__()
+        self.line = "Synchronised 5 hours ago"
+        self.trip: str | None = "Last driven: 11 kilometres."
+
+    async def dump_ui(self):
+        xml = await super().dump_ui()
+        if self.trip is None:
+            return xml
+        tile = (
+            f'<node index="0" text="" resource-id="" class="android.view.View" package="" '
+            f'content-desc="Driving data. {self.trip}" checkable="false" checked="false" '
+            f'clickable="true" enabled="true" focusable="true" focused="false" scrollable="false" '
+            f'long-clickable="false" password="false" selected="false" bounds="[53,1070][1027,1252]" />'
+        )
+        return xml.replace("</hierarchy>", tile + "</hierarchy>")
+
+
+@pytest.mark.asyncio
+async def test_a_new_trip_lifts_the_pause():
+    phone, clock = TripPhone(), [T0.timestamp() + 3 * H]
+    channel = _paused_channel(phone, clock)
+    await channel.read()  # the trip as the pause found it
+    assert channel._is_rate_limited()
+    phone.trip = "Last driven: 4 kilometres."
+    await channel.read()
+    assert channel.rate_limited_until == 0.0
+    assert channel.request_state == "available"
+
+
+@pytest.mark.asyncio
+async def test_the_same_trip_or_no_tile_keeps_the_pause():
+    phone, clock = TripPhone(), [T0.timestamp() + 3 * H]
+    channel = _paused_channel(phone, clock)
+    await channel.read()
+    await channel.read()
+    phone.trip = None  # tile not on screen
+    await channel.read()
+    assert channel._is_rate_limited() and channel.request_state == "restricted"
+
+
+@pytest.mark.asyncio
+async def test_a_trip_already_new_on_the_tripping_read_is_the_baseline():
+    # The car synced just before the alert: the first read in the pause shows
+    # a trip HA had not seen, and that alone must not lift it.
+    phone, clock = TripPhone(), [T0.timestamp() + 3 * H]
+    channel = CompanionChannel(phone, PRESETS["volkswagen"], time_fn=lambda: 0.0,
+                               wall_clock_fn=lambda: clock[0])
+    await channel.read()  # before the pause
+    from custom_components.vag_connect.companion.channel import _RATE_LIMIT_BACKOFF_S
+    channel.restore_rate_limit(clock[0] + _RATE_LIMIT_BACKOFF_S)
+    phone.trip = "Last driven: 4 kilometres."
+    await channel.read()
+    assert channel._is_rate_limited()

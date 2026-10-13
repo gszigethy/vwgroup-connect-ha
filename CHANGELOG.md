@@ -155,6 +155,7 @@ VW app 4.6.4 is supported (gszigethy/vwgroup-connect-ha#28, gszigethy/vwgroup-co
 - **Car request budget:**
   - The car's "Too many requests" and "Request limit reached" alerts are recognised in any app language.
   - Either alert always pauses commands for 12 h, even when it appears late. The pause and the 60 s command gap survive a restart (gszigethy/vwgroup-connect-ha#50).
+  - The pause ends early once the car sends new data: when the overview's sync time is later than the alert, or the Driving data tile shows a new trip, controls and *Synchronise now* work again and *App request status* returns to *Available*. The alerts themselves say that starting the car makes everything available again (gszigethy/vwgroup-connect-ha#96).
   - Screen reads continue during the pause; only commands wait.
   - The battery level is read from the charge sheet during the pause, when the overview hides it.
   - A sync never probes through a backend "too many requests" pause (gszigethy/vwgroup-connect-ha#54).
