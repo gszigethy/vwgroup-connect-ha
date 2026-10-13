@@ -372,7 +372,11 @@ Target* as the vehicle-wide limit.
 **The synchronisation cluster.** Five things belong together:
 
 - *Vehicle sync interval* (0 = off, 60–240 min in steps of 5) taps *Synchronise now* on a timer. The
-  first sync waits a full interval, so a Home Assistant restart never wakes the car by itself.
+  interval counts from the newest of the last sync attempt, the car's last data (*Last vehicle sync*) and
+  the last command tap. A car that sent data on its own, for example while driven, therefore gets no tap
+  until a full interval after that data. The last two survive a restart, so after a Home Assistant restart
+  an overdue sync runs right away, a recent one is waited out, and a restart never wakes the car by itself.
+  With neither known (a new entry), the first sync waits a full interval.
 - *Force vehicle refresh* is one such tap on demand. Both restart the same interval clock, so the two
   never wake the car minutes apart.
 - *Last vehicle sync* is the timestamp of the car's data, inferred from the app's age text. It is also what the walk gates
@@ -595,7 +599,8 @@ device so most of it is tested without hardware.
 | `entity_twins.py` | The control-versus-sensor rules; the list of cloud-only diagnostics. |
 | `transport.py`, `addon_transport.py`, `relay_transport.py`, `relay.py` | The three ways to reach the phone ([3.9](#39-transports)). |
 
-Outside the package: `coordinator.py` (poll loop, app-sync loop, persistence of the pause, force refresh,
+Outside the package: `coordinator.py` (poll loop, app-sync loop and its due time from the car's sync time and
+the persisted last tap (`_companion_sync_basis_age_s`), persistence of the pause, force refresh,
 placeholders at startup), `entity_base.py` (availability and `companion_read_at`), `switch.py`, `number.py`,
 `button.py`, `select.py`, `time.py`, `climate.py` (platform), `const.py` (options, limits, id helpers),
 `config_flow.py` (setup and options).
@@ -781,7 +786,7 @@ To add a value or a screen:
 |---|---|---|
 | Poll interval | slider 5–240 min, step 5 (setup default 10); hard floor 3 min | Screen walks are slow and tap a real phone |
 | Nightly doubling (22:00–05:00) | only with *wake the screen* on | Fewer overnight screen wakes; a dedicated phone keeps its cadence |
-| Vehicle sync interval | 0 (off) or 60–240 min, step 5; first sync waits a full interval | Each sync wakes the car and spends budget |
+| Vehicle sync interval | 0 (off) or 60–240 min, step 5; counted from the newest of the last attempt, the car's last data and the last tap, also across a restart | Each sync wakes the car and spends budget |
 | Read-back after a sync | 3 min | The car needs time to answer |
 | Gap between commands | 60 s, kept across restarts | Never drive into a backend limit |
 | Request-limit pause | 12 h, persisted; ends early when the car sends data or a new trip shows after the alert | The car's daily power budget |

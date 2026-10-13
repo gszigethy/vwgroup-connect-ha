@@ -143,7 +143,7 @@ Every control starts from the overview and checks the result on screen.
 | Climate Settings switches | Auxiliary air conditioning, automatic window heating, zone front left and front right. Taps Save and reads the page back; a value already in place sends nothing. | gszigethy/vwgroup-connect-ha#41 |
 | Departure timers (switch, time and `set_departure_timer`) | On/off, time, days and Repeat. A timer is found by its content, not its row; two timers with the same time are refused. Saves only when the page shows exactly what was asked. | gszigethy/vwgroup-connect-ha#42, gszigethy/vwgroup-connect-ha#55 |
 | **Force vehicle refresh** button | Taps vehicle Settings → *Synchronise now*, then re-reads the app after 3 minutes. A refused sync is reported at once. | gszigethy/vwgroup-connect-ha#25 |
-| **Vehicle sync interval** | Runs *Synchronise now* on a timer. Off by default, minimum 60 min. Each sync wakes the car. | gszigethy/vwgroup-connect-ha#54 |
+| **Vehicle sync interval** | Runs *Synchronise now* on a timer. Off by default, minimum 60 min. The interval counts from the newest of the last sync attempt, the car's last data and the last command tap, so a car that sent data on its own (for example while driven) gets no extra tap. After a restart an overdue sync runs at once; a recent one is never repeated. Each sync wakes the car. | gszigethy/vwgroup-connect-ha#54, gszigethy/vwgroup-connect-ha#100 |
 
 Lock and unlock are deliberately not offered. They would need the S-PIN over ADB, the slider has no reliable target, and a wrong tap risks the opposite command or an S-PIN lockout (gszigethy/vwgroup-connect-ha#36).
 

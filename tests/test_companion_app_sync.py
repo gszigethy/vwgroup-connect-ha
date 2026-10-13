@@ -293,6 +293,7 @@ def _coord(data=None, options=None, *, read_only=False, client=None):
     coord.is_read_only = lambda: read_only
     coord._persist_companion_rate_limit = MagicMock()
     coord._cariad_client = client
+    coord.vehicles = {}
     return coord
 
 
@@ -1002,3 +1003,89 @@ async def test_a_skipped_sync_still_waits_a_full_interval(monkeypatch, skip):
     assert len(sleeps) == 180 and set(sleeps) == {60.0}
     client.command_sync_vehicle.assert_not_awaited()
     coord.async_request_refresh.assert_not_awaited()
+
+
+# ── the interval counts from the car's last data and the last tap ─────────────
+
+WALL0 = 1_791_000_000.0
+
+
+async def _run_loop(monkeypatch, coord, *, minutes=180, on_minute=None):
+    """Run the loop on fake clocks; return the minutes at which it tapped."""
+    import custom_components.vag_connect.coordinator as mod
+
+    clock = [0.0]
+    monkeypatch.setattr(time, "monotonic", lambda: 1000.0 + clock[0])
+    monkeypatch.setattr(time, "time", lambda: WALL0 + clock[0])
+    tapped: list[float] = []
+    coord._cariad_client.command_sync_vehicle = AsyncMock(
+        side_effect=lambda vin: tapped.append(clock[0] / 60) or True
+    )
+    coord._started = True
+    coord.async_request_refresh = AsyncMock()
+
+    async def fake_sleep(seconds):
+        before = clock[0]
+        clock[0] += seconds
+        if on_minute is not None and int(before // 60) != int(clock[0] // 60):
+            on_minute(int(clock[0] // 60))
+        if clock[0] >= minutes * 60:
+            coord._started = False
+
+    monkeypatch.setattr(mod.asyncio, "sleep", fake_sleep)
+    await coord._companion_app_sync_loop()
+    return tapped
+
+
+def _car_synced(coord, minutes_ago, now_min=0.0):
+    at = datetime.fromtimestamp(WALL0 + (now_min - minutes_ago) * 60, tz=timezone.utc)
+    coord.vehicles = {"VIN": {"companion_app_synced_at": at.isoformat()}}
+
+
+@pytest.mark.asyncio
+async def test_after_a_restart_an_overdue_sync_runs_at_once(monkeypatch):
+    coord = _coord(options={CONF_COMPANION_APP_SYNC_INTERVAL: 60}, client=_fake_client())
+    _car_synced(coord, minutes_ago=240)
+    tapped = await _run_loop(monkeypatch, coord, minutes=10)
+    assert tapped == [0.0]
+
+
+@pytest.mark.asyncio
+async def test_after_a_restart_a_recent_sync_is_waited_out(monkeypatch):
+    coord = _coord(options={CONF_COMPANION_APP_SYNC_INTERVAL: 60}, client=_fake_client())
+    _car_synced(coord, minutes_ago=20)
+    tapped = await _run_loop(monkeypatch, coord, minutes=59)
+    assert tapped and 40 <= tapped[0] < 41  # not at the restart, not a full hour later
+
+
+@pytest.mark.asyncio
+async def test_a_persisted_tap_the_car_never_answered_still_holds_the_next_one(monkeypatch):
+    from custom_components.vag_connect.const import CONF_COMPANION_LAST_WRITE_AT
+
+    coord = _coord(
+        data={CONF_COMPANION_LAST_WRITE_AT: WALL0 - 10 * 60},
+        options={CONF_COMPANION_APP_SYNC_INTERVAL: 60}, client=_fake_client(),
+    )
+    coord._cariad_client.companion_last_write_at = 0.0  # nothing tapped this run
+    _car_synced(coord, minutes_ago=300)
+    tapped = await _run_loop(monkeypatch, coord, minutes=55)
+    assert tapped and 50 <= tapped[0] < 51
+
+
+@pytest.mark.asyncio
+async def test_car_data_arriving_on_its_own_skips_the_tap(monkeypatch):
+    coord = _coord(options={CONF_COMPANION_APP_SYNC_INTERVAL: 60}, client=_fake_client())
+
+    def drive(minute):
+        if minute == 50:  # the car was driven and sent data
+            _car_synced(coord, minutes_ago=0, now_min=50)
+
+    tapped = await _run_loop(monkeypatch, coord, minutes=115, on_minute=drive)
+    assert tapped and 110 <= tapped[0] < 111  # one interval after the car's data
+
+
+@pytest.mark.asyncio
+async def test_nothing_known_still_waits_a_full_interval_after_a_restart(monkeypatch):
+    coord = _coord(options={CONF_COMPANION_APP_SYNC_INTERVAL: 60}, client=_fake_client())
+    tapped = await _run_loop(monkeypatch, coord, minutes=59)
+    assert tapped == []
