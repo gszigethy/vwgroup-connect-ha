@@ -94,6 +94,15 @@ _REDACT_KEYS = frozenset({
     "license_plate",
     "vehicle_nickname",
     "image_urls",
+    # Companion: the VW app's charging-location labels are the owner's own
+    # names for where the car habitually charges ("Home", a street, an
+    # employer), the same class as parking_city and vehicle_nickname above.
+    "charging_location_1_name",
+    "charging_location_2_name",
+    "charging_location_3_name",
+    "charging_location_4_name",
+    "charging_location_5_name",
+    "charging_location_current",
     # v1.13.0 (#62) — explicit token field names. Defensive registration:
     # today these only live in coordinator's in-memory cache, but if a
     # future change adds them to entry.data they'll automatically

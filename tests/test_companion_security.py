@@ -153,6 +153,29 @@ async def test_full_diagnostics_redacts_companion_tokens_and_hosts(loaded):
         assert options[key] not in encoded
 
 
+_CHARGING_LOCATION_LABELS = {
+    **{f"charging_location_{n}_name": f"Synthetic place {n}" for n in range(1, 6)},
+    "charging_location_current": "Synthetic place 1",
+}
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_redacts_charging_location_labels():
+    """A charging location's label names where the car charges, so it never
+    reaches a diagnostics file people attach to public issues."""
+    assert set(_CHARGING_LOCATION_LABELS) <= _REDACT_KEYS
+    coord = SimpleNamespace(
+        vehicles={"WVGZZZ1KZAW123456": {"battery_soc": 70, **_CHARGING_LOCATION_LABELS}},
+        last_update_success=True, cloud_push_active=False,
+        push_states={}, push_last_errors={}, is_active=True,
+    )
+    entry = SimpleNamespace(
+        data={CONF_STRATEGY: STRATEGY_COMPANION_ADB}, options={}, runtime_data=coord,
+    )
+    encoded = json.dumps(await async_get_config_entry_diagnostics(MagicMock(), entry))
+    assert "Synthetic place" not in encoded
+
+
 @pytest.mark.asyncio
 async def test_register_and_handle_never_log_agent_token(caplog):
     caplog.set_level(logging.DEBUG)

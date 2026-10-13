@@ -81,6 +81,10 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ### Behoben / Fixed
 
+- **Companion (ADB): charging-location names no longer appear in the diagnostics download.** The
+  names of the VW app's charging locations, and the current location, are the owner's own labels for
+  where the car charges. They are now redacted like the parking city and the vehicle nickname.
+
 - **An entry you set up by scanning the sign-in code now asks you to scan it again, instead of
   guessing at a password it never had.** A UK Audi Q4 e-tron was set up that way in July and ran
   for 87 days. Then its session stopped renewing, and the integration spent the next seven hours
