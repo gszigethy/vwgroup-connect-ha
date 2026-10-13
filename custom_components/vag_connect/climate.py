@@ -225,6 +225,21 @@ class VagCompanionClimate(VagClimate, RestoreEntity):
                 float(held), float(dial) if isinstance(dial, (int, float)) else None,
             )
 
+    _window_heating_seen = False
+
+    def _handle_coordinator_update(self) -> None:
+        # Mirror the app: a window-heating Start is one-shot. Once a run was
+        # seen and has ended (Stop, the car's timer, or the app), the next
+        # Start is air conditioning again. A choice never started is kept.
+        t = self._targets()
+        if t is not None and t.window_heating_only:
+            if self._running():
+                self._window_heating_seen = True
+            elif self._window_heating_seen:
+                self._window_heating_seen = False
+                self.coordinator._cariad_client.store_climate_start_mode(False)
+        super()._handle_coordinator_update()
+
     def _targets(self) -> ClimateTargets | None:
         from .companion.client import climate_targets_of  # noqa: PLC0415
 

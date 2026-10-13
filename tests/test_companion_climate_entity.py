@@ -185,3 +185,30 @@ async def test_restart_with_nothing_saved_holds_nothing():
     await _restore(client, None)
     assert client.climate_targets.temp_c is None
     assert client.climate_targets.window_heating_only is False
+
+
+def _poll(e, coord, vehicle):
+    coord.data[VIN] = dict(vehicle)
+    e._handle_coordinator_update()
+
+
+def test_window_heating_run_ends_back_to_air_conditioning():
+    client = _client()
+    client.store_climate_start_mode(True)
+    coord = _coord(client)
+    e = _entity(coord)
+    _poll(e, coord, {"window_heating_front": True})
+    assert e.preset_mode == PRESET_WINDOW_HEATING
+    _poll(e, coord, {"window_heating_front": False})
+    assert client.climate_targets.window_heating_only is False
+    assert e.preset_mode == PRESET_AIR_CONDITIONING
+
+
+def test_a_choice_never_started_is_kept():
+    client = _client()
+    client.store_climate_start_mode(True)
+    coord = _coord(client)
+    e = _entity(coord)
+    for _ in range(3):
+        _poll(e, coord, {"window_heating_front": False, "climatisation_active": False})
+    assert client.climate_targets.window_heating_only is True
