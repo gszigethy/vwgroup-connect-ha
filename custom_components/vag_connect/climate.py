@@ -189,6 +189,8 @@ class VagCompanionClimate(VagClimate, RestoreEntity):
     """
 
     _attr_preset_modes: list[str] = [PRESET_AIR_CONDITIONING, PRESET_WINDOW_HEATING]
+    # The app's dial: 15.5 is LO, 30 is HI.
+    _attr_min_temp = 15.5
 
     def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
         super().__init__(coordinator, vin)
@@ -233,7 +235,10 @@ class VagCompanionClimate(VagClimate, RestoreEntity):
         # Start is air conditioning again. A choice never started is kept.
         t = self._targets()
         if t is not None and t.window_heating_only:
-            if self._running():
+            # Only a read shows window heating running: a Start's optimistic
+            # climatisation_active (reverted when the Start is refused) is not
+            # a run, and a real window-heating read never sets it.
+            if self._vehicle.get("window_heating_front"):
                 self._window_heating_seen = True
             elif self._window_heating_seen:
                 self._window_heating_seen = False

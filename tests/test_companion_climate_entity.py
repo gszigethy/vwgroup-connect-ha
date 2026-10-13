@@ -210,3 +210,19 @@ def test_a_choice_never_started_is_kept():
     for _ in range(3):
         _poll(e, coord, {"window_heating_front": False, "climatisation_active": False})
     assert client.climate_targets.window_heating_only is True
+
+
+def test_a_refused_start_keeps_the_window_heating_choice():
+    # The coordinator shows climatisation_active optimistically on a Start and
+    # reverts it when the Start is refused (pause, gap, gate). That is no run.
+    client = _client()
+    client.store_climate_start_mode(True)
+    coord = _coord(client)
+    e = _entity(coord)
+    _poll(e, coord, {"climatisation_active": True})   # optimistic
+    _poll(e, coord, {"climatisation_active": False})  # reverted
+    assert client.climate_targets.window_heating_only is True
+
+
+def test_the_dial_minimum_is_lo():
+    assert _entity(_coord(_client())).min_temp == 15.5
