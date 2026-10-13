@@ -200,6 +200,8 @@ app shows it. The setup form also has an S-PIN field and the add-on and agent op
 
 Names below are as Home Assistant shows them without the car's name in front (for example *Battery
 Level* is `sensor.<car>_adb_battery_level`). Naming rules are at the end of this section.
+Charge Target, Automatic window heating and Climate at unlock are in **Controls**; climate zones,
+the Read switches, intervals and Reset stay in **Configuration**.
 
 **Overview, read on every poll (no switch)**
 
@@ -219,7 +221,7 @@ Level* is `sensor.<car>_adb_battery_level`). Naming rules are at the end of this
 
 | Entity | Platform | Notes |
 |---|---|---|
-| Charge Target | number | The app's *Target charge level* text is read from the charge sheet; the number is also the control ([2.6](#26-commands)). 50–100 % in 10 % steps. |
+| Charge Target | number (Controls) | The app's *Target charge level* text is read from the charge sheet; the number is also the control ([2.6](#26-commands)). 50–100 % in 10 % steps. |
 | Charging power, speed, remaining time | sensors | Only while the app shows them. "One hour and 40 minutes" counts as 100 min. |
 | Charging Mode | sensor | The app's charging method (*Immediate charging*, *Charge for departure time*, *Charge at preferred times*, …) mapped to Home Assistant labels such as Manual, Timer and Preferred charging times. Read-only. |
 
@@ -231,7 +233,7 @@ Level* is `sensor.<car>_adb_battery_level`). Naming rules are at the end of this
 | Next Service, Service In | sensors | Distance and days to the next service; oil service where the app shows it. |
 | Warning Active, Vehicle Warning Messages | binary sensor, sensor | Warning header and the categories that carry a warning. |
 | Auto Unlock When Charged | binary sensor | The vehicle-wide *Automatically release AC connector*. |
-| Charge Target | number | Vehicle Settings also holds *Charging up to*, read on **every** poll (it can change in the app at any time). |
+| Charge Target | number (Controls) | Vehicle Settings also holds *Charging up to*, read on **every** poll (it can change in the app at any time). |
 
 **Climate** (*Read climate detail*, *Read climate settings*)
 
@@ -242,7 +244,8 @@ Level* is `sensor.<car>_adb_battery_level`). Naming rules are at the end of this
 | Target Temperature, Climate Start Mode | sensors (diagnostic) | What the app's dial and mode picker show now. |
 | Desired Temperature, Desired Climate Start Mode | number, select | Values **held in Home Assistant** and applied by the next Start ([2.4](#24-how-the-entities-depend-on-each-other)). Restored after a restart. |
 | Outside Temperature | sensor | |
-| Climate at unlock, Automatic window heating, Climate zone front left / front right | switches | The Air Conditioning Settings. |
+| Climate at unlock, Automatic window heating | switches (Controls) | The Air Conditioning Settings. |
+| Climate zone front left / front right | switches (Configuration) | The Air Conditioning Settings. |
 
 **Departure times** (*Read departure times*)
 
@@ -289,6 +292,8 @@ share preview of the app's map, and nothing is shared.
 All three are in the device's Configuration section: they maintain the data and do not operate the car.
 
 **Naming and ids**
+
+Moving the three controls out of Configuration changes no names, unique ids or entity ids.
 
 - **Unique ids** of companion entities are `{vin}_companion_{key}`, a namespace of their own, so a car
   that is also set up through the EU Data Act portal does not drop the Companion's entities as
@@ -609,6 +614,8 @@ the persisted last tap (`_companion_sync_basis_age_s`), persistence of the pause
 placeholders at startup), `entity_base.py` (availability and `companion_read_at`), `switch.py`, `number.py`,
 `button.py` (the three companion buttons, all Configuration), `select.py`, `time.py`, `climate.py` (platform), `const.py` (options, limits, id helpers),
 `config_flow.py` (setup and options).
+`number.py` makes only Companion Charge Target a Control; `switch.py` selects Automatic window
+heating and Climate at unlock by key. Climate zones, Read switches, intervals and Reset stay Configuration.
 
 ### 3.3 The read pipeline
 
