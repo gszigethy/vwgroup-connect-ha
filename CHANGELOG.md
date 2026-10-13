@@ -81,6 +81,14 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ### Behoben / Fixed
 
+- **Companion (ADB): charging-location names no longer appear in the diagnostics download.** The
+  names of the VW app's charging locations, and the current location, are the owner's own labels for
+  where the car charges. They are now redacted like the parking city and the vehicle nickname.
+
+- **Cloud cars: charging no longer stays stuck on when a poll leaves out the plug.** The Companion
+  fix that keeps a live charging session when the plug is unknown now applies to Companion (ADB) entries
+  only. Cloud entries again treat a missing plug reading as not charging.
+
 - **Companion (ADB): three unique ids lose a doubled `companion_` infix.** *Reset companion connection*,
   *Refresh vehicle data* and *Charging Mode* were registered as `<vin>_companion_companion_…`. They are
   renamed in place once at setup, so entity ids, names and history stay. The reset button keeps the id it
