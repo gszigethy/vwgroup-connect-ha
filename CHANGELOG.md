@@ -146,6 +146,8 @@ Every control starts from the overview and checks the result on screen.
 | **Refresh app screen data** button | Re-reads the app's screens now; the car is not asked for new data. With *Refresh vehicle data* and *Reset companion connection* it sits in the device's Configuration section, as all three maintain the data rather than operate the car. Cloud entries keep *Refresh Data*. | gszigethy/vwgroup-connect-ha#101 |
 | **Vehicle sync interval** | Runs *Synchronise now* on a timer. Off by default, minimum 60 min. The interval counts from the newest of the last sync attempt, the car's last data and the last command tap, so a car that sent data on its own (for example while driven) gets no extra tap. After a restart an overdue sync runs at once; a recent one is never repeated. Each sync wakes the car. | gszigethy/vwgroup-connect-ha#54, gszigethy/vwgroup-connect-ha#100 |
 
+Charge limit, automatic window heating and climate at unlock sit in the device's Controls section; cloud entries keep the charge limit in Configuration (gszigethy/vwgroup-connect-ha#102).
+
 Lock and unlock are deliberately not offered. They would need the S-PIN over ADB, the slider has no reliable target, and a wrong tap risks the opposite command or an S-PIN lockout (gszigethy/vwgroup-connect-ha#36).
 
 #### VW app 4.6.4

@@ -268,6 +268,8 @@ class VagConnectNumber(VagConnectEntity, NumberEntity):
     def __init__(self, coordinator: VagConnectCoordinator, vin: str, description: VagNumberDescription) -> None:
         super().__init__(coordinator, vin, description.key)
         self.entity_description = description
+        if description.key == "target_soc" and coordinator.is_companion():
+            self._attr_entity_category = None
 
     # v2.8.0 - default values for the aux heating sliders when the user
     # has not picked one yet. Mirrors the coordinator-side fallbacks in
