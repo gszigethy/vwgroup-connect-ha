@@ -2322,7 +2322,15 @@
     },
     "climate": {
       "climate": {
-        "name": "Klimatizace"
+        "name": "Klimatizace",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "air_conditioning": "Klimatizace",
+              "window_heating": "Pouze vyhřívání oken"
+            }
+          }
+        }
       }
     },
     "device_tracker": {
@@ -2855,6 +2863,12 @@
     },
     "hvac_mode_not_supported": {
       "message": "Režim HVAC {hvac_mode} není podporován; použijte jeden z: {modes}. Nic nebylo odesláno."
+    },
+    "climate_preset_while_running": {
+      "message": "Nejprve zastavte klimatizaci: režim nelze měnit, když běží. Nic nebylo odesláno."
+    },
+    "climate_preset_not_supported": {
+      "message": "Režim {preset} není podporován; použijte jeden z: {presets}. Nic nebylo odesláno."
     }
   },
   "selector": {

@@ -2322,7 +2322,15 @@
     },
     "climate": {
       "climate": {
-        "name": "Standklimatisering"
+        "name": "Standklimatisering",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "air_conditioning": "Airconditioning",
+              "window_heating": "Alleen ruitverwarming"
+            }
+          }
+        }
       }
     },
     "device_tracker": {
@@ -2855,6 +2863,12 @@
     },
     "hvac_mode_not_supported": {
       "message": "De HVAC-modus {hvac_mode} wordt niet ondersteund; gebruik een van: {modes}. Er is niets verzonden."
+    },
+    "climate_preset_while_running": {
+      "message": "Stop eerst de klimaatregeling: de modus kan niet veranderen terwijl die loopt. Er is niets verzonden."
+    },
+    "climate_preset_not_supported": {
+      "message": "De modus {preset} wordt niet ondersteund; gebruik een van: {presets}. Er is niets verzonden."
     }
   },
   "selector": {

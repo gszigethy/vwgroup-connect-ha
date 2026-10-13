@@ -2322,7 +2322,15 @@
     },
     "climate": {
       "climate": {
-        "name": "Standklimatisierung"
+        "name": "Standklimatisierung",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "air_conditioning": "Klimatisierung",
+              "window_heating": "Nur Scheibenheizung"
+            }
+          }
+        }
       }
     },
     "device_tracker": {
@@ -2890,6 +2898,12 @@
     },
     "hvac_mode_not_supported": {
       "message": "Der HVAC-Modus {hvac_mode} wird nicht unterstützt; verwende einen von: {modes}. Es wurde nichts gesendet."
+    },
+    "climate_preset_while_running": {
+      "message": "Zuerst die Klimatisierung stoppen: Der Modus kann sich nicht ändern, während sie läuft. Es wurde nichts gesendet."
+    },
+    "climate_preset_not_supported": {
+      "message": "Der Modus {preset} wird nicht unterstützt; verwende einen von: {presets}. Es wurde nichts gesendet."
     }
   },
   "triggers": {

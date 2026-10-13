@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Climate entity for VW Group Connect — remote pre-conditioning."""
 
+from typing import TYPE_CHECKING
+
 from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
@@ -16,6 +18,9 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 from .coordinator import VagConnectCoordinator
 from .entity_base import VagConnectEntity, register_dynamic_spawner
+
+if TYPE_CHECKING:
+    from .companion.client import ClimateTargets
 
 DEFAULT_TEMP = 21.0
 MIN_TEMP = 16.0
@@ -45,6 +50,8 @@ async def async_setup_entry(
         # backend confirmation) hides; None (unknown) keeps the entity.
         if coordinator.command_capability_supported(vin, "command_start_climate") is False:
             return []
+        if coordinator.is_companion():
+            return [VagCompanionClimate(coordinator, vin)]
         return [VagClimate(coordinator, vin)]
 
     register_dynamic_spawner(entry, coordinator, async_add_entities, _build_for_vin)
@@ -148,3 +155,78 @@ class VagClimate(VagConnectEntity, ClimateEntity):
         # applies the new temperature.
         if hvac_mode is not None:
             await self.async_set_hvac_mode(hvac_mode)
+
+
+PRESET_AIR_CONDITIONING = "air_conditioning"
+PRESET_WINDOW_HEATING = "window_heating"
+
+
+class VagCompanionClimate(VagClimate):
+    """Companion: the one place to run climate.
+
+    The app's *Select mode* picker only chooses what Start starts, and one
+    Stop ends either mode. So the mode is a preset: chosen while off it is
+    held in HA for the next start (nothing is sent), while running it shows
+    what runs and cannot be changed. Same unique id as the shared entity.
+    """
+
+    _attr_preset_modes = [PRESET_AIR_CONDITIONING, PRESET_WINDOW_HEATING]
+
+    def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
+        super().__init__(coordinator, vin)
+        self._attr_supported_features |= (
+            ClimateEntityFeature.PRESET_MODE
+            | ClimateEntityFeature.TURN_ON
+            | ClimateEntityFeature.TURN_OFF
+        )
+
+    def _targets(self) -> ClimateTargets | None:
+        from .companion.client import climate_targets_of  # noqa: PLC0415
+
+        return climate_targets_of(self.coordinator)
+
+    def _running(self) -> bool:
+        v = self._vehicle
+        return bool(v.get("climatisation_active")) or bool(v.get("window_heating_front"))
+
+    @property
+    def hvac_mode(self) -> HVACMode:
+        # Window heating alone is climate running too: the app's Stop ends it.
+        return HVACMode.HEAT_COOL if self._running() else HVACMode.OFF
+
+    @property
+    def preset_mode(self) -> str:
+        if self._running():
+            if self._vehicle.get("climatisation_active"):
+                shown = self._vehicle.get("climate_start_mode")
+                return PRESET_WINDOW_HEATING if shown == PRESET_WINDOW_HEATING else PRESET_AIR_CONDITIONING
+            return PRESET_WINDOW_HEATING
+        targets = self._targets()
+        if targets is not None and targets.window_heating_only:
+            return PRESET_WINDOW_HEATING
+        return PRESET_AIR_CONDITIONING
+
+    async def async_set_preset_mode(self, preset_mode: str) -> None:
+        if preset_mode not in self.preset_modes:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="climate_preset_not_supported",
+                translation_placeholders={
+                    "preset": str(preset_mode), "presets": ", ".join(self.preset_modes),
+                },
+            )
+        if self._running():
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="climate_preset_while_running",
+            )
+        store = getattr(self.coordinator._cariad_client, "store_climate_start_mode", None)
+        if callable(store):
+            store(preset_mode == PRESET_WINDOW_HEATING)
+        self.async_write_ha_state()
+
+    async def async_turn_on(self) -> None:
+        await self.async_set_hvac_mode(HVACMode.HEAT_COOL)
+
+    async def async_turn_off(self) -> None:
+        await self.async_set_hvac_mode(HVACMode.OFF)

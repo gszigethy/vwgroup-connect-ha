@@ -2322,7 +2322,15 @@
     },
     "climate": {
       "climate": {
-        "name": "Kupévärmare"
+        "name": "Kupévärmare",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "air_conditioning": "Luftkonditionering",
+              "window_heating": "Endast rutvärme"
+            }
+          }
+        }
       }
     },
     "device_tracker": {
@@ -2855,6 +2863,12 @@
     },
     "hvac_mode_not_supported": {
       "message": "HVAC-läget {hvac_mode} stöds inte; använd ett av: {modes}. Inget skickades."
+    },
+    "climate_preset_while_running": {
+      "message": "Stoppa klimatet först: läget kan inte ändras medan det körs. Inget skickades."
+    },
+    "climate_preset_not_supported": {
+      "message": "Läget {preset} stöds inte; använd ett av: {presets}. Inget skickades."
     }
   },
   "selector": {

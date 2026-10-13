@@ -2322,7 +2322,15 @@
     },
     "climate": {
       "climate": {
-        "name": "Climate Control"
+        "name": "Climate Control",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "air_conditioning": "Air conditioning",
+              "window_heating": "Window heating only"
+            }
+          }
+        }
       }
     },
     "device_tracker": {
@@ -2855,6 +2863,12 @@
     },
     "hvac_mode_not_supported": {
       "message": "The HVAC mode {hvac_mode} is not supported; use one of: {modes}. Nothing was sent."
+    },
+    "climate_preset_while_running": {
+      "message": "Stop the climate first: the mode cannot change while it runs. Nothing was sent."
+    },
+    "climate_preset_not_supported": {
+      "message": "The mode {preset} is not supported; use one of: {presets}. Nothing was sent."
     }
   },
   "selector": {

@@ -1,0 +1,135 @@
+# Copyright 2026 Prash Balan (@its-me-prash) — GNU AGPL v3.0-or-later
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""Companion climate entity: one place for on/off, temperature and the mode."""
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from homeassistant.components.climate import HVACMode
+from homeassistant.exceptions import ServiceValidationError
+
+from custom_components.vag_connect.climate import (
+    PRESET_AIR_CONDITIONING,
+    PRESET_WINDOW_HEATING,
+    VagClimate,
+    VagCompanionClimate,
+)
+from custom_components.vag_connect.companion.client import CompanionClient
+
+VIN = "WVWZZZTESTVIN0001"
+
+
+class _TrippedChannel:
+    def __getattr__(self, name):  # pragma: no cover - must not run
+        raise AssertionError(f"the channel was touched: {name}")
+
+
+def _client() -> CompanionClient:
+    client = CompanionClient.__new__(CompanionClient)
+    client._brand = "volkswagen"
+    client._channel = _TrippedChannel()
+    return client
+
+
+def _coord(client: CompanionClient, vehicle: dict | None = None):
+    coord = MagicMock()
+    coord.is_companion = MagicMock(return_value=True)
+    coord.command_method_available = MagicMock(return_value=True)
+    coord._cariad_client = client
+    coord.data = {VIN: dict(vehicle or {})}
+    coord.last_update_success = True
+    coord.async_start_climatisation = AsyncMock()
+    coord.async_stop_climatisation = AsyncMock()
+    return coord
+
+
+def _entity(coord) -> VagCompanionClimate:
+    e = VagCompanionClimate(coord, VIN)
+    e.async_write_ha_state = MagicMock()
+    return e
+
+
+def test_same_unique_id_as_the_shared_entity():
+    coord = _coord(_client())
+    assert VagCompanionClimate(coord, VIN).unique_id == VagClimate(coord, VIN).unique_id
+
+
+def test_presets_and_default():
+    e = _entity(_coord(_client()))
+    assert e.preset_modes == [PRESET_AIR_CONDITIONING, PRESET_WINDOW_HEATING]
+    assert e.preset_mode == PRESET_AIR_CONDITIONING
+
+
+@pytest.mark.asyncio
+async def test_preset_while_off_only_stores():
+    client = _client()
+    coord = _coord(client)
+    e = _entity(coord)
+    await e.async_set_preset_mode(PRESET_WINDOW_HEATING)
+    assert client.climate_targets.window_heating_only is True
+    assert e.preset_mode == PRESET_WINDOW_HEATING
+    coord.async_start_climatisation.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_preset_while_off_is_allowed_during_the_pause():
+    # Local only: no command path, so no request-limit check is reached.
+    client = _client()
+    coord = _coord(client)
+    coord.async_start_climatisation = AsyncMock(side_effect=AssertionError("no start"))
+    await _entity(coord).async_set_preset_mode(PRESET_WINDOW_HEATING)
+    assert client.climate_targets.window_heating_only is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("vehicle", [
+    {"climatisation_active": True},
+    {"climatisation_active": False, "window_heating_front": True},
+])
+async def test_preset_change_while_running_is_refused(vehicle):
+    client = _client()
+    e = _entity(_coord(client, vehicle))
+    with pytest.raises(ServiceValidationError):
+        await e.async_set_preset_mode(PRESET_WINDOW_HEATING)
+    assert client.climate_targets.window_heating_only is False
+
+
+@pytest.mark.asyncio
+async def test_unknown_preset_is_refused():
+    e = _entity(_coord(_client()))
+    with pytest.raises(ServiceValidationError):
+        await e.async_set_preset_mode("boost")
+
+
+def test_window_heating_alone_shows_on():
+    e = _entity(_coord(_client(), {"climatisation_active": False, "window_heating_front": True}))
+    assert e.hvac_mode == HVACMode.HEAT_COOL
+    assert e.preset_mode == PRESET_WINDOW_HEATING
+
+
+def test_running_preset_follows_the_app():
+    e = _entity(_coord(_client(), {"climatisation_active": True, "climate_start_mode": "air_conditioning"}))
+    assert e.preset_mode == PRESET_AIR_CONDITIONING
+
+
+@pytest.mark.asyncio
+async def test_turn_on_starts_and_turn_off_stops():
+    coord = _coord(_client())
+    e = _entity(coord)
+    await e.async_turn_on()
+    coord.async_start_climatisation.assert_awaited_once_with(VIN)
+    await e.async_turn_off()
+    coord.async_stop_climatisation.assert_awaited_once_with(VIN)
+
+
+@pytest.mark.asyncio
+async def test_turn_on_with_window_heating_chosen_uses_the_held_mode():
+    # The client's command_start_climate starts what ClimateTargets holds.
+    client = _client()
+    coord = _coord(client)
+    e = _entity(coord)
+    await e.async_set_preset_mode(PRESET_WINDOW_HEATING)
+    await e.async_turn_on()
+    coord.async_start_climatisation.assert_awaited_once_with(VIN)
+    assert client.climate_targets.window_heating_only is True

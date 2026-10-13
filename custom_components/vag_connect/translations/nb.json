@@ -2322,7 +2322,15 @@
     },
     "climate": {
       "climate": {
-        "name": "Klimaanlegg"
+        "name": "Klimaanlegg",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "air_conditioning": "Klimaanlegg",
+              "window_heating": "Kun vindusoppvarming"
+            }
+          }
+        }
       }
     },
     "device_tracker": {
@@ -2855,6 +2863,12 @@
     },
     "hvac_mode_not_supported": {
       "message": "HVAC-modusen {hvac_mode} støttes ikke; bruk en av: {modes}. Ingenting ble sendt."
+    },
+    "climate_preset_while_running": {
+      "message": "Stopp klimaet først: modusen kan ikke endres mens det går. Ingenting ble sendt."
+    },
+    "climate_preset_not_supported": {
+      "message": "Modusen {preset} støttes ikke; bruk en av: {presets}. Ingenting ble sendt."
     }
   },
   "selector": {
