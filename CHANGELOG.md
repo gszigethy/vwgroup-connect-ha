@@ -81,6 +81,11 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ### Behoben / Fixed
 
+- **Companion (ADB): three unique ids lose a doubled `companion_` infix.** *Reset companion connection*,
+  *Refresh vehicle data* and *Charging Mode* were registered as `<vin>_companion_companion_…`. They are
+  renamed in place once at setup, so entity ids, names and history stay. The reset button keeps the id it
+  had before Companion entities got their own namespace.
+
 - **An entry you set up by scanning the sign-in code now asks you to scan it again, instead of
   guessing at a password it never had.** A UK Audi Q4 e-tron was set up that way in July and ran
   for 87 days. Then its session stopped renewing, and the integration spent the next seven hours

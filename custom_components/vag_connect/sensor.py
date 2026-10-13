@@ -5172,7 +5172,7 @@ class VagCompanionChargeModeSensor(VagConnectEntity, SensorEntity):
     _attr_icon = "mdi:ev-plug-type2"
 
     def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
-        super().__init__(coordinator, vin, "companion_charge_mode")
+        super().__init__(coordinator, vin, "charge_mode")
 
     @property
     def options(self) -> list[str]:
