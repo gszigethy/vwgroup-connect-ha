@@ -133,3 +133,55 @@ async def test_turn_on_with_window_heating_chosen_uses_the_held_mode():
     await e.async_turn_on()
     coord.async_start_climatisation.assert_awaited_once_with(VIN)
     assert client.climate_targets.window_heating_only is True
+
+
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
+
+
+def _read(client, value):
+    client.climate_targets.note_app_dial(value)
+
+
+def test_saved_data_holds_only_held_values():
+    client = _client()
+    _read(client, 20.0)
+    e = _entity(_coord(client, {"target_temperature": 20.0}))
+    assert e.extra_restore_state_data.as_dict() == {
+        "held_temp_c": None, "app_dial_c": 20.0, "window_heating_only": False,
+    }
+    client.store_climate_target_temperature(23.0)
+    client.store_climate_start_mode(True)
+    assert e.extra_restore_state_data.as_dict() == {
+        "held_temp_c": 23.0, "app_dial_c": 20.0, "window_heating_only": True,
+    }
+
+
+async def _restore(client, saved):
+    e = _entity(_coord(client))
+    e.async_get_last_extra_data = AsyncMock(
+        return_value=SimpleNamespace(as_dict=lambda: saved) if saved is not None else None
+    )
+    with patch.object(CoordinatorEntity, "async_added_to_hass", new=AsyncMock()):
+        await e.async_added_to_hass()
+    return e
+
+
+@pytest.mark.asyncio
+async def test_restart_restores_mode_and_temperature():
+    client = _client()
+    await _restore(client, {"held_temp_c": 23.0, "app_dial_c": 20.0, "window_heating_only": True})
+    assert client.climate_targets.window_heating_only is True
+    assert client.climate_targets.temp_c == 23.0
+    _read(client, 19.0)  # dial moved in the app while HA was down: it wins
+    assert client.climate_targets.temp_c == 19.0
+
+
+@pytest.mark.asyncio
+async def test_restart_with_nothing_saved_holds_nothing():
+    client = _client()
+    await _restore(client, None)
+    assert client.climate_targets.temp_c is None
+    assert client.climate_targets.window_heating_only is False

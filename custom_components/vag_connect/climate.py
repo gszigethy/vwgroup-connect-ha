@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Climate entity for VW Group Connect — remote pre-conditioning."""
 
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.climate import (
     ClimateEntity,
@@ -14,6 +15,7 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
 
 from .const import DOMAIN
 from .coordinator import VagConnectCoordinator
@@ -161,7 +163,23 @@ PRESET_AIR_CONDITIONING = "air_conditioning"
 PRESET_WINDOW_HEATING = "window_heating"
 
 
-class VagCompanionClimate(VagClimate):
+@dataclass
+class _HeldClimate(ExtraStoredData):
+    """What HA holds for the next Start, with the dial it was held against."""
+
+    held_temp_c: float | None
+    app_dial_c: float | None
+    window_heating_only: bool
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "held_temp_c": self.held_temp_c,
+            "app_dial_c": self.app_dial_c,
+            "window_heating_only": self.window_heating_only,
+        }
+
+
+class VagCompanionClimate(VagClimate, RestoreEntity):
     """Companion: the one place to run climate.
 
     The app's *Select mode* picker only chooses what Start starts, and one
@@ -179,6 +197,33 @@ class VagCompanionClimate(VagClimate):
             | ClimateEntityFeature.TURN_ON
             | ClimateEntityFeature.TURN_OFF
         )
+
+    @property
+    def extra_restore_state_data(self) -> _HeldClimate:
+        # Only held values: a dial reading shown in their place must never come
+        # back as a target, or the next Start would move the dial.
+        t = self._targets()
+        return _HeldClimate(
+            t.temp_c if t is not None else None,
+            t.app_dial_c if t is not None else None,
+            bool(t.window_heating_only) if t is not None else False,
+        )
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        extra = await self.async_get_last_extra_data()
+        if extra is None:
+            return
+        saved = extra.as_dict()
+        client = self.coordinator._cariad_client
+        if saved.get("window_heating_only") is True:
+            client.store_climate_start_mode(True)
+        held = saved.get("held_temp_c")
+        dial = saved.get("app_dial_c")
+        if isinstance(held, (int, float)) and not isinstance(held, bool):
+            client.restore_climate_target_temperature(
+                float(held), float(dial) if isinstance(dial, (int, float)) else None,
+            )
 
     def _targets(self) -> ClimateTargets | None:
         from .companion.client import climate_targets_of  # noqa: PLC0415
