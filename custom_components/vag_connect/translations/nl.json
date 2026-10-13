@@ -1753,6 +1753,18 @@
       },
       "charging_location_5_timer_3_weekdays": {
         "name": "Laadlocatie 5 timer 3 weekdagen"
+      },
+      "tyre_sensor_life_fl": {
+        "name": "Levensduur druksensor linksvoor"
+      },
+      "tyre_sensor_life_fr": {
+        "name": "Levensduur druksensor rechtsvoor"
+      },
+      "tyre_sensor_life_rl": {
+        "name": "Levensduur druksensor linksachter"
+      },
+      "tyre_sensor_life_rr": {
+        "name": "Levensduur druksensor rechtsachter"
       }
     },
     "binary_sensor": {
@@ -2175,6 +2187,9 @@
       },
       "charging_location_5_timer_3_enabled": {
         "name": "Laadlocatie 5 timer 3 ingeschakeld"
+      },
+      "trailer_connected": {
+        "name": "Aanhanger aangekoppeld"
       }
     },
     "switch": {
@@ -2602,7 +2617,7 @@
     },
     "stale_data": {
       "title": "{vin}: voertuiggegevens al {age} uur niet ververst",
-      "description": "De laatste gegevens die je auto doorgaf, zijn ongeveer **{age} uur geleden** vastgelegd, ook al blijft de integratie succesvol opvragen. Dat kan twee oorzaken hebben: misschien staat de auto gewoon geparkeerd en in slaapstand (normaal — je hoeft niets te doen), of de gegevensstroom via de EU Data Act is verlopen en levert geen verse metingen meer.\n\nDe waarden die je nu ziet, zijn de laatst bekende — niet live. Is er sindsdien gereden of opgeladen en blijft deze waarschuwing staan, dan is de gegevensstroom hoogstwaarschijnlijk verlopen: ga naar volkswagen.de → de gegevensinstellingen van je auto en vernieuw of vraag het delen van gegevens opnieuw aan, of voeg het kanaal opnieuw toe.\n\nDeze waarschuwing verdwijnt vanzelf zodra er een verse meting binnenkomt."
+      "description": "De laatste gegevens die je auto doorgaf, zijn ongeveer **{age} uur geleden** vastgelegd, ook al blijft de integratie succesvol opvragen. Dat kan twee oorzaken hebben: misschien staat de auto gewoon geparkeerd en in slaapstand (normaal — je hoeft niets te doen), of de gegevensstroom via de EU Data Act is verlopen en levert geen verse metingen meer.\n\nDe waarden die je nu ziet, zijn de laatst bekende — niet live. Is er sindsdien gereden of opgeladen en blijft deze waarschuwing staan, dan is de gegevensstroom hoogstwaarschijnlijk verlopen: ga naar volkswagen.de → de gegevensinstellingen van je auto en voeg het kanaal opnieuw toe.\n\nDeze waarschuwing verdwijnt vanzelf zodra er een verse meting binnenkomt."
     },
     "historical_timeout": {
       "title": "{vin}: eenmalige historische export niet voltooid",
@@ -2619,6 +2634,10 @@
     "skoda_official_multi_integration": {
       "title": "Officiële Škoda API — een andere integratie gebruikt hem ook",
       "description": "We vonden meer officiële API-sleutels op je Škoda-account dan deze integratie heeft aangemaakt — meestal een teken dat een tweede integratie of app ook de officiële Škoda API uitleest. Dat mag gerust naast elkaar draaien, maar ze delen hetzelfde kleine aanvraagbudget per auto, waardoor het gecombineerde verkeer de aanvraaglimiet van Škoda sneller kan bereiken en het account in het ergste geval tijdelijk — of uiteindelijk zelfs permanent — geblokkeerd kan raken. Heb je niet allebei nodig? Verwijder dan de officiële API-sleutel die je niet gebruikt in de MyŠkoda-app (Instellingen → API-sleutels). Je kunt deze melding sluiten."
+    },
+    "device_login_expired": {
+      "title": "Meld je opnieuw aan om {brand} te herstellen",
+      "description": "The sign-in session for this entry has expired and could not be renewed on its own.\n\nThis entry was set up by scanning the sign-in code, so there are no stored credentials to retry with and nothing to correct. Choose **Reauthenticate** on the integration and scan the code again; the vehicle data returns as soon as the new session is in.\n\nUntil then the entities stay unavailable. This is not a wrong-password problem and it is nothing you did wrong."
     }
   },
   "services": {

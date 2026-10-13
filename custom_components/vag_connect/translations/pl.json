@@ -1753,6 +1753,18 @@
       },
       "charging_location_5_timer_3_weekdays": {
         "name": "Miejsce ładowania 5 harmonogram 3 dni tygodnia"
+      },
+      "tyre_sensor_life_fl": {
+        "name": "Żywotność czujnika ciśnienia przód lewy"
+      },
+      "tyre_sensor_life_fr": {
+        "name": "Żywotność czujnika ciśnienia przód prawy"
+      },
+      "tyre_sensor_life_rl": {
+        "name": "Żywotność czujnika ciśnienia tył lewy"
+      },
+      "tyre_sensor_life_rr": {
+        "name": "Żywotność czujnika ciśnienia tył prawy"
       }
     },
     "binary_sensor": {
@@ -2175,6 +2187,9 @@
       },
       "charging_location_5_timer_3_enabled": {
         "name": "Miejsce ładowania 5 harmonogram 3 włączony"
+      },
+      "trailer_connected": {
+        "name": "Przyczepa podłączona"
       }
     },
     "switch": {
@@ -2602,7 +2617,7 @@
     },
     "stale_data": {
       "title": "{vin}: dane pojazdu nie odświeżyły się od {age} h",
-      "description": "Ostatnie dane przesłane przez Twój samochód zostały zarejestrowane około **{age} godz. temu**, mimo że integracja nadal poprawnie odpytuje serwer. Mogą być tego dwie przyczyny: samochód może być po prostu zaparkowany i uśpiony (to normalne — nie musisz nic robić) albo jego kanał danych w ramach EU Data Act wygasł i przestał dostarczać świeże odczyty.\n\nWartości, które teraz widzisz, to ostatnie znane, a nie dane na żywo. Jeśli od tego czasu samochód był używany lub podłączony do ładowania, a to ostrzeżenie wciąż się wyświetla, kanał danych najprawdopodobniej wygasł: otwórz volkswagen.de → ustawienia danych swojego samochodu i odnów/ponownie zażądaj udostępniania danych albo dodaj kanał od nowa.\n\nTo ostrzeżenie zniknie automatycznie w chwili, gdy nadejdzie świeższy odczyt."
+      "description": "Ostatnie dane przesłane przez Twój samochód zostały zarejestrowane około **{age} godz. temu**, mimo że integracja nadal poprawnie odpytuje serwer. Mogą być tego dwie przyczyny: samochód może być po prostu zaparkowany i uśpiony (to normalne — nie musisz nic robić) albo jego kanał danych w ramach EU Data Act wygasł i przestał dostarczać świeże odczyty.\n\nWartości, które teraz widzisz, to ostatnie znane, a nie dane na żywo. Jeśli od tego czasu samochód był używany lub podłączony do ładowania, a to ostrzeżenie wciąż się wyświetla, kanał danych najprawdopodobniej wygasł: otwórz volkswagen.de → ustawienia danych swojego samochodu i dodaj kanał od nowa.\n\nTo ostrzeżenie zniknie automatycznie w chwili, gdy nadejdzie świeższy odczyt."
     },
     "historical_timeout": {
       "title": "{vin}: jednorazowy eksport historyczny nie został ukończony",
@@ -2619,6 +2634,10 @@
     "skoda_official_multi_integration": {
       "title": "Oficjalne API Škoda — używa go też inna integracja",
       "description": "Na Twoim koncie Škoda znaleźliśmy więcej kluczy oficjalnego API, niż utworzyła ta integracja — zwykle to znak, że oficjalne API Škoda odczytuje też druga integracja lub aplikacja. Nie ma problemu, żeby działały razem, ale dzielą ten sam niewielki budżet zapytań na samochód, więc łączny ruch może szybciej osiągnąć limit Škoda, a w najgorszym przypadku doprowadzić do tymczasowego — a z czasem nawet trwałego — zablokowania konta. Jeśli nie potrzebujesz obu, usuń w aplikacji MyŠkoda nieużywany klucz oficjalnego API (Ustawienia → Klucze API). To powiadomienie możesz zamknąć."
+    },
+    "device_login_expired": {
+      "title": "Zaloguj się ponownie, aby przywrócić {brand}",
+      "description": "The sign-in session for this entry has expired and could not be renewed on its own.\n\nThis entry was set up by scanning the sign-in code, so there are no stored credentials to retry with and nothing to correct. Choose **Reauthenticate** on the integration and scan the code again; the vehicle data returns as soon as the new session is in.\n\nUntil then the entities stay unavailable. This is not a wrong-password problem and it is nothing you did wrong."
     }
   },
   "services": {

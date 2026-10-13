@@ -1753,6 +1753,18 @@
       },
       "charging_location_5_timer_3_weekdays": {
         "name": "Ladested 5 timer 3 ugedage"
+      },
+      "tyre_sensor_life_fl": {
+        "name": "Tryksensor levetid for venstre"
+      },
+      "tyre_sensor_life_fr": {
+        "name": "Tryksensor levetid for højre"
+      },
+      "tyre_sensor_life_rl": {
+        "name": "Tryksensor levetid bag venstre"
+      },
+      "tyre_sensor_life_rr": {
+        "name": "Tryksensor levetid bag højre"
       }
     },
     "binary_sensor": {
@@ -2175,6 +2187,9 @@
       },
       "charging_location_5_timer_3_enabled": {
         "name": "Ladested 5 timer 3 aktiveret"
+      },
+      "trailer_connected": {
+        "name": "Anhænger tilkoblet"
       }
     },
     "switch": {
@@ -2602,7 +2617,7 @@
     },
     "stale_data": {
       "title": "{vin}: bildata er ikke opdateret i {age} t",
-      "description": "De seneste data, din bil har rapporteret, blev registreret for omkring **{age} timer siden** — selvom integrationen stadig henter data uden problemer. Det kan skyldes to ting: bilen er måske bare parkeret og i dvale (helt normalt — der er ikke noget at gøre), eller dens dataforsyning under EU Data Act kan være udløbet og holdt op med at levere friske aflæsninger.\n\nDe værdier, du ser lige nu, er de senest kendte — ikke live-data. Hvis bilen er blevet kørt eller sat til opladning siden da, og denne advarsel bliver hængende, er dataforsyningen højst sandsynligt udløbet: åbn volkswagen.de → din bils dataindstillinger og forny/anmod om datadelingen igen, eller tilføj kanalen på ny.\n\nDenne advarsel forsvinder automatisk, i det øjeblik en nyere aflæsning kommer ind."
+      "description": "De seneste data, din bil har rapporteret, blev registreret for omkring **{age} timer siden** — selvom integrationen stadig henter data uden problemer. Det kan skyldes to ting: bilen er måske bare parkeret og i dvale (helt normalt — der er ikke noget at gøre), eller dens dataforsyning under EU Data Act kan være udløbet og holdt op med at levere friske aflæsninger.\n\nDe værdier, du ser lige nu, er de senest kendte — ikke live-data. Hvis bilen er blevet kørt eller sat til opladning siden da, og denne advarsel bliver hængende, er dataforsyningen højst sandsynligt udløbet: åbn volkswagen.de → din bils dataindstillinger og tilføj kanalen på ny.\n\nDenne advarsel forsvinder automatisk, i det øjeblik en nyere aflæsning kommer ind."
     },
     "historical_timeout": {
       "title": "{vin}: engangseksport af historik blev ikke fuldført",
@@ -2619,6 +2634,10 @@
     "skoda_official_multi_integration": {
       "title": "Škodas officielle API — en anden integration bruger det også",
       "description": "Vi fandt flere officielle API-nøgler på din Škoda-konto, end denne integration har oprettet — som regel et tegn på, at en anden integration eller app også læser Škodas officielle API. Det er helt fint at have begge dele kørende, men de deler det samme lille anmodningsbudget pr. bil, så den samlede trafik kan ramme Škodas hastighedsgrænse hurtigere og i værste fald få kontoen midlertidigt — eller på sigt permanent — blokeret. Hvis du ikke har brug for begge, kan du fjerne den officielle API-nøgle, du ikke bruger, i MyŠkoda-appen (Indstillinger → API-nøgler). Du kan roligt lukke denne besked."
+    },
+    "device_login_expired": {
+      "title": "Log ind igen for at gendanne {brand}",
+      "description": "The sign-in session for this entry has expired and could not be renewed on its own.\n\nThis entry was set up by scanning the sign-in code, so there are no stored credentials to retry with and nothing to correct. Choose **Reauthenticate** on the integration and scan the code again; the vehicle data returns as soon as the new session is in.\n\nUntil then the entities stay unavailable. This is not a wrong-password problem and it is nothing you did wrong."
     }
   },
   "services": {

@@ -42,6 +42,185 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+### Hinzugefügt / Added
+
+- **Your car can tell you when a trailer is hooked up.** Two Audis reported the tow-hitch
+  module's own verdict on whether something is attached, and there was nowhere for it to go:
+  the integration had no trailer field at all, so this is a new reading rather than one that
+  was being dropped. Both cars happened to report "nothing attached", so the wording for the
+  opposite case is taken from the pair rather than seen on a car, and anything the module
+  says that is neither of the two leaves the sensor unknown instead of telling you the
+  trailer is off. People build automations on this one, and a confident wrong "no trailer"
+  is worse than no reading. The sensor appears only on cars that report the field. Thanks
+  @heldenbariton-ship-it and @marcus-stem (#1798, #1802).
+- **Four new readings for the remaining life of each wheel's tyre pressure sensor.** Five
+  Audi owners reported the same four diagnostic values on every poll, the largest group in
+  the backlog, and not one of them was ever read. The reason was the shape of the payload:
+  it arrives encoded, and the decoder expected a document inside it, while these four send
+  a plain number. They are decoded now, one per wheel. On four of the five cars the value
+  the car sends is the byte that means "not available", so those cars get no sensor at all
+  rather than four sensors reading 255, and the one car that sends a real value gets its
+  four. The portal documents neither a unit nor a meaning for them, so they are unitless
+  and off by default, exactly like the other tyre values whose unit the portal leaves open.
+  Thanks @zdimic1, @N85UK, @derschneewolf, @heldenbariton-ship-it and @marcus-stem (#1767).
+- **A charge level and an electric range from a one time export now reach your car.** The
+  15 minute feed and the one time export name the same readings differently, and the
+  integration only ever knew the feed's names: of the seventeen charge level names it looks
+  for, exactly one appears in the portal's own catalogue of export fields, and of the range
+  names, none at all. So a reporter whose Audi delivers its charge level only in the export
+  watched the import report success while his car still had no battery entity at all, because
+  the flag that decides whether a car gets electric entities is derived from exactly those
+  readings. The export's own spellings are now read, for the charge level and for the electric
+  range. It still only fills what the feed left empty, a value the car could not report is
+  still dropped rather than published, and the 12 V starter battery is deliberately kept out
+  of it, since it sits one letter from the traction pack in the same catalogue. Charging
+  sessions out of the file are not read as current state either: this car's export holds
+  eleven of them, and a session's charge level is not the car's charge level now. Thanks
+  @placidcasual98, who ran every test asked of him and whose negative results are what pinned
+  this down (#1403).
+
+### Behoben / Fixed
+
+- **An entry you set up by scanning the sign-in code now asks you to scan it again, instead of
+  guessing at a password it never had.** A UK Audi Q4 e-tron was set up that way in July and ran
+  for 87 days. Then its session stopped renewing, and the integration spent the next seven hours
+  doing the wrong thing once an hour: it fell back to signing in with an email and a password,
+  and because that kind of entry stores no password, it put the account's internal id into the
+  email field. The identity service answered that this is not an email, which the integration
+  read as "the EU Data Act portal needs a one-time action" and said so, to an owner in the UK
+  whose car cannot use that portal at all. Meanwhile nothing offered him the one thing that
+  would have fixed it, so the entities stayed unavailable and the log filled up.
+  Such an entry now stops before sending anything, says that the sign-in session expired, and
+  gets the Reauthenticate button, which has routed these entries to the sign-in code since
+  v2.x. The retry also stops after two failed rounds rather than continuing hourly, which is
+  the same rule Porsche entries have had since 4.7.8. Thanks @ratclma, whose report named the
+  cause and the fix (#1813).
+- **Your car is no longer told it is a model it isn't.** An Audi e-tron 55 from 2019 was
+  informed by the integration that it is "an MEB / ID-family car (ID.3/4/5/7, Enyaq, Born,
+  Q4)". It is not one, and its owner said so. The notice was built from the backend's
+  refusal and not from any check of the car: when the durable Car-Net login answers
+  "Unknown user", the integration concluded the car must be an ID. That answer only says
+  the car is not registered in the old Car-Net system, which is the expected case for ID
+  and MEB models and equally what an older car answers once the brand has moved it off
+  that system. The outcome was right, since the refusal is real and commands genuinely
+  cannot be sent, but the explanation sent people looking for an answer that does not
+  exist. The notice and the setup message now say what the refusal actually tells us.
+  German and English are corrected; the other languages still carry the old wording until
+  a native speaker gets to them. Thanks @jocke-w (#1809).
+- **An error report now says what the backend actually answered.** A report reached the
+  tracker saying only that a request had failed with a 400, which is not something anyone
+  can act on: a 400 can mean an expired subscription, a passing backend problem, or a
+  mistake in what the integration sent, and only the answer's own text separates those. The
+  text was being read and then dropped, because the part of the code that writes the report
+  deliberately keeps it out of the message to avoid putting a VIN in a log. It is now
+  included in the report, masked the same way as everything else in it. A failure that
+  repeats is also no longer twenty copies of itself: the report keeps one entry with a count
+  of how often it happened, so the rest of the history survives and anyone reading it can
+  see how persistent the problem is. Thanks @moltke69 (#1808).
+- **Three cars stop reporting the same three fields on every poll.** A VW and two CUPRA
+  sent a companion value that says whether a reading next to it can be trusted. It is not a
+  reading itself, so it was never going to become a sensor showing you the word "VALID",
+  but nothing used it either, which is why it kept being offered as something new. It is
+  used now for what it is: it decides whether the reading beside it counts, it is kept in
+  the diagnostics so nothing is hidden, and it no longer comes back on the next poll. Every
+  value seen so far says the reading is valid, so nothing changes on your car unless the
+  portal itself ever says otherwise. Thanks @tertius1, @StoneH74 and @Thunderhawk2001
+  (#1797, #1803, #1795).
+- **A value filled in from a one time export now says when the car captured it.** The sensors
+  fed by the 15 minute feed carry the car's own capture time and whether that time belongs to
+  the reading or to the file it came in. The ones filled in by the import carried neither, so
+  there was no way to tell whether an imported door state was from this morning or from three
+  days ago. The cause was that the two pieces of bookkeeping are stored next to the readings
+  rather than on them, and the import skipped them on any car that already had a live feed.
+  Imported values now carry their own capture time where the export supplied one, and say
+  plainly that the age is the file's where it did not. A live reading keeps its own time and is
+  still never overwritten. Thanks @kmeinderink, who measured the missing attributes and then
+  said which half of the problem actually mattered to him, which is what made this small
+  instead of large.
+
+- **The one time export now identifies this project to the portal, like the rest of the
+  integration already did.** The portal's operator asked that requests to their domain carry a
+  name, so they can attribute traffic and report a problem back to whoever causes it. We did
+  that, but only for the login and the dataset download: the one time export and the automatic
+  data request lived in their own module and still went out anonymously, including the two
+  requests that actually create a data request on the portal. That is not only a courtesy. On
+  9 October the portal answered logins with an error for hours purely on the strength of a
+  header, so unidentified requests were exposed to exactly that kind of gate. Every request
+  from that module now carries the name, and the headers it already sent are kept rather than
+  replaced.
+
+- **The clear message when the car's gateway refuses a command now actually appears.** The last
+  release announced that a command refused on its final leg would explain itself instead of
+  surfacing a raw 403. It did not. The check looked for the gateway's own words in the error's
+  message, and that message is deliberately stripped of the response body so that logging or
+  re-raising it cannot leak your car's identifier. The words were therefore never in it, both
+  explanations were unreachable, and a reporter who tested the release still got the bare 403.
+  The same mistake sat on the locked-S-PIN detection in two other places, where it cost the one
+  message that tells you what to do about it. All three now read the response body, and the
+  decision lives in a single function that the tests call directly instead of re-implementing
+  it, because the old test did re-implement it and passed against code that could not run.
+  Thanks @panther7 for testing the release and reporting that commands still failed (#584).
+- **An electric car no longer loses its battery entities a quarter of an hour after they
+  appear.** The snapshot the integration keeps carries a charge level and a range forward when
+  a poll does not report them, but it did not carry the flag that says the car HAS a battery,
+  and that flag is what decides whether the electric entities exist at all. So a car whose
+  charge level had been filled in from a one time export kept the number and lost the flag on
+  the very next feed snapshot, and the entities disappeared again with their own values sitting
+  right there. The flag is now worked out again from the readings that survived, through the
+  same single rule the rest of the integration uses, and only ever upward: a car that reports
+  fuel as well as charge stays a hybrid rather than being turned into an EV, and a car we know
+  nothing about stays unclassified instead of being called electric. A plug in hybrid also
+  stops losing the word hybrid on every poll that omits the flags.
+- **A charge level the car could not report is no longer published as a reading.** When a car
+  cannot report its charge level it sends a placeholder number instead, and we put that
+  straight on the battery sensor: a car that said "no reading" showed up as 255 % charged. The
+  sensor feeds Home Assistant's long term statistics, so the nonsense was written into your
+  history as well. Anything outside 0 to 100 is now treated as no reading and left empty,
+  which is what the integration already did for one of the other charge level sources but
+  never for this one. 0 % and 100 % are of course still real readings, and a car that reported
+  nothing valid no longer looks like it has a battery at all.
+- **A petrol or diesel car no longer reads as an electric one.** The one time export names its
+  own engine type and we were throwing that away, so a car whose own file said petrol had its
+  fuel range copied onto the electric range sensor and was marked as an EV. The engine type is
+  now read and the range lands on the combustion sensor where it belongs. The plug in hybrids
+  whose two ranges were swapped back in an earlier release are deliberately untouched by this,
+  and there are tests to keep them that way.
+- **A connected charging cable no longer says "not connected".** The portal writes the plug
+  state as a long protocol word and the check only understood the short form, so a plugged in
+  car was told its cable was out, as a definite no rather than an honest unknown. The value a
+  car sends when it cannot report the plug at all was being turned into a "no" too, and now
+  stays unknown. Thanks @placidcasual98, whose own export is what showed this (#1403).
+- **The charge limit from a one time export is read again.** The field name we were looking for
+  had a capital letter that the portal's own catalogue never uses, so no real export could
+  match it.
+- **The privacy note on an automatic report no longer reads as covering the file you attach
+  yourself.** What the integration generates is masked, and that has not changed: the vehicle
+  identifier in a report is cut to its last six characters and a model name that turns out to be
+  an identifier is left out entirely. But that promise prints directly above the box you drag a
+  file into, and a data export downloaded from the portal is named with your full vehicle
+  identifier, so people have been attaching one without realising. Six of the open reports carry
+  one that way. The note now says plainly that your own attachments are not covered, and suggests
+  renaming the file first.
+
+- **A refused lock or unlock now explains itself, like a refused climate command already did.**
+  The last release added a clear message for a command the car's gateway turns down on its final
+  step, and credited the reporter who worked it out. His own command was locking, and that path
+  never received the message: it had no handler on that step at all, so he would have seen the
+  same bare error a third time. Both paths now share one classification, so they cannot disagree
+  about what you are told, and the specific code his car returns is recognised as well, which
+  means we no longer have to ask anyone for a description the integration does not print. Thanks
+  @panther7 for testing the release and saying it still failed, and @Joassens, whose instrumented
+  logs are what made the messages possible in the first place (#584).
+
+- **The stale-data warning no longer tells you to re-request your data sharing.** The portal's
+  operator has asked that nobody file further data requests while they work through a backlog,
+  because it does not speed anything up and can put you further back in the queue. Our warning
+  had been advising exactly that, in all twelve languages. It now points at re-adding the channel
+  instead, and in English it says plainly that empty or unchanged downloads are a hold-up on the
+  portal's side rather than yours. The other eleven languages have the bad advice removed; the
+  added explanation follows in a later pass rather than being machine-translated into an
+  instruction nobody here can check.
+
 ## [4.13.0-4] - 2026-10-13 — Companion climate in one entity, tidier controls
 
 ### ⚠️ Breaking — Companion (ADB) climate in one entity
