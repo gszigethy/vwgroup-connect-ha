@@ -190,6 +190,12 @@ status), so a walk that finds no rows leaves the last values as they are. A
 car whose last location was deleted keeps the old values until a location
 exists again.
 
+The app itself also lags behind the car here: a location deleted in the car
+stays in the app's list until the app is closed and restarted (observed live).
+A vehicle sync, *Synchronise now* included, does not refresh the list. Until
+the restart the walk reads the deleted location as before; with *close the app
+after each read* on, the next poll starts the app fresh and picks it up.
+
 | Value | Companion-only field → entity |
 |---|---|
 | Locations read | `charging_location_count` → sensor |

@@ -112,6 +112,7 @@ The Companion channel drives the VW app on a spare Android phone over ADB and re
   - Read-only; it never changes a setting.
   - A location's two charge-level sliders can't be read: the app draws their values without any readable text.
   - A Departure times screen that shows no locations, as the app does while the car's request limit is reached, leaves the last values in place.
+  - A location deleted in the car stays in the app, and in these entities, until the app is closed and restarted; a vehicle sync does not refresh the list (gszigethy/vwgroup-connect-ha#97).
 - **Driving data** (opt-in): the last trip and the trip since charging or refuelling. Covers distance, consumption, average speed and driving time; miles are converted (gszigethy/vwgroup-connect-ha#16).
 - **Parking position** (opt-in), read from the share preview.
 
