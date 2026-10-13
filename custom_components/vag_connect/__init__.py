@@ -31,6 +31,7 @@ from homeassistant.helpers import entity_registry as er
 from ._vol import vol
 
 from .const import (
+    COMPANION_UNIQUE_ID_INFIX,
     CONF_COMPANION_UID_NAMESPACE,
     CONF_BRAND,
     CONF_PASSWORD,
@@ -315,7 +316,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: VagConnectConfigEntry) -
     if _companion_uid_migration_due(entry.data):
         _migrate_companion_unique_ids(hass, entry, list(coordinator.vehicles))
         _self_update_entry(
-            coordinator, data={**entry.data, CONF_COMPANION_UID_NAMESPACE: 1}
+            coordinator,
+            data={**entry.data, CONF_COMPANION_UID_NAMESPACE: COMPANION_UID_NAMESPACE_VERSION},
         )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -347,9 +349,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: VagConnectConfigEntry) -
     return True
 
 
+# 1: bare "{vin}_{key}" ids moved to "{vin}_companion_{key}".
+# 2: also undoes the doubled "{vin}_companion_companion_{key}" that version 1
+#    gave keys which themselves started with "companion_" (earlier fork builds).
+COMPANION_UID_NAMESPACE_VERSION = 2
+
+
 def _companion_uid_migration_due(data: Any) -> bool:
-    """True for a companion entry whose ids were not yet moved to its namespace."""
-    return is_companion_entry_data(data) and not data.get(CONF_COMPANION_UID_NAMESPACE)
+    """True for a companion entry whose ids are not at the current namespace version."""
+    if not is_companion_entry_data(data):
+        return False
+    return (data.get(CONF_COMPANION_UID_NAMESPACE) or 0) < COMPANION_UID_NAMESPACE_VERSION
 
 
 def _migrate_companion_unique_ids(
@@ -359,17 +369,24 @@ def _migrate_companion_unique_ids(
 
     Keeps each entity's entity_id, name and history; only the registry's
     unique id changes, so the platforms find them again under the new id.
-    Runs once per entry (``CONF_COMPANION_UID_NAMESPACE``), so every
-    ``{vin}_…`` id moves exactly once, including legacy keys that already
-    start with ``companion_``. Entry-scoped ids (``{entry_id}_…``) stay.
+    An id already in the namespace stays (upstream's reset button was
+    ``{vin}_companion_reset_button`` from the start), and a doubled
+    ``{vin}_companion_companion_{key}`` loses one infix. Entry-scoped ids
+    (``{entry_id}_…``) stay.
     """
+    infix = f"{COMPANION_UNIQUE_ID_INFIX}_"
     registry = er.async_get(hass)
     for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         uid = reg_entry.unique_id or ""
         vin = next((v for v in vins if uid.startswith(f"{v}_")), None)
         if vin is None:
             continue
-        new_uid = vehicle_unique_id(vin, uid[len(vin) + 1:], companion=True)
+        key = uid[len(vin) + 1:]
+        if key.startswith(infix * 2):
+            key = key[len(infix) * 2:]
+        elif key.startswith(infix):
+            continue
+        new_uid = vehicle_unique_id(vin, key, companion=True)
         if registry.async_get_entity_id(reg_entry.domain, DOMAIN, new_uid):
             continue
         registry.async_update_entity(reg_entry.entity_id, new_unique_id=new_uid)

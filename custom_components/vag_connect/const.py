@@ -32,8 +32,9 @@ STRATEGY_COMPANION_ADB        = "companion_adb"
 # level, ranges, doors locked, currently charging, …) to HA's duplicate check.
 COMPANION_UNIQUE_ID_INFIX     = "companion"
 # Set in a companion entry's data once its registered ids were moved to that
-# namespace. A flag, not a prefix test: some legacy keys already start with
-# "companion_" (e.g. "{vin}_companion_reset_button").
+# namespace; its value is the version of that move (see __init__.py). Entity
+# keys never start with "companion_": the helper adds the infix, so the reset
+# button's key is "reset_button" and its id stays "{vin}_companion_reset_button".
 CONF_COMPANION_UID_NAMESPACE  = "companion_uid_namespace"
 CONF_ADB_HOST                 = "adb_host"
 CONF_ADB_PORT                 = "adb_port"

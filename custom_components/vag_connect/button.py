@@ -212,7 +212,7 @@ class VagCompanionResetButton(VagConnectEntity, ButtonEntity):
     _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
-        super().__init__(coordinator, vin, "companion_reset_button")
+        super().__init__(coordinator, vin, "reset_button")
 
     async def async_press(self) -> None:
         await self.coordinator.async_reset_companion_cooldown()
@@ -231,7 +231,7 @@ class VagCompanionForceRefreshButton(VagConnectEntity, ButtonEntity):
     _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, coordinator: VagConnectCoordinator, vin: str) -> None:
-        super().__init__(coordinator, vin, "companion_force_refresh_button")
+        super().__init__(coordinator, vin, "force_refresh_button")
 
     async def async_press(self) -> None:
         await self.coordinator.async_companion_force_refresh()

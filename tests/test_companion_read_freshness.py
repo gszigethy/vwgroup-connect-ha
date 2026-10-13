@@ -191,14 +191,14 @@ def test_reconcile_carries_read_time_with_restored_value():
 
 @pytest.mark.parametrize("companion", [True, False])
 def test_charging_mode_expires_with_its_read_time(monkeypatch, companion):
-    """The sensor's key is ``companion_charge_mode`` but the walk stamps ``charge_mode``."""
+    """The sensor's key is ``charge_mode``, the field the walk stamps."""
     from custom_components.vag_connect import entity_base
     from custom_components.vag_connect.sensor import VagCompanionChargeModeSensor
 
     monkeypatch.setattr(entity_base, "time", SimpleNamespace(time=lambda: 1000 + DAY), raising=False)
     vehicle = {"charge_mode": "manual", "companion_nav_read_at": {"charge_mode": 1000.0}}
     entity = object.__new__(VagCompanionChargeModeSensor)
-    entity._vin, entity._key = "VIN", "companion_charge_mode"
+    entity._vin, entity._key = "VIN", "charge_mode"
     entity.coordinator = SimpleNamespace(
         data={"VIN": vehicle}, last_update_success=True,
         is_vehicle_available=lambda _: True, is_companion=lambda: companion,

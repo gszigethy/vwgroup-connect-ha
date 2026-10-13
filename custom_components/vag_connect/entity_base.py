@@ -298,7 +298,6 @@ class VagConnectEntity(CoordinatorEntity[VagConnectCoordinator]):
             "climatisation_switch": ("climatisation_active",),
             "auto_unlock_plug_switch": ("auto_unlock_when_charged",),
             "window_heating_switch": ("window_heating_front",),
-            "companion_charge_mode": ("charge_mode",),
         }.get(key, (key.removesuffix("_set").replace("_switch", "_enabled"),))
         stamps = self._vehicle.get("companion_nav_read_at") or {}
         times = [stamps[k] for k in keys if k in stamps]
