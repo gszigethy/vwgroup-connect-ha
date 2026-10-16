@@ -131,3 +131,77 @@ async def test_walk_runs_only_when_opted_in_and_until_the_trips_are_known():
     assert walked == ["open_driving_data"]
     await on._augment_via_nav({t: 1 for t in NAV.resource_targets})
     assert walked == ["open_driving_data"]
+
+
+STRINGS_481 = {**STRINGS, **{
+    k: set(v) for k, v in json.loads(
+        (FIXTURES / 'companion_driving' / 'vw_481_extra_resources.json').read_text()
+    ).items()
+}}
+
+
+def test_long_haul_is_a_separate_family_and_single_trip_can_follow_it():
+    out = read_driving_data(parse_ui_dump(_xml('long_first_481')), STRINGS_481)
+    assert out['long_trip_distance_km'] == 499
+    assert out['long_trip_duration_min'] == 1317
+    assert not any(k.startswith(('last_trip_', 'refuel_trip_')) for k in out)
+    second = read_driving_data(parse_ui_dump(_xml('single_second_481')), STRINGS_481)
+    assert second['last_trip_distance_km'] == 3
+    assert second['last_trip_duration_min'] == 13
+
+
+def test_carousel_discovery_does_not_require_known_titles():
+    nodes = parse_ui_dump(_xml('long_first_481').replace('Last single trip', 'Unknown single')
+                          .replace('Last long-haul trip', 'Unknown long'))
+    assert trip_carousel_row(nodes, STRINGS_481) == (0, 261, 1080, 1050)
+    # The outer vertical scroller alone must never be used as a sideways band.
+    from dataclasses import replace
+    no_horizontal = [replace(n, scrollable=False) if n.bounds == (0, 261, 1080, 1050)
+                     else n for n in nodes]
+    # Remove the second card: no remaining evidence of a horizontal carousel.
+    no_horizontal = [n for n in no_horizontal if not (n.bounds and n.bounds[0] >= 970)]
+    assert trip_carousel_row(no_horizontal, STRINGS_481) is None
+
+
+class OrderedCarousel(Carousel):
+    def __init__(self, screens):
+        super().__init__()
+        self.screens = screens
+
+    async def dump_ui(self):
+        return _xml(self.screens[min(len(self.swipes), len(self.screens) - 1)])
+
+
+@pytest.mark.asyncio
+async def test_channel_collects_single_trip_after_long_haul_then_refuel():
+    phone = OrderedCarousel(['long_first_481', 'single_second_481', 'tiguan_driving_swiped'])
+    channel = CompanionChannel(phone, VW, time_fn=time.monotonic)
+    channel._app_strings = STRINGS_481
+    out = await channel._read_driving_data(parse_ui_dump(_xml('long_first_481')))
+    assert out['long_trip_distance_km'] == 499
+    assert out['last_trip_distance_km'] == 3
+    assert out['last_trip_duration_min'] == 13
+    assert out['refuel_trip_distance_km'] == 299
+    assert len(phone.swipes) == 2
+
+
+@pytest.mark.asyncio
+async def test_channel_searches_backwards_when_initial_card_is_at_the_end():
+    phone = OrderedCarousel(['tiguan_driving_swiped', 'tiguan_driving_swiped', 'tiguan_driving'])
+    channel = CompanionChannel(phone, VW, time_fn=time.monotonic)
+    channel._app_strings = STRINGS
+    out = await channel._read_driving_data(parse_ui_dump(_xml('tiguan_driving_swiped')))
+    assert out == {**REFUEL, **LAST}
+    assert len(phone.swipes) == 2
+    assert phone.swipes[0][0] > phone.swipes[0][2]
+    assert phone.swipes[1][0] < phone.swipes[1][2]
+
+
+@pytest.mark.asyncio
+async def test_stationary_carousel_stops_with_a_bounded_number_of_swipes():
+    phone = OrderedCarousel(['long_first_481'])
+    channel = CompanionChannel(phone, VW, time_fn=time.monotonic)
+    channel._app_strings = STRINGS_481
+    out = await channel._read_driving_data(parse_ui_dump(_xml('long_first_481')))
+    assert out['long_trip_distance_km'] == 499
+    assert len(phone.swipes) == 2

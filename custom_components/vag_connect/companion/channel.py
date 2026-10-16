@@ -1086,28 +1086,42 @@ class CompanionChannel:
         return (detail if cleared else None), taps
 
     async def _read_driving_data(self, nodes: list[UiNode]) -> dict[str, object]:
-        """Both trip cards: the first as drawn, the second after one swipe.
+        """Collect cards in any order with at most two swipes each way.
 
-        The carousel shows the second card clipped at the edge, title and
-        labels but no values. A sideways swipe inside the carousel brings it
-        on screen; it moves the cards only and asks the car for nothing.
+        Swipe only a recognised horizontal band, never pull to refresh. A
+        stationary/covered screen or transport failure ends that direction.
+        Long-haul values stay separate from single and refuel/charging trips.
         """
         out = read_driving_data(nodes, self._app_strings)
-        row = trip_carousel_row(nodes, self._app_strings)
         swipe = getattr(self._t, "swipe", None)
-        if "refuel_trip_distance_km" in out or row is None or swipe is None:
+        wanted = {
+            f"{prefix}_{part}" for prefix in ("last_trip", "refuel_trip")
+            for part in ("distance_km", "duration_min", "avg_speed_kmh")
+        }
+        if swipe is None:
             return out
-        left, top, right, bottom = row
-        y = (top + bottom) // 2
-        try:
-            await swipe(left + int((right - left) * 0.85), y, left + int((right - left) * 0.15), y, 400)
-        except CompanionTransportError:
-            return out
-        swiped, cleared = await self._dump_and_clear_overlays(await self._settle())
-        if cleared:
-            for key, val in read_driving_data(swiped, self._app_strings).items():
-                if key.startswith("refuel_trip_"):
+        for forward in (True, False):
+            for _ in range(2):
+                row = trip_carousel_row(nodes, self._app_strings)
+                if wanted <= out.keys() or row is None:
+                    return out
+                left, top, right, bottom = row
+                y = (top + bottom) // 2
+                x1, x2 = left + int((right - left) * 0.85), left + int((right - left) * 0.15)
+                if not forward:
+                    x1, x2 = x2, x1
+                try:
+                    await swipe(x1, y, x2, y, 400)
+                    swiped, cleared = await self._dump_and_clear_overlays(await self._settle())
+                except CompanionTransportError:
+                    return out
+                if not cleared:
+                    return out
+                for key, val in read_driving_data(swiped, self._app_strings).items():
                     out.setdefault(key, val)
+                if swiped == nodes:
+                    break
+                nodes = swiped
         return out
 
     async def _read_departure_pages(self, nodes: list[UiNode]) -> dict[str, object]:

@@ -112,6 +112,7 @@ DRIVING_TILE = "acc_vehicle_tab_label_driving_data"
 _RTS = "volkswagen_acc_cat_snowshoe_rts_"
 _RTS_UNIT = "volkswagen_cat_snowshoe_rts_"
 TRIP_CARDS = {
+    "long_trip": (_RTS + "lastLongHaulTripLabel", _RTS_UNIT + "lastLongDistanceTripTileTitle"),
     "last_trip": (_RTS + "lastSingleTripLabel", _RTS_UNIT + "lastSingleTripTileTitle"),
     "refuel_trip": (
         _RTS + "cyclicTripsScreenheaderLabelHybrid", _RTS + "cyclicTripsScreenheaderEV",
@@ -543,17 +544,44 @@ def _trip_cards(
 def trip_carousel_row(
     nodes: list[UiNode], resources: StringResources,
 ) -> tuple[int, int, int, int] | None:
-    """The band the trip cards share, to swipe sideways in; None without both."""
-    boxes = [box for _prefix, box in _trip_cards(nodes, resources)]
-    if len(boxes) < 2:
-        return None
-    left = min(b[0] for b in boxes)
-    right = max(b[2] for b in boxes)
-    return left, max(b[1] for b in boxes), right, min(b[3] for b in boxes)
+    """A sideways card band, including layouts with unfamiliar card titles.
+
+    Prefer known cards for older trees. Otherwise require a scrollable box
+    containing side-by-side clickable cards and translated trip row labels;
+    a lone vertical screen scroller is not evidence of a carousel.
+    """
+    boxes = list(dict.fromkeys(box for _prefix, box in _trip_cards(nodes, resources)))
+    if len(boxes) >= 2:
+        top, bottom = max(b[1] for b in boxes), min(b[3] for b in boxes)
+        if top < bottom:
+            return min(b[0] for b in boxes), top, max(b[2] for b in boxes), bottom
+    labels = _labels(resources, *TRIP_ROWS)
+    for container in sorted(
+        (n for n in nodes if n.scrollable and n.bounds and n.tap_point),
+        key=lambda n: (n.bounds[2] - n.bounds[0]) * (n.bounds[3] - n.bounds[1]) if n.bounds else 0,
+    ):
+        assert container.bounds is not None
+        cards = [n for n in nodes if n.clickable and n.bounds and n.tap_point
+                 and _inside(n, container.bounds) and n.bounds != container.bounds]
+        for first in cards:
+            assert first.bounds is not None
+            for second in cards:
+                assert second.bounds is not None
+                if first.bounds[2] > second.bounds[0]:
+                    continue
+                top = max(first.bounds[1], second.bounds[1])
+                bottom = min(first.bounds[3], second.bounds[3])
+                if top >= bottom:
+                    continue
+                seen = {n.text.strip().casefold() for n in nodes
+                        if _inside(n, first.bounds) and n.text.strip().casefold() in labels}
+                if len(seen) >= 2:
+                    return container.bounds[0], top, container.bounds[2], bottom
+    return None
 
 
 def read_driving_data(nodes: list[UiNode], resources: StringResources) -> dict[str, object]:
-    """The trip cards' rows into the VW cloud's ``last_trip_*`` / ``refuel_trip_*``.
+    """Read single, refuel/charging and long-haul cards into distinct field families.
 
     Each row label is followed, to its right, by its value text (consumption
     by one line per energy). Values are kept only when their unit is one of the
