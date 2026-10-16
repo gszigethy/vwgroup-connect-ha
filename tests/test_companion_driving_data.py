@@ -142,8 +142,8 @@ STRINGS_481 = {**STRINGS, **{
 
 def test_long_haul_is_a_separate_family_and_single_trip_can_follow_it():
     out = read_driving_data(parse_ui_dump(_xml('long_first_481')), STRINGS_481)
-    assert out['long_trip_distance_km'] == 499
-    assert out['long_trip_duration_min'] == 1317
+    assert out['companion_long_trip_distance_km'] == 499
+    assert out['companion_long_trip_duration_min'] == 1317
     assert not any(k.startswith(('last_trip_', 'refuel_trip_')) for k in out)
     second = read_driving_data(parse_ui_dump(_xml('single_second_481')), STRINGS_481)
     assert second['last_trip_distance_km'] == 3
@@ -178,7 +178,7 @@ async def test_channel_collects_single_trip_after_long_haul_then_refuel():
     channel = CompanionChannel(phone, VW, time_fn=time.monotonic)
     channel._app_strings = STRINGS_481
     out = await channel._read_driving_data(parse_ui_dump(_xml('long_first_481')))
-    assert out['long_trip_distance_km'] == 499
+    assert out['companion_long_trip_distance_km'] == 499
     assert out['last_trip_distance_km'] == 3
     assert out['last_trip_duration_min'] == 13
     assert out['refuel_trip_distance_km'] == 299
@@ -203,5 +203,5 @@ async def test_stationary_carousel_stops_with_a_bounded_number_of_swipes():
     channel = CompanionChannel(phone, VW, time_fn=time.monotonic)
     channel._app_strings = STRINGS_481
     out = await channel._read_driving_data(parse_ui_dump(_xml('long_first_481')))
-    assert out['long_trip_distance_km'] == 499
+    assert out['companion_long_trip_distance_km'] == 499
     assert len(phone.swipes) == 2

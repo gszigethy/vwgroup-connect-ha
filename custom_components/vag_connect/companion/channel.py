@@ -76,6 +76,7 @@ from .resources import (
     read_health_resources,
     read_overview_resources,
     read_settings_resources,
+    trip_card_families,
     trip_carousel_row,
 )
 from .departure import (
@@ -1093,18 +1094,21 @@ class CompanionChannel:
 
         Swipe only a recognised horizontal band, never pull to refresh. A
         stationary/covered screen or transport failure ends that direction.
-        Long-haul values stay separate from single and refuel/charging trips.
+        Long-haul values stay separate from single and refuel/charging trips;
+        that card is searched for only once its title was on screen.
         """
         out = read_driving_data(nodes, self._app_strings)
         swipe = getattr(self._t, "swipe", None)
-        wanted = {
-            f"{prefix}_{part}" for prefix in ("last_trip", "refuel_trip")
-            for part in ("distance_km", "duration_min", "avg_speed_kmh")
-        }
+        families = {"last_trip", "refuel_trip"}
         if swipe is None:
             return out
         for forward in (True, False):
             for _ in range(2):
+                families |= trip_card_families(nodes, self._app_strings)
+                wanted = {
+                    f"{prefix}_{part}" for prefix in families
+                    for part in ("distance_km", "duration_min", "avg_speed_kmh")
+                }
                 row = trip_carousel_row(nodes, self._app_strings)
                 if wanted <= out.keys() or row is None:
                     return out

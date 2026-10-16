@@ -921,6 +921,8 @@ _VW = BrandPreset(
             resource_targets=(
                 "last_trip_distance_km", "last_trip_duration_min", "last_trip_avg_speed_kmh",
                 "refuel_trip_distance_km", "refuel_trip_duration_min", "refuel_trip_avg_speed_kmh",
+                "companion_long_trip_distance_km", "companion_long_trip_duration_min",
+                "companion_long_trip_avg_speed_kmh",
             ),
         ),
         NavReadSelector(

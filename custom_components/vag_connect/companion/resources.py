@@ -112,7 +112,8 @@ DRIVING_TILE = "acc_vehicle_tab_label_driving_data"
 _RTS = "volkswagen_acc_cat_snowshoe_rts_"
 _RTS_UNIT = "volkswagen_cat_snowshoe_rts_"
 TRIP_CARDS = {
-    "long_trip": (_RTS + "lastLongHaulTripLabel", _RTS_UNIT + "lastLongDistanceTripTileTitle"),
+    # Companion only: the app's long-haul card has no cloud field of its own here.
+    "companion_long_trip": (_RTS + "lastLongHaulTripLabel", _RTS_UNIT + "lastLongDistanceTripTileTitle"),
     "last_trip": (_RTS + "lastSingleTripLabel", _RTS_UNIT + "lastSingleTripTileTitle"),
     "refuel_trip": (
         _RTS + "cyclicTripsScreenheaderLabelHybrid", _RTS + "cyclicTripsScreenheaderEV",
@@ -574,6 +575,11 @@ def _trip_cards(
             if box is not None:
                 cards.append((prefix, box))
     return cards
+
+
+def trip_card_families(nodes: list[UiNode], resources: StringResources) -> set[str]:
+    """The trip card families whose titles are on screen, clipped cards included."""
+    return {prefix for prefix, _box in _trip_cards(nodes, resources)}
 
 
 def trip_carousel_row(
