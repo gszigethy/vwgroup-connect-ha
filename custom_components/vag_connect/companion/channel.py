@@ -85,6 +85,8 @@ from .departure import (
     departure_rows,
     find_toolbar_text,
     page_fields,
+    is_compose_timer_page,
+    read_timer_details,
     read_timer_page,
 )
 from .charging_locations import (
@@ -983,7 +985,7 @@ class CompanionChannel:
         if self._preset.brand == "volkswagen" and nav.name == "vehicle_settings":
             values.update(read_settings_resources(detail, self._app_strings))
         if self._preset.brand == "volkswagen" and nav.name == "departure_times":
-            values.update(read_departure_timers(detail))
+            values.update(read_departure_timers(detail, self._app_strings))
         if self._preset.brand == "volkswagen" and nav.name in (
             "climate_detail", "climate_settings",
         ):
@@ -1135,11 +1137,12 @@ class CompanionChannel:
         out: dict[str, object] = {}
         for slot in range(1, min(3, len(departure_rows(nodes))) + 1):
             page, nodes = await self._open_timer_page(nodes, slot)
-            if page is None:
+            details = read_timer_details(nodes, slot)
+            if page is None and not details and not is_compose_timer_page(nodes):
                 if not departure_rows(nodes):
                     await self._back_to_timer_list()  # off the list: one step back
                 break
-            out.update(page_fields(page, slot))
+            out.update(details)
             back = await self._back_to_timer_list()
             if back is None:
                 break
@@ -1265,10 +1268,12 @@ class CompanionChannel:
         if point is None:
             return None, nodes
         await self._t.tap(*point)
-        settled = await self._settle(lambda n: read_timer_page(n) is not None)
+        settled = await self._settle(
+            lambda n: read_timer_page(n) is not None or is_compose_timer_page(n)
+        )
         page_nodes, cleared = await self._dump_and_clear_overlays(settled)
         if not cleared or self._limit_on_screen(page_nodes):
-            return None, page_nodes
+            return None, []
         return read_timer_page(page_nodes), page_nodes
 
     async def _back_to_timer_list(self) -> list[UiNode] | None:
@@ -2266,6 +2271,11 @@ class CompanionChannel:
         """Set the timer's page, Save, and read it back; the list after."""
         page, nodes = await self._open_timer_page(listing, slot)
         if page is None:
+            if is_compose_timer_page(nodes):
+                raise CompanionWriteBlocked(
+                    "the app's departure editor does not expose its clock and weekday "
+                    "selection; editing cannot be verified, so nothing was changed"
+                )
             raise CompanionWriteBlocked(f"could not open departure timer {slot} in the app")
         if page.time != departure_rows(listing)[slot - 1].time:
             raise CompanionWriteBlocked(

@@ -482,20 +482,31 @@ def driving_tile_text(nodes: list[UiNode], resources: StringResources) -> str | 
 _DRIVING_TILE_FALLBACK = re.compile(r"^(?:Driving\s*data|Fahrdaten)\.\s")
 
 
-def read_departure_timers(nodes: list[UiNode]) -> dict[str, object]:
+def read_departure_timers(
+    nodes: list[UiNode], resources: StringResources | None = None,
+) -> dict[str, object]:
     """The Departure times screen's timer rows, top to bottom, at most three.
 
     Each row's switch is the timer's on/off and its clock text the time,
     reported as 24-hour "HH:MM" like the VW cloud's ``departureTime`` (see
     ``departure.departure_rows``). The words around them are not read, so
-    this works in any language. The count is set only when all three timers
-    were on screen.
+    this works in any language. If translations are available, also read the
+    recurrence label within each row. It does not prove Repeat: a one-time
+    Saturday timer and a repeating Saturday timer have the same list label.
+    The count is set only when all three timers were on screen.
     """
     rows = departure_rows(nodes)
     out: dict[str, object] = {}
     for index, row in enumerate(rows[:3], start=1):
         out[f"departure_timer_{index}_enabled"] = row.enabled
         out[f"departure_timer_{index}_time"] = row.time
+        if resources:
+            from .charging_locations import recurrence_days  # noqa: PLC0415
+
+            days = {value for n in nodes if n.text and _inside(n, row.bounds)
+                    if (value := recurrence_days(n.text, resources)) is not None}
+            if len(days) == 1:
+                out[f"departure_timer_{index}_weekdays"] = days.pop()
     if len(rows) >= 3:
         out["departure_timer_enabled_count"] = sum(1 for row in rows[:3] if row.enabled)
     return out
