@@ -65,6 +65,7 @@ from .resources import (
     find_request_limit,
     find_settings_entry,
     find_tile_entry,
+    find_vehicle_location,
     is_power_budget_alert,
     power_budget_labels,
     read_battery_resources,
@@ -1296,7 +1297,13 @@ class CompanionChannel:
         return scrolled if cleared else nodes
 
     def _step_node(self, nodes: list[UiNode], step: "ActionSelector") -> UiNode | None:
+        if step.action == "find_vehicle":
+            node = find_vehicle_location(nodes, self._app_strings)
+            if node is not None:
+                return node
         node = find_node_for(nodes, step)
+        if step.action == "find_vehicle":
+            return node if node is not None and node.clickable and node.tap_point else None
         if step.action == "open_charge_detail" and node is None:
             node = find_battery_tile(nodes, self._app_strings)
         if step.action == "open_vehicle_settings" and node is None:

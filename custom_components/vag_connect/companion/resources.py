@@ -151,10 +151,11 @@ _CHARGING_KEYS = (
 )
 # Overview tiles opened by a nav read, by their translated label.
 DEPARTURE_TILE = "acc_vehicle_tab_label_departure_times"
+VEHICLE_LOCATION = "volkswagen_cat_nav_mapsVehicleLocationLabel"
 _SINGLE_KEYS = frozenset({
     "acc_common_hint_details", "acc_vehicle_tab_label_settings", *_LIMIT_KEYS,
     POWER_BUDGET_FOOTER, *_BACKEND_LIMIT_TEXTS,
-    DEPARTURE_TILE, TIMER_SAVE, TIMER_CANCEL, *_TRIP_KEYS,
+    DEPARTURE_TILE, VEHICLE_LOCATION, TIMER_SAVE, TIMER_CANCEL, *_TRIP_KEYS,
     SYNC_LAST_UPDATE, SYNC_JUST_NOW, SYNC_TOO_OLD, DATA_UNAVAILABLE, *_CLIMA_KEYS,
     *HEALTH_ROWS, HEALTH_NO_ISSUES, HEALTH_ISSUES, *SETTINGS_SWITCHES,
     *_TILE_KEYS, *_CHARGING_KEYS,
@@ -448,6 +449,16 @@ def find_tile_entry(nodes: list[UiNode], resources: StringResources, key: str) -
         and any(node.content_desc.startswith(label + ".") for label in labels)
         and any(node.content_desc.rstrip(".").endswith(hint) for hint in hints)
     ), None)
+
+
+def find_vehicle_location(nodes: list[UiNode], resources: StringResources) -> UiNode | None:
+    """The map's location button by the installed app's translated label."""
+    labels = _labels(resources, VEHICLE_LOCATION)
+    matches = [
+        n for n in nodes if n.enabled and n.clickable and n.tap_point
+        and any(t.strip().casefold() in labels for t in (n.text, n.content_desc) if t)
+    ]
+    return matches[0] if len(matches) == 1 else None
 
 
 def driving_tile_text(nodes: list[UiNode], resources: StringResources) -> str | None:
