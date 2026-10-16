@@ -66,6 +66,7 @@ from .resources import (
     find_settings_entry,
     find_tile_entry,
     find_vehicle_location,
+    clickable_target,
     is_power_budget_alert,
     power_budget_labels,
     read_battery_resources,
@@ -1322,7 +1323,7 @@ class CompanionChannel:
                 return node
         node = find_node_for(nodes, step)
         if step.action == "find_vehicle":
-            return node if node is not None and node.clickable and node.tap_point else None
+            return clickable_target(nodes, node) if node is not None else None
         if step.action == "open_charge_detail" and node is None:
             node = find_battery_tile(nodes, self._app_strings)
         if step.action == "open_vehicle_settings" and node is None:

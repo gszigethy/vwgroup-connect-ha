@@ -456,10 +456,34 @@ def find_vehicle_location(nodes: list[UiNode], resources: StringResources) -> Ui
     """The map's location button by the installed app's translated label."""
     labels = _labels(resources, VEHICLE_LOCATION)
     matches = [
-        n for n in nodes if n.enabled and n.clickable and n.tap_point
+        n for n in nodes if n.enabled and n.tap_point
         and any(t.strip().casefold() in labels for t in (n.text, n.content_desc) if t)
     ]
-    return matches[0] if len(matches) == 1 else None
+    return clickable_target(nodes, matches[0]) if len(matches) == 1 else None
+
+
+def clickable_target(nodes: list[UiNode], label: UiNode) -> UiNode | None:
+    """The label itself if clickable, else the smallest clickable node around it.
+
+    4.8.1 labels the map's icon buttons on a non-clickable child; the click
+    sits on the button around it. A clickable area that also holds another
+    label (the map itself) is not that button. Without one there is nothing to tap.
+    """
+    point = label.tap_point
+    if point is None:
+        return None
+    if label.clickable:
+        return label
+    x, y = point
+    others = [
+        n for n in nodes if n is not label and n.bounds and (n.text or n.content_desc)
+    ]
+    around = [
+        n for n in nodes if n.enabled and n.clickable and n.bounds and n.tap_point
+        and n.bounds[0] <= x < n.bounds[2] and n.bounds[1] <= y < n.bounds[3]
+        and not any(o is not n and _inside(o, n.bounds) for o in others)
+    ]
+    return min(around, key=lambda n: (n.bounds[2] - n.bounds[0]) * (n.bounds[3] - n.bounds[1]) if n.bounds else 0, default=None)
 
 
 def driving_tile_text(nodes: list[UiNode], resources: StringResources) -> str | None:
