@@ -103,6 +103,8 @@ async def test_channel_swipes_sideways_once_and_keeps_both_cards():
     phone = Carousel()
     channel = CompanionChannel(phone, VW, time_fn=time.monotonic, nav_opt_ins={"driving_data"})
     channel._app_strings = STRINGS
+    channel._trip_families = {"last_trip", "refuel_trip"}  # after the first sweep
+    channel._trip_swept_at = channel._now()
     out = await channel._read_driving_data(parse_ui_dump(_xml("tiguan_driving")))
     assert out == {**LAST, **REFUEL}
     [(x1, y1, x2, y2)] = phone.swipes
@@ -142,8 +144,8 @@ STRINGS_481 = {**STRINGS, **{
 
 def test_long_haul_is_a_separate_family_and_single_trip_can_follow_it():
     out = read_driving_data(parse_ui_dump(_xml('long_first_481')), STRINGS_481)
-    assert out['long_trip_distance_km'] == 499
-    assert out['long_trip_duration_min'] == 1317
+    assert out['companion_long_trip_distance_km'] == 499
+    assert out['companion_long_trip_duration_min'] == 1317
     assert not any(k.startswith(('last_trip_', 'refuel_trip_')) for k in out)
     second = read_driving_data(parse_ui_dump(_xml('single_second_481')), STRINGS_481)
     assert second['last_trip_distance_km'] == 3
@@ -177,8 +179,10 @@ async def test_channel_collects_single_trip_after_long_haul_then_refuel():
     phone = OrderedCarousel(['long_first_481', 'single_second_481', 'tiguan_driving_swiped'])
     channel = CompanionChannel(phone, VW, time_fn=time.monotonic)
     channel._app_strings = STRINGS_481
+    channel._trip_families = {"companion_long_trip", "last_trip", "refuel_trip"}
+    channel._trip_swept_at = channel._now()
     out = await channel._read_driving_data(parse_ui_dump(_xml('long_first_481')))
-    assert out['long_trip_distance_km'] == 499
+    assert out['companion_long_trip_distance_km'] == 499
     assert out['last_trip_distance_km'] == 3
     assert out['last_trip_duration_min'] == 13
     assert out['refuel_trip_distance_km'] == 299
@@ -190,6 +194,8 @@ async def test_channel_searches_backwards_when_initial_card_is_at_the_end():
     phone = OrderedCarousel(['tiguan_driving_swiped', 'tiguan_driving_swiped', 'tiguan_driving'])
     channel = CompanionChannel(phone, VW, time_fn=time.monotonic)
     channel._app_strings = STRINGS
+    channel._trip_families = {"last_trip", "refuel_trip"}
+    channel._trip_swept_at = channel._now()
     out = await channel._read_driving_data(parse_ui_dump(_xml('tiguan_driving_swiped')))
     assert out == {**REFUEL, **LAST}
     assert len(phone.swipes) == 2
@@ -203,5 +209,69 @@ async def test_stationary_carousel_stops_with_a_bounded_number_of_swipes():
     channel = CompanionChannel(phone, VW, time_fn=time.monotonic)
     channel._app_strings = STRINGS_481
     out = await channel._read_driving_data(parse_ui_dump(_xml('long_first_481')))
-    assert out['long_trip_distance_km'] == 499
+    assert out['companion_long_trip_distance_km'] == 499
     assert len(phone.swipes) == 2
+
+
+class DirectedCarousel:
+    """Cards in a row; a right-to-left swipe moves one card forward."""
+
+    def __init__(self, screens, start):
+        self.screens, self.index = screens, start
+        self.swipes: list[tuple[int, int, int, int]] = []
+
+    async def dump_ui(self):
+        return self.screens[self.index]
+
+    async def swipe(self, x1, y1, x2, y2, _ms=300):
+        self.swipes.append((x1, y1, x2, y2))
+        step = 1 if x1 > x2 else -1
+        self.index = max(0, min(len(self.screens) - 1, self.index + step))
+
+
+@pytest.mark.asyncio
+async def test_first_read_sweeps_both_ends_and_finds_a_hidden_long_haul_card():
+    """Long-haul sits left of the starting card and shows no title there."""
+    # The refuel card without its long-haul peek: nothing on screen to the
+    # right of the start names the long-haul card.
+    refuel = _xml('tiguan_driving_swiped').replace('text="Last long-haul trip"', 'text=""')
+    screens = [_xml('long_first_481'), _xml('single_second_481'), refuel]
+    phone = DirectedCarousel(screens, start=1)
+    channel = CompanionChannel(phone, VW, time_fn=time.monotonic)
+    channel._app_strings = STRINGS_481
+    out = await channel._read_driving_data(parse_ui_dump(screens[1]))
+    assert out['companion_long_trip_distance_km'] == 499
+    assert out['last_trip_distance_km'] == 3
+    assert out['refuel_trip_distance_km'] == 299
+    assert channel._trip_families == {"companion_long_trip", "last_trip", "refuel_trip"}
+
+    # The next read starts in the middle again: the remembered card is searched
+    # for, and the walk stops as soon as it is read.
+    phone.index, phone.swipes = 1, []
+    out = await channel._read_driving_data(parse_ui_dump(screens[1]))
+    assert out['companion_long_trip_distance_km'] == 499
+    assert phone.index == 0 and len(phone.swipes) <= 4
+
+
+@pytest.mark.asyncio
+async def test_a_card_added_later_is_found_by_the_daily_sweep():
+    refuel = _xml('tiguan_driving_swiped').replace('text="Last long-haul trip"', 'text=""')
+    screens = [_xml('single_second_481'), refuel]  # no long-haul card yet
+    clock = [0.0]
+    phone = DirectedCarousel(screens, start=0)
+    channel = CompanionChannel(phone, VW, time_fn=lambda: clock[0])
+    channel._app_strings = STRINGS_481
+    await channel._read_driving_data(parse_ui_dump(screens[0]))
+    assert channel._trip_families == {"last_trip", "refuel_trip"}
+
+    # The app now shows a long-haul card left of the single trip.
+    screens.insert(0, _xml('long_first_481'))
+    phone.index = 1
+    out = await channel._read_driving_data(parse_ui_dump(screens[1]))
+    assert 'companion_long_trip_distance_km' not in out  # same day: not searched
+
+    clock[0] = 24 * 3600.0
+    phone.index = 1
+    out = await channel._read_driving_data(parse_ui_dump(screens[1]))
+    assert out['companion_long_trip_distance_km'] == 499
+    assert "companion_long_trip" in channel._trip_families
