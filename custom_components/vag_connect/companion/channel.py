@@ -148,6 +148,7 @@ _SETTLE_MAX_DUMPS = 2              # dumps spent waiting for a Compose screen to
                                    # uiautomator dump is a round trip of a
                                    # second or more, so a four-step walk would
                                    # otherwise spend half a minute dumping.
+_TRIP_SWEEP_S = 24 * 3600.0       # full Driving data carousel sweep, at most daily
 _SLIDER_TRIES = 3                  # charge-limit taps, each read back, before
                                    # giving up without saving
 _SLIDER_READS = 3                  # dumps per slider tap to see it redrawn
@@ -367,7 +368,9 @@ class CompanionChannel:
         self._screen_lock = _ScreenLock()
         self._app_strings: dict[str, set[str]] = {}
         # Trip-card families a full Driving data sweep found; None until one ran.
+        # Swept again daily, so a card the app adds later is found.
         self._trip_families: set[str] | None = None
+        self._trip_swept_at: float = 0.0
         # (app version, split list) the current table was successfully read for.
         self._strings_ok_key: tuple[str | None, tuple[str, ...]] | None = None
         self._strings_try_key: tuple[str | None, tuple[str, ...]] | None = None
@@ -1099,13 +1102,14 @@ class CompanionChannel:
         Long-haul values stay separate from single and refuel/charging trips.
         The first read sweeps both ends of the carousel, since a card left of
         the starting one may not show its title, and remembers which cards
-        exist; later reads stop once every remembered card was read.
+        exist; later reads stop once every remembered card was read. The
+        sweep repeats daily, so a card the app adds later is found.
         """
         out = read_driving_data(nodes, self._app_strings)
         swipe = getattr(self._t, "swipe", None)
         if swipe is None:
             return out
-        sweep = self._trip_families is None
+        sweep = self._trip_families is None or self._now() - self._trip_swept_at >= _TRIP_SWEEP_S
         families = {"last_trip", "refuel_trip"} | (self._trip_families or set())
         for forward in (True, False):
             for _ in range(2):
@@ -1136,6 +1140,7 @@ class CompanionChannel:
                 nodes = swiped
         if sweep:
             self._trip_families = families | trip_card_families(nodes, self._app_strings)
+            self._trip_swept_at = self._now()
         return out
 
     async def _read_departure_pages(self, nodes: list[UiNode]) -> dict[str, object]:
