@@ -398,13 +398,18 @@ class CompanionChannel:
     @property
     def writes_enabled(self) -> bool:
         """Whether writes are currently allowed, with all gates applied."""
+        preset_listed = app_version_listed(
+            self._live_app_version, self._preset.verified_app_version
+        )
         return (
             bool(self._version_ok)
             and self._preset.writable
-            and app_version_listed(self._live_app_version, self._preset.verified_app_version)
+            # The same rule as ``_command_gate``: a build the preset lists, or
+            # one an action lists itself after its own live test.
             and any(
-                a.app_versions is None
-                or app_version_listed(self._live_app_version, a.app_versions)
+                (a.app_versions is None and preset_listed)
+                or (a.app_versions is not None
+                    and app_version_listed(self._live_app_version, a.app_versions))
                 for a in self._preset.actions
             )
             and not self._is_rate_limited()
@@ -2450,7 +2455,14 @@ class CompanionChannel:
             if (now.hour_value, now.minute_value) != want_clock:
                 staged = True
                 now = await self._set_compose_clock(now, *want_clock)
-            nodes, _cleared = await self._dump_and_clear_overlays()
+            nodes, cleared = await self._dump_and_clear_overlays()
+            if self._limit_on_screen(nodes):
+                self._trip_rate_limit()
+                raise CompanionWriteBlocked(_LIMIT_REASON)
+            if not cleared or not is_compose_timer_page(nodes):
+                raise CompanionWriteBlocked(
+                    "a message covered the departure timer before Save; nothing was saved"
+                )
             save = find_toolbar_text(nodes, self._toolbar_labels(TIMER_SAVE, "save"), page_top)
             if save is None or save.tap_point is None:
                 raise CompanionWriteBlocked("the app did not offer Save for the departure timer")

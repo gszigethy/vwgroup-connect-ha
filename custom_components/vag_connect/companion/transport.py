@@ -25,7 +25,7 @@ _LOGGER = logging.getLogger(__name__)
 _DUMP_PATH = "/sdcard/vag_connect_ui.xml"
 # The hidden-node helper (a11y/README.md): pushed for a departure timer edit on
 # VW app 4.8.1 and removed afterwards. The hash pins the shipped build.
-A11Y_DEX_SHA256 = "a8095eaa0805900f3d4fac4eed18fd85b7582cf3139444077db9b9b9086ab7f2"
+A11Y_DEX_SHA256 = "b079a86e357cdf3a7a439316809e523ddb8b87d0d0630df1a93407f1719c2656"
 _A11Y_REMOTE = "/data/local/tmp/vag_connect_a11y.dex"
 _A11Y_RUN = f"CLASSPATH={_A11Y_REMOTE} app_process / A11yTree"
 
@@ -415,13 +415,22 @@ class NetworkAdbTransport:
         if self._device is None:
             raise CompanionTransportError("not connected")
         local = await asyncio.to_thread(_a11y_dex_path)
-        try:
-            await asyncio.to_thread(
-                functools.partial(
-                    self._device.push, local, _A11Y_REMOTE,
-                    transport_timeout_s=timeout_s, read_timeout_s=timeout_s,
-                )
+        upload = asyncio.ensure_future(asyncio.to_thread(
+            functools.partial(
+                self._device.push, local, _A11Y_REMOTE,
+                transport_timeout_s=timeout_s, read_timeout_s=timeout_s,
             )
+        ))
+        try:
+            await asyncio.shield(upload)
+        except asyncio.CancelledError:
+            # The upload thread cannot be stopped: let it finish, so the
+            # caller's cleanup removes the file instead of racing it.
+            try:
+                await upload
+            except Exception:  # noqa: BLE001 - only the cancellation matters here
+                pass
+            raise
         except Exception as err:  # noqa: BLE001 - adb-shell raises many types
             await self.close()
             raise CompanionTransportError(
