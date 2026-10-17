@@ -522,3 +522,31 @@ async def test_cancelling_during_the_upload_lets_it_finish_before_cleanup():
     with pytest.raises(asyncio.CancelledError):
         await task
     assert finished.is_set()  # cleanup after this point cannot race the upload
+
+
+@pytest.mark.asyncio
+async def test_a_request_limit_alert_before_save_pauses_and_saves_nothing():
+    phone = EditorPhone()
+    ch = _channel(phone)
+    ch._limit_on_screen = lambda nodes: phone.page and phone.edit != phone.saved
+    with pytest.raises(CompanionWriteBlocked):
+        await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (7, 0), None, None)
+    assert "save" not in phone.taps
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_upload_that_then_fails_still_reports_the_cancellation():
+    import time as _time
+
+    t = _adb()
+
+    def failing_push(*_a, **_k):
+        _time.sleep(0.2)
+        raise OSError("pipe")
+
+    t._device.push = failing_push
+    task = asyncio.ensure_future(t.a11y_prepare())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task

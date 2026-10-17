@@ -69,6 +69,7 @@ public class A11yTree {
                 System.out.println("END");
             }
         } catch (Throwable t) {
+            if (t instanceof InterruptedException) Thread.currentThread().interrupt();
             System.out.println("ERROR " + t);
             status = 1;
         } finally {
