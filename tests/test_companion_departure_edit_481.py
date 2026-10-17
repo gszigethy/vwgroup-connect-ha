@@ -369,3 +369,87 @@ async def test_saving_refreshes_the_enabled_count():
     ch._nav_cache["departure_timer_enabled_count"] = 7  # stale on purpose
     await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (7, 5), None, None)
     assert ch._nav_cache.get("departure_timer_enabled_count") != 7
+
+
+# -- the transport side of the helper -----------------------------------------
+
+
+class _Device:
+    available = True
+
+    def __init__(self, out=""):
+        self.out, self.cmds, self.pushed = out, [], []
+
+    def shell(self, cmd, transport_timeout_s=None, read_timeout_s=None, timeout_s=None):
+        self.cmds.append(cmd)
+        return self.out
+
+    def push(self, local, remote, transport_timeout_s=None, read_timeout_s=None):
+        self.pushed.append((local, remote))
+
+    def close(self):
+        pass
+
+
+def _adb(out=""):
+    t = transport_mod.NetworkAdbTransport("phone", 5555, "/nonexistent")
+    t._device = _Device(out)
+    return t
+
+
+@pytest.mark.asyncio
+async def test_prepare_pushes_the_pinned_helper_to_tmp():
+    t = _adb()
+    await t.a11y_prepare()
+    [(local, remote)] = t._device.pushed
+    assert local.endswith("a11y_tree.dex") and remote == "/data/local/tmp/vag_connect_a11y.dex"
+
+
+@pytest.mark.asyncio
+async def test_prepare_refuses_a_modified_helper_before_any_push(monkeypatch):
+    monkeypatch.setattr(transport_mod, "A11Y_DEX_SHA256", "0" * 64)
+    t = _adb()
+    with pytest.raises(CompanionTransportError, match="reviewed build"):
+        await t.a11y_prepare()
+    assert t._device.pushed == []
+
+
+@pytest.mark.asyncio
+async def test_prepare_without_a_connection_fails_cleanly():
+    t = transport_mod.NetworkAdbTransport("phone", 5555, "/nonexistent")
+    with pytest.raises(CompanionTransportError, match="not connected"):
+        await t.a11y_prepare()
+
+
+@pytest.mark.asyncio
+async def test_a_failed_push_closes_the_link():
+    t = _adb()
+
+    def broken(*_a, **_k):
+        raise OSError("pipe")
+
+    t._device.push = broken
+    with pytest.raises(CompanionTransportError, match="editor helper"):
+        await t.a11y_prepare()
+    assert t._device is None
+
+
+@pytest.mark.asyncio
+async def test_tree_set_and_cleanup_commands():
+    t = _adb(TREE)
+    assert await t.a11y_tree() == TREE
+    assert t._device.cmds[-1] == "CLASSPATH=/data/local/tmp/vag_connect_a11y.dex app_process / A11yTree"
+    t._device.out = "SET 1 true\n"
+    assert await t.a11y_set_progress(1, 60001) is True
+    assert t._device.cmds[-1].endswith("A11yTree set 1 60001.0")
+    t._device.out = "SET 1 false\n"
+    assert await t.a11y_set_progress(1, 60001) is False
+    await t.a11y_cleanup()
+    assert t._device.cmds[-1] == "rm -f /data/local/tmp/vag_connect_a11y.dex"
+
+
+@pytest.mark.asyncio
+async def test_a_tree_without_its_end_marker_is_not_trusted():
+    t = _adb("NODE\t0\t0\t0\t1\t1\tclass=x\n")
+    with pytest.raises(CompanionTransportError, match="no screen"):
+        await t.a11y_tree()

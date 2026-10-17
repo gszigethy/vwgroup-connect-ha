@@ -361,7 +361,7 @@ def read_compose_clock(tree: str) -> ComposeClock | None:
         return None
     wheels = sorted(ranged, key=lambda w: w.left)
     digits = [w for w in wheels if w.state.isdigit() and len(w.state) <= 2]
-    meridiem = [w for w in wheels if w.maximum == 1.0]
+    meridiem = [w for w in wheels if abs(w.maximum - 1.0) < 1e-6]
     if len(digits) != 2 or len(meridiem) != len(wheels) - 2:
         return None
     hour, minute = digits
