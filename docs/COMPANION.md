@@ -462,7 +462,7 @@ that cannot be closed) yields no values rather than wrong ones, and the last val
 | Climate temperature on a running climate | Moves the dial: one step is a tap on the next label, two steps one slow drag | same | The dial must show °C and be inside 15.5–30 °C; read back after every gesture; more than 2 °C is refused before anything moves |
 | Climate at unlock, Automatic window heating, Climate zones | Air Conditioning Settings → toggle → Save | 4.8.1, 4.6.4 | The page is read back; a value already in place sends nothing |
 | Departure Timer switches | Taps the row's switch (the app sends at once) | 4.8.1, 4.6.4, 4.3.2 | Watched for a flip back (the car did not accept it) |
-| Departure Timer time, `set_departure_timer` | The timer's page: time wheels, weekdays, Repeat → Save | 4.8.1, 4.6.4 | Saved only when the page shows exactly what was asked; the timer is matched by content; two timers with the same time are refused; `enabled: false` with an edit is refused (Save switches the timer on). On 4.8.1 the picker is hidden from uiautomator: its wheels are read and set through the [a11y helper](#departure-editor-on-481), the time is read back from the wheels before Save, and the days (which the page does not show) are checked on the list after Save |
+| Departure Timer time, `set_departure_timer` | The timer's page: time wheels, weekdays, Repeat → Save | 4.8.1, 4.6.4 | Saved only when the page shows exactly what was asked; the timer is matched by content; two timers with the same time are refused; `enabled: false` with an edit is refused (Save switches the timer on). On 4.8.1 the picker is hidden from uiautomator: its wheels are read and set through the [a11y helper](#departure-editor-on-481) and read back before Save. The 4.8.1 page never shows which weekdays are on, so a change of days is refused there (time and Repeat can be set) |
 | Refresh vehicle data, Vehicle sync interval | Vehicle Settings → *Synchronise now* | 4.8.1, 4.6.4, 4.3.2 | A power-budget pause allows one probe per 4 h; a backend pause allows none |
 
 **How a command runs.** One command at a time, sharing the screen lock with polls. The channel brings
@@ -770,13 +770,14 @@ a 6 kB helper, `companion/a11y/a11y_tree.dex` (source and build steps beside it)
 - the wheels are found by structure (two-digit wheels left to right, plus the two-value AM/PM wheel on a
   12-hour phone), not by their labels, so the edit works in any app language.
 
-The edit: the days the timer opened with come from the list's recurrence label; day buttons are tapped
-by id (added before removed, so a day always stays on), then Repeat (the app turns it on for a second
-day), then each wheel is set and read back. Save is pressed only when the app offers it, which it does
-only while the page differs from the saved timer. Afterwards the list must show the new time and days and
-the reopened page the new Repeat; anything stopping the edit before Save presses the page's X, which
-restores the saved timer. A transport without the helper (the add-on bridge, the relay) refuses the edit
-before touching the page.
+The edit: Repeat is read and set on the page, then each wheel is set and read back. Save is pressed
+only when the app offers it, which it does only while the page differs from the saved timer. Afterwards
+the list must show the new time and the reopened page the new Repeat. Anything that stops the edit
+before Save (including a dropped link, after one reconnect) presses the page's X, which restores the
+saved timer, and the helper is removed on every path. The day buttons expose no state, so a change of
+days could only be checked after Save: it is refused, and the days are changed in the app. A request
+must match the days on the list. A transport without the helper (the add-on bridge, the relay) refuses
+the edit before touching the page.
 
 ### 3.10 Security model
 

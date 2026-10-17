@@ -31,8 +31,9 @@ its wheels: one range node each (hour, minute, AM/PM on a 12-hour phone) with
 the shown value as state description and SET_PROGRESS as the way to set it.
 ``read_compose_clock`` parses that output by structure, not by label, so it
 does not depend on the app's language. The days come from the list's
-recurrence label, and only Repeat is observable on the page itself, so a
-TimerPage is never built for this editor.
+recurrence label and cannot be checked on the page, so they are never changed
+there; only Repeat is observable on the page itself, so a TimerPage is never
+built for this editor.
 """
 from __future__ import annotations
 
@@ -385,15 +386,6 @@ def wheel_target(wheel: HiddenWheel, shown: int, wanted: int, count: int) -> flo
     ahead = (wanted - shown) % count
     step = ahead if ahead <= count // 2 else ahead - count
     return wheel.progress + step
-
-
-def compose_day_chip(nodes: list[UiNode], day: str) -> UiNode | None:
-    """The 4.8.1 day button for a weekday code ("mon" …)."""
-    rid = _DAY_IDS[day]
-    return next(
-        (n for n in nodes if _rid(n).casefold() == rid and n.tap_point and n.enabled),
-        None,
-    )
 
 
 def compose_repeat_switch(nodes: list[UiNode]) -> UiNode | None:

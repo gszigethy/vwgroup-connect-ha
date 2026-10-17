@@ -2,10 +2,10 @@
 """VW app 4.8.1 departure editor: hidden wheels set by SET_PROGRESS, days by button.
 
 The fake phone is built from the live 4.8.1 captures (list, timer 3's page,
-and the a11y helper's output of the same page) and behaves like the app: a day
-button toggles its day, a second day forces Repeat on, Save shows only while
-the page differs from the saved timer, X restores the saved timer, and Save
-returns to the list with the new time and recurrence label.
+and the a11y helper's output of the same page) and behaves like the app: Save
+shows only while the page differs from the saved timer, X restores the saved
+timer, and Save returns to the list with the new time. The page never shows
+which weekdays are on, so a change of days is refused before any tap.
 """
 from __future__ import annotations
 
@@ -21,7 +21,6 @@ from custom_components.vag_connect.companion import channel as channel_mod
 from custom_components.vag_connect.companion import transport as transport_mod
 from custom_components.vag_connect.companion.channel import CompanionChannel, CompanionWriteBlocked
 from custom_components.vag_connect.companion.departure import (
-    compose_day_chip,
     compose_repeat_switch,
     departure_rows,
     read_compose_clock,
@@ -72,7 +71,10 @@ class EditorPhone:
         self.taps: list[str] = []
         self.helper: list[str] = []
         page = parse_ui_dump(PAGE)
-        self.chips = {d: compose_day_chip(page, d).bounds for d in ("mon", "sat", "sun")}
+        self.chips = {
+            n.resource_id.removeprefix("cta_").lower()[:3]: n.bounds
+            for n in page if n.resource_id.startswith("cta_")
+        }
         self.repeat_box = compose_repeat_switch(page).bounds
         self.row3 = departure_rows(parse_ui_dump(LIST))[2].clock.bounds
 
@@ -216,21 +218,31 @@ def test_wheels_take_the_short_way_round():
 
 
 @pytest.mark.asyncio
-async def test_edit_sets_wheels_days_and_repeat_then_saves_once_and_reads_back():
+async def test_edit_sets_wheels_and_repeat_then_saves_once_and_reads_back():
     phone = EditorPhone()
     ch = _channel(phone)
     listing = parse_ui_dump(await phone.dump_ui())
-    back = await ch._edit_timer(listing, 3, (7, 5), ("sun",), False)
-    assert phone.saved == Timer(7, 5, frozenset({"sun"}), False)
-    # Sunday added before Saturday is removed; the app's forced Repeat undone.
-    assert phone.taps.count("save") == 1
-    assert phone.taps.index("sun") < phone.taps.index("sat") < phone.taps.index("repeat")
-    assert phone.taps.index("repeat") < phone.taps.index("save")
-    assert phone.helper[0] == "prepare" and "cleanup" in phone.helper
+    back = await ch._edit_timer(listing, 3, (7, 5), ("sat",), False)
+    assert phone.saved == Timer(7, 5, frozenset({"sat"}), False)
+    # No day button is ever tapped; the page is reopened after Save to read Repeat.
+    assert phone.taps == ["open", "repeat", "save", "open", "back"]
+    assert phone.helper[0] == "prepare" and phone.helper[-1] == "cleanup"
     assert departure_rows(back)
     assert ch._nav_cache["departure_timer_3_time"] == "07:05"
-    assert ch._nav_cache["departure_timer_3_weekdays"] == "sun"
+    assert ch._nav_cache["departure_timer_3_weekdays"] == "sat"
     assert ch._nav_cache["departure_timer_3_repeat"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("days", [("sun",), ("sat", "sun"), ("mon", "tue", "wed", "thu", "fri")])
+async def test_a_change_of_days_is_refused_before_any_tap(days):
+    phone = EditorPhone()
+    ch = _channel(phone)
+    with pytest.raises(CompanionWriteBlocked, match="change the days in the app"):
+        await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (7, 0), days, True)
+    assert phone.taps == ["open"]  # only the row was opened
+    assert not [h for h in phone.helper if h.startswith("set")]
+    assert phone.helper[-1] == "cleanup"
 
 
 @pytest.mark.asyncio
@@ -253,13 +265,13 @@ async def test_a_wheel_that_does_not_move_cancels_with_x_and_saves_nothing():
 
 
 @pytest.mark.asyncio
-async def test_a_day_change_that_did_not_reach_the_wheels_is_cancelled():
+async def test_a_repeat_change_whose_wheels_do_not_move_is_cancelled_with_x():
     phone = EditorPhone(wheels_move=False)
     ch = _channel(phone)
     with pytest.raises(CompanionWriteBlocked):
-        await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (7, 0), ("mon",), True)
-    assert "x" in phone.taps and "save" not in phone.taps
-    assert phone.saved.days == frozenset({"sat"})
+        await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (7, 0), None, False)
+    assert phone.taps[-1] == "x" and "save" not in phone.taps
+    assert phone.saved == Timer(6, 0, frozenset({"sat"}), True)
 
 
 @pytest.mark.asyncio
@@ -321,7 +333,7 @@ async def test_task_cancellation_mid_edit_still_presses_x():
     phone.fail_set = asyncio.CancelledError()
     ch = _channel(phone)
     with pytest.raises(asyncio.CancelledError):
-        await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (7, 0), ("sun",), None)
+        await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (7, 0), None, False)
     assert "x" in phone.taps and "save" not in phone.taps
     assert phone.saved == Timer(6, 0, frozenset({"sat"}), True)
     assert phone.helper[-1] == "cleanup"
@@ -344,7 +356,7 @@ async def test_a_dropped_link_reconnects_to_cancel_and_remove_the_helper():
     phone.a11y_set_progress = drop
     ch = _channel(phone)
     with pytest.raises(CompanionWriteBlocked, match="link dropped"):
-        await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (7, 0), ("sun",), None)
+        await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (7, 0), None, False)
     assert phone.connects >= 1
     assert "x" in phone.taps and "save" not in phone.taps
     assert phone.helper[-1] == "cleanup"

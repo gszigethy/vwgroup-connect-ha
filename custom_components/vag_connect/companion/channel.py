@@ -89,7 +89,6 @@ from .departure import (
     departure_rows,
     find_toolbar_text,
     page_fields,
-    compose_day_chip,
     compose_page_top,
     compose_repeat_switch,
     compose_toolbar_leading,
@@ -2378,13 +2377,13 @@ class CompanionChannel:
         The picker is hidden from uiautomator, so its wheels are read and set
         through the a11y helper (``a11y/``): each wheel's value comes from its
         state description, and SET_PROGRESS moves it, read back before Save.
-        The day buttons show no state, so the days the timer opened with come
-        from the list's recurrence label; each button tap toggles one day,
-        added before removed so one day stays on, and the list shows the days
-        again after Save. Save is pressed only when the app offers it, which
-        it does only while the page differs from the saved timer. Anything
-        that stops the edit before Save presses the page's X, which restores
-        the saved timer, so nothing is sent.
+        The day buttons show no state, so a change of days could only be
+        checked after Save and is refused; the days the timer has come from
+        the list's recurrence label, which a request must match. Repeat is
+        read on the page. Save is pressed only when the app offers it, which it
+        does only while the page differs from the saved timer. Anything that
+        stops the edit before Save presses the page's X, which restores the
+        saved timer, so nothing is sent.
         """
         t = self._t
         row = departure_rows(listing)[slot - 1]
@@ -2434,18 +2433,14 @@ class CompanionChannel:
                 if back is None:
                     raise CompanionWriteBlocked("the app did not return to the Departure times list")
                 return back  # nothing to change, nothing sent
-            toggles = [d for d in want_days if d not in opened_days]
-            toggles += [d for d in opened_days if d not in want_days]
-            for day in toggles:
-                chip = compose_day_chip(nodes, day)
-                if chip is None or chip.tap_point is None:
-                    raise CompanionWriteBlocked(f"the {day} button is not on the page; nothing was saved")
-                staged = True
-                nodes = await self._tap_compose_page(chip)
-            # Picking a second day turns Repeat on in the app; read it after the days.
-            switch = compose_repeat_switch(nodes)
-            if switch is None:
-                raise CompanionWriteBlocked("could not read Repeat on the page; nothing was saved")
+            if want_days != opened_days:
+                # The page never shows which days are on, so a change could only
+                # be checked after Save: refused, as nothing unverified is sent.
+                raise CompanionWriteBlocked(
+                    f"app {self._live_app_version} does not show which weekdays are "
+                    "selected, so they cannot be checked before saving; change the "
+                    "days in the app (time and Repeat can be set here). Nothing was changed"
+                )
             if switch.checked != want_repeat:
                 staged = True
                 nodes = await self._tap_compose_page(switch)
