@@ -104,10 +104,12 @@ async def test_new_editor_read_walk_returns_to_list_after_every_slot():
 
 
 @pytest.mark.asyncio
-async def test_incomplete_editor_cannot_be_written_even_if_version_gate_is_bypassed():
+async def test_editor_without_the_hidden_node_helper_is_not_written():
+    # A transport that cannot read the hidden picker (no a11y helper) only
+    # opens the page and goes back; the full edit is in test_companion_departure_edit_481.
     phone = ReadOnlyTimerPhone()
     channel = CompanionChannel(phone, PRESETS['volkswagen'], time_fn=lambda: 0)
-    with pytest.raises(CompanionWriteBlocked, match='does not expose its clock'):
+    with pytest.raises(CompanionWriteBlocked, match='direct ADB connection'):
         await channel._edit_timer(parse_ui_dump(xml('list_481')), 1, (8, 0), ('mon',), True)
-    assert phone.opened == 1  # Only opened the page; no editor control was tapped.
+    assert (phone.opened, phone.backs, phone.page) == (1, 1, False)
     assert channel.writes_enabled is False
