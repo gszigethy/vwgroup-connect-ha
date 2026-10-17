@@ -65,7 +65,7 @@ All three are also read:
 
 Vehicle Settings shares the health switch but holds the charge limit, which can
 change in the app at any time, so it is still read on every poll. Whether a
-health warning can reach the app without a vehicle sync is open (#78).
+health warning can reach the app without a vehicle sync is open (gszigethy/vwgroup-connect-ha#78).
 
 ## Overview (Vehicle tab)
 
@@ -75,9 +75,9 @@ itself as `<label>. <value>. <hint>`.
 | Tile | Example narration | Field → entity | Keys | Status |
 |---|---|---|---|---|
 | Range | `Range overview. Battery range: 92 kilometres. Fuel range: 410 kilometres. Open details` | `electric_range_km`, `combustion_range_km` → Electric/Fuel Range | `acc_vehicle_tab_range_tile_value_*` | Mapped |
-| Range, charging | `Range overview. Currently charging. Battery range: …` | `is_charging`, `charging_state` | `…_battery_currently_charging` | Mapped; a state, not the whole narration, since #7 |
-| Climate control | `Climate control. Off. Open details` (DE `Vorklimatisierung. Aus.`) | `climatisation_active`, `climatisation_state` | `acc_vehicle_tab_clima_tile_label`, `…_all_clima_on/_off` | Mapped by the app's keys (#11); EN/DE regex as fallback |
-| Vehicle (lock) | `Vehicle. Locked. Open details` | `doors_locked` → Doors Locked | `acc_vehicle_tab_label_lock_unlock_vehicle`, `…_state_locked/_unlocked` | Mapped by the app's keys (#11); EN/DE regex as fallback |
+| Range, charging | `Range overview. Currently charging. Battery range: …` | `is_charging`, `charging_state` | `…_battery_currently_charging` | Mapped; a state, not the whole narration, since gszigethy/vwgroup-connect-ha#7 |
+| Climate control | `Climate control. Off. Open details` (DE `Vorklimatisierung. Aus.`) | `climatisation_active`, `climatisation_state` | `acc_vehicle_tab_clima_tile_label`, `…_all_clima_on/_off` | Mapped by the app's keys (gszigethy/vwgroup-connect-ha#11); EN/DE regex as fallback |
+| Vehicle (lock) | `Vehicle. Locked. Open details` | `doors_locked` → Doors Locked | `acc_vehicle_tab_label_lock_unlock_vehicle`, `…_state_locked/_unlocked` | Mapped by the app's keys (gszigethy/vwgroup-connect-ha#11); EN/DE regex as fallback |
 | Horn and Turn Signals | `Horn and Turn Signals. Open details` | — | — | Not mapped (a command surface; never opened live) |
 | Departure times | `Departure times. Open details` | — | — | See Departure times |
 | Driving data | `Driving data. Last driven: 3.0 kilometres. Average consumption: 0 litres per 100 kilometres. Open details` | — | `acc_vehicle_tab_label_driving_data` | See Driving data |
@@ -96,7 +96,7 @@ Tap the range tile; close with *Close sheet*.
 | `rangeArcBatterySoc` | `Charging status. Battery charge level: 83 per cent. Target charge level reached` | `battery_soc`, `charging_state`, `is_charging` | Mapped |
 | Charging details | `Charging details. Target charge level: 80 per cent` | `target_soc` | Mapped |
 | Power, speed, time | ID.4: 10 kW, 270 min | `charging_power_kw`, `charging_rate_kmh`, `remaining_charge_time_min` | Mapped |
-| Charging method | `Charging method. Immediate charging. Change charging method` | `charge_mode` → Charging Mode (read-only sensor) | Mapped (#13) |
+| Charging method | `Charging method. Immediate charging. Change charging method` | `charge_mode` → Charging Mode (read-only sensor) | Mapped (gszigethy/vwgroup-connect-ha#13) |
 | Start/Stop charging | CTA | `command_start/stop_charging` | Mapped (command) |
 
 ## Air Conditioning sheet and Settings (nav reads `climate_detail`, `climate_settings`)
@@ -107,7 +107,7 @@ These are covered in [COMPANION_CLIMATE.md](COMPANION_CLIMATE.md):
 - **Settings:** climate at unlock, window heating, without external power, and
   the zones (driver/passenger front zones on the Tiguan).
 
-Since #6 both screens are read on one walk.
+Since gszigethy/vwgroup-connect-ha#6 both screens are read on one walk.
 
 ## Vehicle (lock) sheet
 
@@ -131,7 +131,7 @@ If your brand's backend supports remote lock, use that channel instead.
 
 ## Departure times
 
-Nav read `departure_times` (opt-in, #15). Three timers. Each has a time
+Nav read `departure_times` (opt-in, gszigethy/vwgroup-connect-ha#15). Three timers. Each has a time
 (`07:25 AM`), a recurrence (`Weekdays`, `Saturday`) and a `checkable` switch
 (all off on the Tiguan). The climate target is in the description (`… chosen
 temperature of 22.0°C`). Without timer data the app shows only the section
@@ -142,9 +142,9 @@ go with the charge mode *Charge at preferred times*. The optional
 
 | Value | Field → entity | Status |
 |---|---|---|
-| Timer on/off | `departure_timer_N_enabled` → Departure Timer N Enabled | Read from the switch's `checked` state (#15); unknown when not read (#10) |
-| Timer time | `departure_timer_N_time` | 24-hour `HH:MM` (#15) |
-| Enabled count | `departure_timer_enabled_count` | When all three rows are on screen (#15) |
+| Timer on/off | `departure_timer_N_enabled` → Departure Timer N Enabled | Read from the switch's `checked` state (gszigethy/vwgroup-connect-ha#15); unknown when not read (gszigethy/vwgroup-connect-ha#10) |
+| Timer time | `departure_timer_N_time` | 24-hour `HH:MM` (gszigethy/vwgroup-connect-ha#15) |
+| Enabled count | `departure_timer_enabled_count` | When all three rows are on screen (gszigethy/vwgroup-connect-ha#15) |
 | Weekdays | `departure_timer_N_weekdays` | From the timer's page (`cta_monday` … `cta_sunday`), app 4.6.4 |
 | Repeat | `departure_timer_N_repeat` | From the timer's page (`cta_repeat`), app 4.6.4 |
 
@@ -251,14 +251,14 @@ the reader only observes it.
 
 ## Driving data
 
-Nav read `driving_data` (opt-in, #16). The trip cards sit in a sideways
+Nav read `driving_data` (opt-in, gszigethy/vwgroup-connect-ha#16). The trip cards sit in a sideways
 carousel; the second is drawn clipped (labels, no values) until one sideways
 swipe.
 
 | Card | Values | Fields | Status |
 |---|---|---|---|
-| Last single trip | date, time, distance, consumption (kWh/100 km and l/100 km), average speed, driving time | `last_trip_*` | Mapped (#16), not date/time |
-| From charging or refuelling | the same set | `refuel_trip_*` | Mapped (#16), not date/time |
+| Last single trip | date, time, distance, consumption (kWh/100 km and l/100 km), average speed, driving time | `last_trip_*` | Mapped (gszigethy/vwgroup-connect-ha#16), not date/time |
+| From charging or refuelling | the same set | `refuel_trip_*` | Mapped (gszigethy/vwgroup-connect-ha#16), not date/time |
 | Last long-haul trip | the same set | — | Not mapped |
 | Month | average consumption | — | Not mapped |
 
@@ -269,11 +269,11 @@ units; durations by `duration_hours` / `duration_minutes`.
 
 | Row | Tiguan | Golf GTE (mi) | Field → entity | Key | Status |
 |---|---|---|---|---|---|
-| Total distance | `322 km` | `22,015 mi` | `odometer_km` → Odometer | `screen_vehiclehealth_subhead_totaldistance` | Mapped by key (#8) |
-| Next service | `711 days / 29,700 km` | `71 days / 12,100 mi` | `service_due_in_days`, `service_km` | `…_subhead_nextinspection` | Mapped, days and distance (#8) |
-| Next oil service | — | `71 days / 1,500 mi` | `oil_service_due_in_days`, `oil_service_km` | `…_subhead_oil_service` | Mapped, days and distance (#8) |
-| AdBlue range | — | — | `adblue_range_km` | `…_subhead_adblue_level` | Mapped (#8), no dump yet |
-| Warning header and categories | `No issues found` + 7 categories | same | `warning_active`, `warning_count`, `warning_messages` | `screen_vehiclehealth_overview_*` | Mapped (#14); a warning layout not seen live yet |
+| Total distance | `322 km` | `22,015 mi` | `odometer_km` → Odometer | `screen_vehiclehealth_subhead_totaldistance` | Mapped by key (gszigethy/vwgroup-connect-ha#8) |
+| Next service | `711 days / 29,700 km` | `71 days / 12,100 mi` | `service_due_in_days`, `service_km` | `…_subhead_nextinspection` | Mapped, days and distance (gszigethy/vwgroup-connect-ha#8) |
+| Next oil service | — | `71 days / 1,500 mi` | `oil_service_due_in_days`, `oil_service_km` | `…_subhead_oil_service` | Mapped, days and distance (gszigethy/vwgroup-connect-ha#8) |
+| AdBlue range | — | — | `adblue_range_km` | `…_subhead_adblue_level` | Mapped (gszigethy/vwgroup-connect-ha#8), no dump yet |
+| Warning header and categories | `No issues found` + 7 categories | same | `warning_active`, `warning_count`, `warning_messages` | `screen_vehiclehealth_overview_*` | Mapped (gszigethy/vwgroup-connect-ha#14); a warning layout not seen live yet |
 
 ## Vehicle Settings (nav read `vehicle_settings`)
 
@@ -281,7 +281,7 @@ units; durations by `duration_hours` / `duration_minutes`.
 |---|---|---|---|---|
 | Charging up to (50–100 %) | `80%` | `target_soc` + Charge Target number | — | Mapped (read and set) |
 | Reduced AC charging current | off | — (`vw_eu` has amps, not on/off) | `vehiclesettingsscreen_reducedchargingspeed` | Not mapped |
-| Automatically release AC connector | on | `auto_unlock_when_charged` → binary sensor | `vehiclesettingsscreen_automaticplugunlock` | Mapped (#9) |
+| Automatically release AC connector | on | `auto_unlock_when_charged` → binary sensor | `vehiclesettingsscreen_automaticplugunlock` | Mapped (gszigethy/vwgroup-connect-ha#9) |
 | Synchronise now | button | `command_sync_vehicle` → App sync interval number, Refresh vehicle data button | — | Mapped (command); the button syncs once, then re-reads the app after 3 minutes |
 | Plug & Charge, users, notifications, contracts | links | — | — | Not mapped (account) |
 
@@ -319,11 +319,11 @@ removed from the HA registry on 2026-10-06: `sensor.<car>_vehicle_requests`
 
 ## Decisions (resolved 2026-10-06)
 
-- **D1, departure times:** a new opt-in nav read (#15).
-- **D2, charge mode:** read into `charge_mode` with a read-only sensor (#13).
+- **D1, departure times:** a new opt-in nav read (gszigethy/vwgroup-connect-ha#15).
+- **D2, charge mode:** read into `charge_mode` with a read-only sensor (gszigethy/vwgroup-connect-ha#13).
   In the APK the charging method is set per charging location; *Charge at
   preferred times* charges only inside that location's preferred times,
   which are set in the infotainment.
-- **D3, driving data:** a new opt-in nav read (#16).
-- **D4, health warnings:** read into the warning fields (#14).
+- **D3, driving data:** a new opt-in nav read (gszigethy/vwgroup-connect-ha#16).
+- **D4, health warnings:** read into the warning fields (gszigethy/vwgroup-connect-ha#14).
 - **D5, stale entities:** removed.

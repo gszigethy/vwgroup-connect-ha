@@ -172,6 +172,22 @@ _SELECTIVESTATUS_UNSERVED_STRIKES = 3
 _SELECTIVESTATUS_UNSERVED_TTL = timedelta(hours=6)
 
 
+def _owner_nickname(value: Any, vin: str) -> str | None:
+    """Return the owner-set nickname, or ``None`` if absent / equal to the VIN.
+
+    myAudi/CARIAD defaults a vehicle "nickname" to the raw VIN when the owner
+    never renamed the car. That VIN guard therefore has to travel *with* the
+    nickname into its own field: dropping the nickname from the model slot
+    without this would merely relocate a full VIN into the nickname sensor.
+    """
+    if not isinstance(value, str):
+        return None
+    trimmed = value.strip()
+    if not trimmed or trimmed.upper() == vin.strip().upper():
+        return None
+    return trimmed
+
+
 def _bff_request_id(resp: Any) -> str | None:
     """Extract the async request id from a BFF 202 command response."""
     if not isinstance(resp, dict):
@@ -486,12 +502,19 @@ class VWEUClient(CariadBaseClient):
                 except AuthenticationError as err2:
                     raise PortalSessionExpiredError(str(err2)) from err2
             # Best-effort nickname enrichment from the relation endpoint.
+            # The portal's ``relation.vehicleNickname`` is owner-typed free
+            # text, so it belongs in its own ``nickname`` slot and never in
+            # ``model``: the model reaches public reporter issue titles, the
+            # HA device name and every entity_id. ``model`` stays present
+            # (as None) because the debug log below subscripts m["model"].
             self._vehicle_metadata: dict[str, dict[str, Any]] = {}
             for pvin in vins:
                 nick = await portal.get_relation_nickname(pvin)
                 if nick:
                     self._vehicle_metadata[pvin] = {
-                        "model": nick, "model_year": None,
+                        "model": None,
+                        "nickname": _owner_nickname(nick, pvin),
+                        "model_year": None,
                     }
             if not vins:
                 _LOGGER.warning(
@@ -543,18 +566,19 @@ class VWEUClient(CariadBaseClient):
         # Cache nickname/model per VIN — used in _parse_status to set device name
         # CARIAD returns: nickname (user-set in app), model, modelYear
         #
-        # Privacy guard: myAudi/CARIAD defaults the vehicle "nickname" to the
-        # raw VIN when the owner never renamed the car, so a naive
-        # ``nickname or model`` lands the full VIN in ``d.model`` — which then
-        # leaks into the public Vehicle Data Scout / Error Reporter issue
-        # titles. Drop any candidate that *is* the VIN before it becomes the
-        # model. (_reporter_pipeline._safe_model is the hard backstop, but
-        # filtering here keeps device names + diagnostics clean too.)
+        # Privacy guard: the owner-set "nickname" is person-typed free text,
+        # not a model designation, so it is NOT a _pick_model candidate. It
+        # used to head that tuple, which put it in ``d.model`` and from there
+        # into the public Vehicle Data Scout / Error Reporter issue titles,
+        # the HA device name and every entity_id for the car. It now goes to
+        # its own ``nickname`` slot (a redacted diagnostics key that already
+        # has its own sensor). The ==VIN check stays on the model fields too,
+        # since CARIAD has shipped the VIN in those as well.
+        # (_reporter_pipeline._safe_model is the hard backstop, but filtering
+        # here keeps device names + diagnostics clean too.)
         def _pick_model(v: dict[str, Any], vin: str) -> str | None:
             vin_u = vin.strip().upper()
             for candidate in (
-                v.get("nickname"),      # user-set name (e.g. "Golf GTE")
-                v.get("vehicleNick"),
                 v.get("model"),
                 v.get("carModel"),
             ):
@@ -568,6 +592,10 @@ class VWEUClient(CariadBaseClient):
         self._vehicle_metadata = {
             v["vin"]: {
                 "model": _pick_model(v, v["vin"]),
+                # Owner-typed name, kept OUT of the model slot (see above).
+                "nickname": _owner_nickname(
+                    v.get("nickname") or v.get("vehicleNick"), v["vin"]
+                ),
                 "model_year": v.get("modelYear") or v.get("model_year"),
                 # #1538 — VW's own drivetrain classification for the car, e.g.
                 # "CARNET_ENROLLMENT_APPLICATION:ICE" on a Golf GTD. Applied as an
@@ -849,8 +877,28 @@ class VWEUClient(CariadBaseClient):
             # otherwise a vw.de reporter's diagnostics carries no raw data to
             # ground the location / auth issues (#923 / #966).
             self.last_raw_responses = dict(getattr(web, "last_raw_responses", {}))
-            # #923/#1157 — surface the sole-mode probe outcomes too.
-            self.probe_outcomes = dict(getattr(web, "probe_outcomes", {}))
+            # #923/#1157 — surface the sole-mode probe outcomes too. Merged in
+            # place, NOT rebound: the line above may replace
+            # ``last_raw_responses`` because that one is re-populated per poll by
+            # design (base.py:282), but ``probe_outcomes`` is a long-lived sink
+            # that other code writes into — #1827's per-channel labels come from
+            # ``gather_and_merge`` by way of the coordinator, which runs AFTER
+            # every ``get_status`` in the same poll (coordinator.py:4620 before
+            # :4777; :4436 before :4465 at setup). Rebinding here dropped the
+            # previous poll's labels at the start of the next one and left the
+            # download with no channel lines for the whole window in between,
+            # which under that scheme reads as "not attempted". The proxy never
+            # writes a ``channel:`` key itself — only ``_record`` does — so there
+            # was nothing in the fresh copy to put them back. ``.update()`` is
+            # also what every other path already does with a connector's outcomes
+            # (base.py:624); this was the only unconditional rebind in the tree.
+            # Lazy-init guarded the same way base.py:622 does it, because this
+            # client is built via ``__new__`` without ``__init__`` throughout the
+            # suite (see the note at :430) — the attribute can be absent, and a
+            # bare ``.update()`` would raise where the old rebind quietly worked.
+            if not isinstance(getattr(self, "probe_outcomes", None), dict):
+                self.probe_outcomes = {}
+            self.probe_outcomes.update(getattr(web, "probe_outcomes", None) or {})
             return web_data
 
         # v2.12.0 — EU Data Act portal mode (read-only fallback). When the
@@ -2134,6 +2182,10 @@ class VWEUClient(CariadBaseClient):
             # #584-class report is triageable at a glance instead of asking
             # for a debug log.
             self.mbb_no_legacy_vins: set[str] = set()
+        if not hasattr(self, "mbb_eudp_oplist_vins"):
+            # #1766 — VINs whose operationList came from the EU-DP host after
+            # the legacy host refused it. Read-only: commands stay off for them.
+            self.mbb_eudp_oplist_vins: set[str] = set()
         now = datetime.now(tz=timezone.utc)
         cached = self._mbb_oplist_cache.get(vin)
         if not force_refresh and cached and cached[1] > now:
@@ -2174,6 +2226,18 @@ class VWEUClient(CariadBaseClient):
             # So: log once, spend no refresh, return None (caller treats None as
             # "unknown" and does not block reads).
             if err.status == 401 and "gw.error.authentication" in body:
+                # #1766 — the legacy host refuses this car, but on an enrolled
+                # MBB_ODP car the same operationList answers on the EU-DP host.
+                # Ask there before recording the no-legacy verdict.
+                eudp = await self._get_mbb_operationlist_eudp(
+                    vin, for_command=for_command
+                )
+                if eudp is not None:
+                    self._mbb_oplist_denied.pop(vin, None)
+                    self.mbb_no_legacy_vins.discard(vin)
+                    self.mbb_eudp_oplist_vins.add(vin)
+                    self._mbb_oplist_cache[vin] = (eudp, now + timedelta(hours=12))
+                    return eudp
                 # #909 — remember the denial so the next polls skip the call
                 # entirely, and say it out loud only ONCE per vehicle: the
                 # verdict never changes, so repeating the full explanation every
@@ -2245,6 +2309,7 @@ class VWEUClient(CariadBaseClient):
             # became primary user in the app), so drop the negative cache.
             self._mbb_oplist_denied.pop(vin, None)
             self.mbb_no_legacy_vins.discard(vin)  # #584 — enrolment recovered
+            self.mbb_eudp_oplist_vins.discard(vin)  # #1766 — legacy host is back
             self._mbb_oplist_cache[vin] = (oplist, now + timedelta(hours=12))
             enabled = [s for s in oplist.services.values() if s.enabled]
             _LOGGER.info(
@@ -2252,6 +2317,71 @@ class VWEUClient(CariadBaseClient):
                 "enabled", vin[-6:], oplist.role, oplist.status,
                 len(enabled), len(oplist.services),
             )
+        return oplist
+
+    async def _get_mbb_operationlist_eudp(
+        self, vin: str, *, for_command: bool = False,
+    ) -> "MbbOperationList | None":
+        """#1766 — the operationList from ``MBB_EUDP_SETTER_BASE``, or None.
+
+        Only called after the legacy host answered ``401
+        gw.error.authentication``. Accepted only when the body parses into a
+        list with at least one service: an empty envelope or an error body
+        must not clear the no-legacy verdict. Read-only, never raises.
+        """
+        from .._mbb import (  # noqa: PLC0415
+            MBB_EUDP_SETTER_BASE,
+            build_mbb_operationlist_url,
+            mbb_service_base,
+            parse_mbb_operationlist,
+        )
+
+        url = build_mbb_operationlist_url(MBB_EUDP_SETTER_BASE, vin)
+        try:
+            resp = await self._mbb_get(
+                url, _retry=False, for_command=for_command
+            )
+        except APIError as err:
+            _LOGGER.debug(
+                "MBB operationList ***%s on the EU-DP host → HTTP %s",
+                vin[-6:], err.status,
+            )
+            return None
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug(
+                "MBB operationList ***%s on the EU-DP host failed: %s",
+                vin[-6:], type(err).__name__,
+            )
+            return None
+        oplist = parse_mbb_operationlist(resp, vin)
+        if oplist is None or not oplist.services:
+            _LOGGER.debug(
+                "MBB operationList ***%s on the EU-DP host: no usable list",
+                vin[-6:],
+            )
+            return None
+        enabled = [s for s in oplist.services.values() if s.enabled]
+        _LOGGER.info(
+            "MBB operationList ***%s: legacy host refused, EU-DP host answered "
+            "(role=%s status=%s, %d/%d services enabled). Read-only: MBB "
+            "commands stay hidden for this car.", vin[-6:], oplist.role,
+            oplist.status, len(enabled), len(oplist.services),
+        )
+        # #1766 — log the host each service's own invocationUrl points at, so a
+        # read that would go to the wrong host is visible instead of silent.
+        try:
+            country = self._mbb_country()
+            hosts: dict[str, str | None] = {}
+            for sid in sorted(oplist.services):
+                base = mbb_service_base(
+                    oplist, sid, brand=self._brand.name, country=country, vin=vin,
+                )
+                hosts[sid] = base.split("//")[-1].split("/")[0] if base else None
+            _LOGGER.debug(
+                "MBB operationList ***%s: host per service: %s", vin[-6:], hosts,
+            )
+        except Exception:  # noqa: BLE001 — logging only, never blocks the list
+            pass
         return oplist
 
     async def _probe_fetched_role_cohort(self, vin: str) -> None:
@@ -2709,6 +2839,14 @@ class VWEUClient(CariadBaseClient):
         spec = MBB_COMMANDS.get(command_name)
         if spec is None:
             raise VehicleCommandError(command_name, "unknown MBB command")
+        if vin in getattr(self, "mbb_eudp_oplist_vins", ()):
+            # #1766 — the EU-DP list is used for reads only. The S-PIN legs have
+            # never been checked against that host, and wrong S-PIN attempts
+            # lock the vehicle PIN, so refuse before anything is sent.
+            raise VehicleCommandError(
+                command_name,
+                "MBB commands are not available for this car yet (its service "
+                "list comes from the EU-DP host, which is read-only for now)")
         pin = spin or self._spin
         if not pin:
             raise SpinError(f"S-PIN required for MBB {command_name}")
@@ -2725,6 +2863,22 @@ class VWEUClient(CariadBaseClient):
         if not mbb_operation_granted(oplist, spec.service_id, spec.operation_id):
             oplist = await self._get_mbb_operationlist(
                 vin, for_command=True, force_refresh=True)
+        # #1807 follow-up — re-check the EU-DP marker now that the fetch above
+        # has had its chance to set it. The gate near the top of this function
+        # reads the same set, but nothing fills it except
+        # _get_mbb_operationlist, which runs here rather than before it, so on a
+        # cold marker (every fresh start until the first
+        # _refresh_mbb_command_capabilities) the early gate sees an empty set
+        # and a service call walks straight past it. The entity gate still hides
+        # the controls, so this is a race rather than an open door, but what it
+        # costs when lost is a locked vehicle PIN, which is why the second gate
+        # exists at all. Same message as the early gate on purpose: the user's
+        # situation is identical, only our bookkeeping differed.
+        if vin in getattr(self, "mbb_eudp_oplist_vins", ()):
+            raise VehicleCommandError(
+                command_name,
+                "MBB commands are not available for this car yet (its service "
+                "list comes from the EU-DP host, which is read-only for now)")
         country, country_src = self._mbb_country_with_source()
         base = mbb_service_base(
             oplist, spec.service_id, brand=self._brand.name,
@@ -3678,10 +3832,16 @@ class VWEUClient(CariadBaseClient):
                 ),
             )
 
-        # ── Model name from vehicles list (nickname set in app) ────────────────
+        # ── Model name + owner nickname from the vehicles list ────────────────
+        # Two distinct slots on purpose: ``model`` is a generic designation
+        # that may be published in a public reporter issue title and drives
+        # the HA device name, while ``nickname`` is owner-typed text that
+        # stays in the redacted ``vehicle_nickname`` field.
         meta = getattr(self, "_vehicle_metadata", {}).get(vin, {})
         if meta.get("model"):
             d.model = meta["model"]
+        if meta.get("nickname"):
+            d.vehicle_nickname = meta["nickname"]
         # The REST vehicles-list often carries NO model name (e.g. an Audi S6
         # returns an empty ``model``, so the device fell back to "Audi (2021)").
         # The vgql media block we already fetch for render images also carries
