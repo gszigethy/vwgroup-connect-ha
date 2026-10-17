@@ -936,7 +936,7 @@ async def test_a_build_newer_than_the_listed_ones_refuses_before_any_dial_tap():
     # Refused in the gate: not even the tile or the mode picker is tapped.
     phone = FakePhone(version="4.7.0", mode="wh", temp=22.0)
     _ch, ctrl = _controller(phone)
-    # (PR #51 adds the same pin, with its own message, earlier in the gate.)
+    # (The command gate adds the same pin, with its own message, earlier in the gate.)
     with pytest.raises(CompanionWriteBlocked, match="4.6.4/4.3.2 only|version 4.7.0"):
         await ctrl.start(temp_c=24.0)
     assert phone.taps == [] and phone.bursts == []

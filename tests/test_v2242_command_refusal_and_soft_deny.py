@@ -31,7 +31,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
-VIN = "WVWZZZAUZFW805377"
+VIN = "WVWZZZAUZFW000000"
 
 
 # ── 1. a denied command explains itself ─────────────────────────────────────
@@ -161,7 +161,8 @@ class TestDenyCooldownScope:
         src = inspect.getsource(vw_eu)
         idx = src.find('"gw.error.authentication" in body')
         assert idx > 0
-        window = src[idx:idx + 700]
+        # #1766 — the EU-DP fallback sits between the check and the cooldown.
+        window = src[idx:idx + 1400]
         assert "_MBB_OPLIST_DENY_TTL" in window, (
             "the explicit gateway verdict lost its long cooldown"
         )

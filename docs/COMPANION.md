@@ -8,10 +8,10 @@ send to the car, how it is built, and where it is known to be weak.
 
 | | |
 |---|---|
-| **Applies to** | fork release 4.13.0-1 (upstream 4.13.0) |
+| **Applies to** | 5.0.0 |
 | **Baseline app** | VW app **4.6.4** (`com.volkswagen.weconnect`); 4.3.2 is still read-compatible |
 | **Status** | experimental, opt-in; Volkswagen only is verified |
-| **Credit** | The channel, its transport, selectors and navigation are Prash Balan's ([@its-me-prash](https://github.com/its-me-prash)). The fork adds the VW app 4.6.4 mapping, the controls, the extra reads and the safety gates described here. App captures came from @plainmad (Mk8 Golf GTE), @kgroshert (ID.4, e-up!), @WEZANGO (CUPRA Born) and @gszigethy (Tiguan eHybrid), and the prior art of @ckomma. |
+| **Credit** | The channel, its transport, selectors and navigation are Prash Balan's ([@its-me-prash](https://github.com/its-me-prash)). The VW app 4.6.4 mapping, the controls, the extra reads and the safety gates described here were developed in [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha). App captures came from @plainmad (Mk8 Golf GTE), @kgroshert (ID.4, e-up!), @WEZANGO (CUPRA Born) and @gszigethy (Tiguan eHybrid), and the prior art of @ckomma. |
 
 > [!NOTE]
 > The Companion is **experimental and opt-in**. Only Volkswagen is verified, on VW app 4.6.4 (and 4.3.2 for reads). Everything that taps the
@@ -97,8 +97,8 @@ These are the rules the code is held to. They explain most of the behaviour belo
 1. **Screen in, taps out.** Besides screen navigation the Companion only does the transport and app-lifecycle work listed in [3.9](#39-transports): waking the display, starting or force-stopping the app, reading the app's resource table, and a temporary dump file. A read taps only the navigation needed to reach a screen and presses BACK to leave.
 2. **A separate stream.** Companion values feed the same fields the VW cloud parser
    (`cariad/api/vw_eu.py`) fills for the same value, and never a field that only the
-   EU Data Act portal fills. Cloud and EU Data Act code is not changed for the
-   Companion. Where the cloud has no equivalent (departure-timer weekdays, charging
+   EU Data Act portal fills. Cloud and EU Data Act parsers are not changed for the
+   Companion; the few shared-code fixes are listed in the changelog. Where the cloud has no equivalent (departure-timer weekdays, charging
    locations) the Companion has its own fields.
 3. **Read before tap, read back after tap.** Every control is verified on screen. A screen that is not the expected one stops the walk, and a staged change is cancelled where the cleanup succeeds, so it is not carried into the next command. A mismatch stops further action; a request that an earlier tap already sent (a moved climate dial) cannot be recalled.
 4. **No device pixels.** Tap points come from nodes in the live dump and from the dp
@@ -134,7 +134,7 @@ supersedes them as the place to start; the others stay as references.
 | [COMPANION_AGENT.md](COMPANION_AGENT.md) | Specification of the agent relay protocol (a phone app that calls Home Assistant). **No agent app exists**; the Home Assistant side ships only as a specification and an endpoint. |
 | [COMPANION_BATTERY.md](COMPANION_BATTERY.md), [COMPANION_CLIMATE.md](COMPANION_CLIMATE.md) | The original write-ups of the battery and Air Conditioning mappings, with their evidence and credit tables. Their behaviour is now described here. |
 | [FAQ.md](FAQ.md#-companion-adb-phone-the-app-wont-navigate-after-it-wakes) | The phone that does not wake or navigate (lock screen). |
-| [CHANGELOG.md](../CHANGELOG.md) | What changed per release; fork releases start at 4.11.0-1. |
+| [CHANGELOG.md](../CHANGELOG.md) | What changed per release. |
 | `tests/fixtures/companion_*/sources.json` | Provenance of every screen dump used in tests. |
 
 ---
@@ -296,7 +296,7 @@ Moving the three controls out of Configuration changes no names, unique ids or e
 - **Unique ids** of companion entities are `{vin}_companion_{key}`, a namespace of their own, so a car
   that is also set up through the EU Data Act portal does not drop the Companion's entities as
   duplicates. A one-time migration kept existing entity ids and history.
-- **Entity ids** of entities created since 4.12.0-4 carry the tag `adb` (`sensor.tiguan_adb_battery_level`)
+- **Entity ids** of newly created companion entities carry the tag `adb` (`sensor.tiguan_adb_battery_level`)
   so they cannot be mistaken for the cloud entry's `sensor.tiguan_battery_level`. Entity **names** carry
   no tag. Entities created earlier keep their ids.
 - Entities on the *VW Group Connect Settings* device can have either `adb_settings_…` or
@@ -965,5 +965,5 @@ car was read-only; commands that send something to the car were exercised agains
 | Battery tile evidence and credits | [COMPANION_BATTERY.md](COMPANION_BATTERY.md#evidence-and-contributor-credits) |
 | Air Conditioning evidence and credits | [COMPANION_CLIMATE.md](COMPANION_CLIMATE.md#evidence-and-credits) |
 | Screen map and per-value status | [COMPANION_APP_MAP.md](COMPANION_APP_MAP.md) |
-| Release-by-release changes | [CHANGELOG.md](../CHANGELOG.md) (fork releases from 4.11.0-1) |
+| Release-by-release changes | [CHANGELOG.md](../CHANGELOG.md) |
 | Upstream tracking issue | [#968](https://github.com/its-me-prash/vwgroup-connect-ha/issues/968) |

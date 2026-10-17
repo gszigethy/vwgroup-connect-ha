@@ -49,6 +49,7 @@ from aiohttp import ClientConnectionError, ClientSession, ClientTimeout
 from .._util import drop_charge_sentinel, drop_odometer_sentinel
 from ..exceptions import (
     AuthenticationError,
+    CariadError,
     EmailTwoFactorRequiredError,
     MarketingConsentError,
     PortalInteractionRequiredError,
@@ -4834,7 +4835,9 @@ def map_dataset_to_vehicle_data(
         ("tyre_pressure_diff_rr", "tyre_pressure_differential_rear_right"),
         ("tyre_pressure_diff_spare", "tyre_pressure_differential_spare_tyre"),
     ):
-        _tpd = _to_int(first(_name))
+        # #1819 — float, not int: _to_int truncates, so a 0.3 bar delta
+        # became 0 and vanished into the sentinel rule.
+        _tpd = _to_float(first(_name))
         if _tpd is not None:
             setattr(d, _attr, _tpd)
 
@@ -4850,7 +4853,11 @@ def map_dataset_to_vehicle_data(
         ("tyre_pressure_actual_rr", "tyre_pressure_actual_rear_right"),
         ("tyre_pressure_actual_spare", "tyre_pressure_actual_spare_tyre"),
     ):
-        _tpa = _to_int(first(_name))
+        # #1819 (Kolbi) — the reported defect: the portal sends
+        # "2.8" and _to_int truncated it to 2 on every corner. The value
+        # is a measurement with one decimal, so read it as one. Rounding
+        # would be equally wrong: 2.8 bar is not 3 bar.
+        _tpa = _to_float(first(_name))
         if _tpa is not None:
             setattr(d, _attr, _tpa)
 
@@ -4865,7 +4872,8 @@ def map_dataset_to_vehicle_data(
         ("tyre_pressure_required_rr", "tyre_pressure_required_rear_right"),
         ("tyre_pressure_required_spare", "tyre_pressure_required_spare_tyre"),
     ):
-        _tpr = _to_int(first(_name))
+        # #1819 — same truncation as the actual family above.
+        _tpr = _to_float(first(_name))
         if _tpr is not None:
             setattr(d, _attr, _tpr)
 
@@ -4876,9 +4884,14 @@ def map_dataset_to_vehicle_data(
     # sentinel to None. Any corner >1 is a genuine reading ("measured"); else any
     # corner ==1 is an indirect/no-numeric TPMS ("indirect"); all-0/absent → None
     # so no phantom entity spawns.
+    # #1819 — _to_float, not _to_int. Truncation turned every corner between
+    # 1.0 and 2.0 bar into exactly 1, which is the "invalid" marker, so a car
+    # with a soft tyre was classified as having an indirect TPMS that reports no
+    # numbers at all. That inverts the rule stated below, and it did so at the
+    # one moment the reading matters most.
     _tpms_present = [
         _v for _v in (
-            _to_int(fields.get(_n))
+            _to_float(fields.get(_n))
             for _n in (
                 "tyre_pressure_actual_front_left",
                 "tyre_pressure_actual_front_right",
@@ -6144,6 +6157,41 @@ class EUDataActConnector:
         if self._bearer:
             self.logged_in = True
             return
+
+        # #1842 (@ColinSainsbury, a Cupra, 2026-10-16) — the same closed-session
+        # race as #1834, one function over. His report carries TWO tracebacks
+        # from one incident: the first is get_vehicle_data -> _get_json, which
+        # the guard in that function now answers, and the second is
+        # get_status -> login -> _login_impl -> aiohttp's __aenter__ with the
+        # bare RuntimeError("Session is closed").
+        #
+        # That second path was left unguarded on purpose, on the grounds that a
+        # login beginning after the entry unloaded is not the poll loop and that
+        # nobody had traced whether something upstream converted the error. The
+        # trace settles it: login() catches TimeoutError and
+        # ClientConnectionError, stores anything else as _login_error and
+        # re-raises it unchanged, so a RuntimeError travels straight to the
+        # error reporter and a shutdown race is filed as a crash. Reported, not
+        # hypothetical, so the reason for leaving it open is gone.
+        #
+        # Checked here rather than in login()'s handler because this is the
+        # first thing the function does that could touch the network, and
+        # because the bearer path above must keep returning without a check it
+        # does not need. CariadError and not AuthenticationError: the caller
+        # replays the password on an auth error, which cannot help a session
+        # that no longer exists.
+        if getattr(self._session, "closed", False) is True:
+            _LOGGER.debug(
+                "EU Data Act: the entry's session is closed, so the portal "
+                "login was not started (the entry is unloading or reloading)"
+            )
+            raise CariadError(
+                "EU Data Act: the connection was closed before the portal "
+                "login could start. That happens when the integration entry "
+                "is unloaded or reloaded; nothing is wrong with the account, "
+                "and the next setup opens a new one."
+            )
+
         headers = {"User-Agent": _USER_AGENT}
 
         # 1. Start OIDC directly at the IDP (portal's own servlet 500s for
@@ -6462,7 +6510,65 @@ class EUDataActConnector:
         # times before giving up as "no data this poll", recovering polls the
         # portal would otherwise drop. A 404/410 (request not provisioned)
         # returns immediately; a real 401/403 still raises.
+        # #1834 (@travel-and-cache) — the session this connector was handed is
+        # the entry's own, created with async_create_clientsession
+        # (coordinator.py:1592), and the comment there says it: "unloading the
+        # entry closes it; there is nothing to unwind by hand." So a poll still
+        # in flight when the entry unloads or reloads reaches a closed session,
+        # and aiohttp answers with a bare RuntimeError("Session is closed").
+        # Nothing caught it: the handler below takes TimeoutError and
+        # ClientConnectionError, a RuntimeError is neither, and the error
+        # reporter has no exclusion list — so a shutdown race was filed as a
+        # crash on 4.13.0.
+        #
+        # Checked here rather than in the handler because retrying is the one
+        # thing that cannot help: the session will not reopen, and the retry
+        # loop would burn its three backoff sleeps before giving up.
+        #
+        # NOT raised as UpstreamUnavailableError, even though that type is
+        # already imported and would have been the quick move: its message tells
+        # the user "server-side issue at VW … do NOT reconfigure", and this is
+        # our own session going away locally. A false explanation is worse than
+        # a plain one.
         for attempt in range(len(_PORTAL_RETRY_DELAYS) + 1):
+            # Checked on EVERY attempt, not once before the loop. The first
+            # version of this guard sat above the loop, on the reasoning that
+            # retrying a closed session cannot help - true, and it left the
+            # larger hole open. A retriable 5xx sleeps 3 s and then 6 s
+            # (_PORTAL_RETRY_DELAYS) and comes back here, so an entry unloaded
+            # during that sleep re-entered the request with no check at all and
+            # the bare RuntimeError escaped exactly as in #1834. Measured: two
+            # requests, one 3 s sleep, RuntimeError out of both the soft and the
+            # hard path. The window is seconds wide rather than one await long,
+            # and portal 5xx storms are documented in this very file, so it is
+            # the likelier of the two races, not the edge case.
+            #
+            # One check at the top of the body covers entry and every re-entry,
+            # which is why the pre-loop copy is gone rather than kept alongside.
+            #
+            # ``is True`` and not merely truthy: most tests here hand the
+            # connector a MagicMock, whose auto-created ``.closed`` attribute is
+            # a Mock and therefore truthy, which made this guard swallow nine
+            # live tests the first time it was written. aiohttp's
+            # ClientSession.closed is a real bool property, so the strict test is
+            # exact for the thing that matters and inert for every stand-in.
+            if getattr(self._session, "closed", False) is True:
+                _LOGGER.debug(
+                    "EU Data Act: the entry's session is closed, so %s was not "
+                    "attempted on try %d (the entry is unloading or reloading; "
+                    "the next setup gets a fresh session)",
+                    _safe_api_url(url),
+                    attempt + 1,
+                )
+                if soft:
+                    return None
+                raise CariadError(
+                    "EU Data Act: the connection was closed while this read "
+                    "was in flight. That happens when the integration entry is "
+                    "unloaded or reloaded; nothing is wrong with the account, "
+                    "and the next setup opens a new one."
+                )
+
             try:
                 async with self._session.get(
                     url, headers=eff_headers, timeout=ClientTimeout(total=_TIMEOUT_S),
