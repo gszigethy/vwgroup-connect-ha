@@ -61,7 +61,8 @@ class EditorPhone:
     can_read_hidden_nodes = True
     connected = True
 
-    def __init__(self, *, wheels_move: bool = True) -> None:
+    def __init__(self, *, wheels_move: bool = True, h24: bool = False) -> None:
+        self.h24 = h24
         self.saved = Timer(6, 0, frozenset({"sat"}), True)  # as captured
         self.edit = self.saved
         self.page = False
@@ -88,9 +89,11 @@ class EditorPhone:
         if not self.page:
             t = self.saved
             day = DAY_NAMES[next(iter(t.days))] if len(t.days) == 1 else "Weekdays"
-            clock = f'text="{(t.hour % 12 or 12):02d}:{t.minute:02d}"'
+            hour = t.hour if self.h24 else t.hour % 12 or 12
+            clock = f'text="{hour:02d}:{t.minute:02d}"'
             head, _, tail = LIST.partition('text="06:00"')
-            tail = tail.replace('text="AM"', f'text="{"PM" if t.hour >= 12 else "AM"}"', 1)
+            meridiem = "" if self.h24 else ("PM" if t.hour >= 12 else "AM")
+            tail = tail.replace('text="AM"', f'text="{meridiem}"', 1)
             return (head + clock + tail).replace('text="Saturday"', f'text="{day}"')
         xml = PAGE
         if not self.edit.repeat:
@@ -107,6 +110,12 @@ class EditorPhone:
 
     async def a11y_tree(self) -> str:
         e = self.edit
+        if self.h24:  # two wheels; the hour list is 00..23
+            tree = "\n".join(line for line in TREE.splitlines() if "desc=AM PM" not in line)
+            tree = re.sub(r"(desc=Hour\trange=)[\d.]+(/\S+\tstate=)\d+",
+                          rf"\g<1>{60000 + e.hour}.0\g<2>{e.hour:02d}", tree)
+            return re.sub(r"(desc=Minute\trange=)[\d.]+(/\S+\tstate=)\d+",
+                          rf"\g<1>{60000 + e.minute // 5}.0\g<2>{e.minute:02d}", tree) + "\n"
         h12 = e.hour % 12 or 12
         tree = re.sub(r"(desc=Hour\trange=)[\d.]+(/\S+\tstate=)\d+",
                       rf"\g<1>{60000 + h12 - 1}.0\g<2>{h12:02d}", TREE)
@@ -122,7 +131,9 @@ class EditorPhone:
         if not self.wheels_move:
             return True
         e = self.edit
-        if index == 0:  # the hour list is 1..12, so progress 60000 shows 01
+        if self.h24 and index == 0:
+            self.edit = replace(e, hour=int(value) % 24)
+        elif index == 0:  # the hour list is 1..12, so progress 60000 shows 01
             h12 = int(value) % 12 + 1
             self.edit = replace(e, hour=h12 % 12 + (12 if e.hour >= 12 else 0))
         elif index == 1:
@@ -453,3 +464,89 @@ async def test_a_tree_without_its_end_marker_is_not_trusted():
     t = _adb("NODE\t0\t0\t0\t1\t1\tclass=x\n")
     with pytest.raises(CompanionTransportError, match="no screen"):
         await t.a11y_tree()
+
+
+
+def test_a_24_hour_phone_has_two_wheels():
+    two = "\n".join(line for line in TREE.splitlines() if "desc=AM PM" not in line)
+    clock = read_compose_clock(two.replace("state=06", "state=18"))
+    assert clock is not None and clock.meridiem is None and clock.time == "18:00"
+    assert read_compose_clock(two.replace("state=06", "state=24")) is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("target", [(18, 30), (0, 0), (23, 55)])
+async def test_24_hour_edits_take_the_short_way_and_read_back(target):
+    phone = EditorPhone(h24=True)
+    ch = _channel(phone)
+    await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, target, None, None)
+    assert (phone.saved.hour, phone.saved.minute) == target
+    assert not any(h.startswith("set 2 ") for h in phone.helper)  # no AM/PM wheel
+
+
+@pytest.mark.asyncio
+async def test_a_message_over_the_page_before_save_cancels_instead_of_saving():
+    phone = EditorPhone()
+    ch = _channel(phone)
+    real = ch._dump_and_clear_overlays
+
+    async def covered(*args, **kwargs):
+        nodes, cleared = await real(*args, **kwargs)
+        if phone.page and phone.edit != phone.saved:
+            return nodes, False  # an overlay that would not clear
+        return nodes, cleared
+
+    ch._dump_and_clear_overlays = covered
+    with pytest.raises(CompanionWriteBlocked, match="before Save"):
+        await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (7, 0), None, None)
+    assert "save" not in phone.taps
+    assert phone.saved == Timer(6, 0, frozenset({"sat"}), True)
+
+
+@pytest.mark.asyncio
+async def test_cancelling_during_the_upload_lets_it_finish_before_cleanup():
+    import threading
+    import time as _time
+
+    t = _adb()
+    finished = threading.Event()
+
+    def slow_push(*_a, **_k):
+        _time.sleep(0.2)
+        finished.set()
+
+    t._device.push = slow_push
+    task = asyncio.ensure_future(t.a11y_prepare())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert finished.is_set()  # cleanup after this point cannot race the upload
+
+
+@pytest.mark.asyncio
+async def test_a_request_limit_alert_before_save_pauses_and_saves_nothing():
+    phone = EditorPhone()
+    ch = _channel(phone)
+    ch._limit_on_screen = lambda nodes: phone.page and phone.edit != phone.saved
+    with pytest.raises(CompanionWriteBlocked):
+        await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (7, 0), None, None)
+    assert "save" not in phone.taps
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_upload_that_then_fails_still_reports_the_cancellation():
+    import time as _time
+
+    t = _adb()
+
+    def failing_push(*_a, **_k):
+        _time.sleep(0.2)
+        raise OSError("pipe")
+
+    t._device.push = failing_push
+    task = asyncio.ensure_future(t.a11y_prepare())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task

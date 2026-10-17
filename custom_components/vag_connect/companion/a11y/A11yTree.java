@@ -21,50 +21,71 @@ public class A11yTree {
     static Class<?> nodeCls;
     static final int ACTION_SET_PROGRESS = 0x0102003d;
 
-    public static void main(String[] args) throws Throwable {
-        Class<?> looperCls = Class.forName("android.os.Looper");
-        Class<?> htCls = Class.forName("android.os.HandlerThread");
-        Object ht = htCls.getConstructor(String.class).newInstance("a11ytree");
-        htCls.getMethod("start").invoke(ht);
-        Object looper = htCls.getMethod("getLooper").invoke(ht);
-        Class<?> connIface = Class.forName("android.app.IUiAutomationConnection");
-        Object conn = Class.forName("android.app.UiAutomationConnection").getConstructor().newInstance();
-        Class<?> uaCls = Class.forName("android.app.UiAutomation");
-        Constructor<?> ctor = uaCls.getConstructor(looperCls, connIface);
-        Object ua = ctor.newInstance(looper, conn);
-        uaCls.getMethod("connect").invoke(ua);
-        // FLAG_INCLUDE_NOT_IMPORTANT_VIEWS (2) | FLAG_REPORT_VIEW_IDS (16)
-        Object info = uaCls.getMethod("getServiceInfo").invoke(ua);
-        java.lang.reflect.Field flags = info.getClass().getField("flags");
-        flags.setInt(info, flags.getInt(info) | 2 | 16);
-        uaCls.getMethod("setServiceInfo", info.getClass()).invoke(ua, info);
-        Thread.sleep(500);
-        nodeCls = Class.forName("android.view.accessibility.AccessibilityNodeInfo");
-        Object root = uaCls.getMethod("getRootInActiveWindow").invoke(ua);
-        if (root == null) {
-            System.out.println("ERROR no root");
-        } else if (args.length == 3 && args[0].equals("set")) {
-            List<Object> ranged = new ArrayList<>();
-            collectRanged(root, ranged);
-            int index = Integer.parseInt(args[1]);
-            if (index < 0 || index >= ranged.size()) {
-                System.out.println("ERROR no range node " + index);
+    public static void main(String[] args) {
+        int status = 0;
+        Object ht = null;
+        Object ua = null;
+        try {
+            Class<?> looperCls = Class.forName("android.os.Looper");
+            Class<?> htCls = Class.forName("android.os.HandlerThread");
+            ht = htCls.getConstructor(String.class).newInstance("a11ytree");
+            htCls.getMethod("start").invoke(ht);
+            Object looper = htCls.getMethod("getLooper").invoke(ht);
+            Class<?> connIface = Class.forName("android.app.IUiAutomationConnection");
+            Object conn = Class.forName("android.app.UiAutomationConnection").getConstructor().newInstance();
+            Class<?> uaCls = Class.forName("android.app.UiAutomation");
+            Constructor<?> ctor = uaCls.getConstructor(looperCls, connIface);
+            ua = ctor.newInstance(looper, conn);
+            uaCls.getMethod("connect").invoke(ua);
+            // FLAG_INCLUDE_NOT_IMPORTANT_VIEWS (2) | FLAG_REPORT_VIEW_IDS (16)
+            Object info = uaCls.getMethod("getServiceInfo").invoke(ua);
+            java.lang.reflect.Field flags = info.getClass().getField("flags");
+            flags.setInt(info, flags.getInt(info) | 2 | 16);
+            uaCls.getMethod("setServiceInfo", info.getClass()).invoke(ua, info);
+            Thread.sleep(500);
+            nodeCls = Class.forName("android.view.accessibility.AccessibilityNodeInfo");
+            Object root = uaCls.getMethod("getRootInActiveWindow").invoke(ua);
+            if (root == null) {
+                System.out.println("ERROR no root");
+                status = 2;
+            } else if (args.length == 3 && args[0].equals("set")) {
+                List<Object> ranged = new ArrayList<>();
+                collectRanged(root, ranged);
+                int index = Integer.parseInt(args[1]);
+                if (index < 0 || index >= ranged.size()) {
+                    System.out.println("ERROR no range node " + index);
+                    status = 2;
+                } else {
+                    Class<?> bundleCls = Class.forName("android.os.Bundle");
+                    Object bundle = bundleCls.getConstructor().newInstance();
+                    bundleCls.getMethod("putFloat", String.class, float.class).invoke(bundle,
+                            "android.view.accessibility.action.ARGUMENT_PROGRESS_VALUE", Float.parseFloat(args[2]));
+                    Object ok = nodeCls.getMethod("performAction", int.class, bundleCls)
+                            .invoke(ranged.get(index), ACTION_SET_PROGRESS, bundle);
+                    System.out.println("SET " + index + " " + ok);
+                }
             } else {
-                Class<?> bundleCls = Class.forName("android.os.Bundle");
-                Object bundle = bundleCls.getConstructor().newInstance();
-                bundleCls.getMethod("putFloat", String.class, float.class).invoke(bundle,
-                        "android.view.accessibility.action.ARGUMENT_PROGRESS_VALUE", Float.parseFloat(args[2]));
-                Object ok = nodeCls.getMethod("performAction", int.class, bundleCls)
-                        .invoke(ranged.get(index), ACTION_SET_PROGRESS, bundle);
-                System.out.println("SET " + index + " " + ok);
+                walk(root, 0);
+                System.out.println("END");
             }
-        } else {
-            walk(root, 0);
-            System.out.println("END");
+        } catch (Throwable t) {
+            if (t instanceof InterruptedException) Thread.currentThread().interrupt();
+            System.out.println("ERROR " + t);
+            status = 1;
+        } finally {
+            // Release the automation connection and the looper thread on every path.
+            try {
+                if (ua != null) ua.getClass().getMethod("disconnect").invoke(ua);
+            } catch (Throwable ignored) {
+                status = status == 0 ? 1 : status;
+            }
+            try {
+                if (ht != null) ht.getClass().getMethod("quitSafely").invoke(ht);
+            } catch (Throwable ignored) {
+                status = status == 0 ? 1 : status;
+            }
         }
-        uaCls.getMethod("disconnect").invoke(ua);
-        htCls.getMethod("quitSafely").invoke(ht);
-        System.exit(0);
+        System.exit(status);
     }
 
     static void collectRanged(Object n, List<Object> out) throws Throwable {

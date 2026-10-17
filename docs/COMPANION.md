@@ -763,21 +763,25 @@ description, and `SET_PROGRESS` (the wheel's own "scroll to item" action). The C
 a 6 kB helper, `companion/a11y/a11y_tree.dex` (source and build steps beside it), and only for this edit:
 
 - pushed to `/data/local/tmp` over the existing ADB connection right before the edit, after its SHA-256
-  is checked against the reviewed build, and removed afterwards. Nothing is installed; it runs as the
+  is checked against the reviewed build, and removed afterwards (best effort: one reconnect; a phone that
+  stays unreachable keeps the 6 kB file until the next edit overwrites or removes it). Nothing is installed; it runs as the
   shell user through `app_process`, like `uiautomator`.
 - it prints the foreground window's nodes, hidden ones included, and on request runs `SET_PROGRESS` on
   one range node. It never taps, saves or sends; the channel presses Save itself.
 - the wheels are found by structure (two-digit wheels left to right, plus the two-value AM/PM wheel on a
   12-hour phone), not by their labels, so the edit works in any app language.
 
-The edit: Repeat is read and set on the page, then each wheel is set and read back. Save is pressed
-only when the app offers it, which it does only while the page differs from the saved timer. Afterwards
-the list must show the new time and the reopened page the new Repeat. Anything that stops the edit
-before Save (including a dropped link, after one reconnect) presses the page's X, which restores the
-saved timer, and the helper is removed on every path. The day buttons expose no state, so a change of
-days could only be checked after Save: it is refused, and the days are changed in the app. A request
-must match the days on the list. A transport without the helper (the add-on bridge, the relay) refuses
-the edit before touching the page.
+The edit: Repeat is read and set on the page, then each wheel is set and read back. Right before Save
+the page must be the editor with no message over it and no request-limit alert. Save is pressed only
+when the app offers it, which it does only while the page differs from the saved timer. Afterwards the
+list must show the new time and the reopened page the new Repeat. A failure after a change was staged
+(including task cancellation and a dropped link) triggers a best-effort cancellation with the page's X,
+which restores the saved timer; it and the helper's removal each retry once after reconnecting. The day
+buttons expose no state, so a change of days could only be checked after Save: it is refused after the
+page opened, before any editor control is changed, and the days are changed in the app. A request must
+match the days on the list. A transport without the helper (the add-on bridge, the relay) refuses the
+edit the same way. Live checks were on one Tiguan, in English, on a 12-hour clock; other vehicles are
+unvalidated. Tests exercise label variations and a synthetic 24-hour picker derived from these captures.
 
 ### 3.10 Security model
 
