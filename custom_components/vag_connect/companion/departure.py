@@ -22,6 +22,10 @@ timer, beside Cancel (``common_button_cancel``), which restores it. A
 successful save goes back to the list (``EditDepartureTimerViewModel``).
 Language independent: ids, digits and the picker's own layout only; Save and
 Cancel come from the installed app's translations.
+
+The 4.8.1 Compose editor has separate read-only detection: only Repeat is
+observable there. Clock and weekday selection are absent from the captured
+accessibility tree, so it cannot produce a writable TimerPage.
 """
 from __future__ import annotations
 
@@ -65,6 +69,7 @@ class DepartureRow:
     time: str  # 24-hour "HH:MM"
     switch: UiNode
     clock: UiNode  # the time text: inside the row, clear of the switch
+    bounds: tuple[int, int, int, int]
 
 
 def departure_rows(nodes: list[UiNode]) -> list[DepartureRow]:
@@ -108,7 +113,7 @@ def departure_rows(nodes: list[UiNode]) -> list[DepartureRow]:
             hour = hour % 12 + (12 if meridiem == "p" else 0)
         if hour > 23 or minute > 59:
             continue
-        rows.append(DepartureRow(row.bounds[1], switch.checked, f"{hour:02d}:{minute:02d}", switch, clock))
+        rows.append(DepartureRow(row.bounds[1], switch.checked, f"{hour:02d}:{minute:02d}", switch, clock, row.bounds))
     rows.sort(key=lambda r: r.top)
     return rows
 
@@ -233,6 +238,39 @@ def page_fields(page: TimerPage, slot: int) -> dict[str, object]:
         f"departure_timer_{slot}_weekdays": ",".join(page.weekdays),
         f"departure_timer_{slot}_repeat": page.repeat,
     }
+
+
+def is_compose_timer_page(nodes: list[UiNode]) -> bool:
+    """Recognise the new editor without claiming its hidden clock is readable."""
+    ids = {_rid(n) for n in nodes}
+    return {"editDepartureTimerWeekday", "editDepartureTimerRepeat"} <= ids
+
+
+def read_timer_details(nodes: list[UiNode], slot: int) -> dict[str, object]:
+    """Read only observable state, using the legacy or Compose layout adapter.
+
+    The 4.8.1 tree omits the clock and weekday selection semantics. Its day
+    buttons all report selected=false, even for an active weekday schedule.
+    Never interpret these missing semantics as an empty schedule, and never
+    return a writable TimerPage from incomplete state.
+    """
+    legacy = read_timer_page(nodes)
+    if legacy is not None:
+        return page_fields(legacy, slot)
+    if not is_compose_timer_page(nodes):
+        return {}
+    groups = [n for n in nodes if _rid(n) == "editDepartureTimerRepeat" and n.bounds]
+    if len(groups) != 1:
+        return {}
+    group = groups[0]
+    assert group.bounds is not None
+    switches = [n for n in nodes if n.checkable and n.bounds and _inside(n, group.bounds)]
+    # Compose duplicates the switch semantics at the same bounds. Conflicting
+    # states or distinct switches are ambiguous and must remain unknown.
+    states = {(n.bounds, n.checked) for n in switches}
+    if len(states) != 1:
+        return {}
+    return {f"departure_timer_{slot}_repeat": switches[0].checked}
 
 
 def find_toolbar_text(nodes: list[UiNode], labels: set[str], page_top: int) -> UiNode | None:

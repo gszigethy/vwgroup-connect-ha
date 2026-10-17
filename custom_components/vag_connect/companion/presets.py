@@ -905,11 +905,8 @@ _VW = BrandPreset(
         ),
         NavReadSelector(
             name="driving_data",
-            # The overview's Driving data tile. Its trip cards sit side by
-            # side in a carousel: "Last single trip" first, then "From
-            # charging or refuelling". ``read_driving_data`` reads them by the
-            # app's own labels and units, swiping the carousel (sideways only,
-            # never a pull-to-refresh) to bring the second card on screen.
+            # Trip cards may start with long-haul, single or refuel/charging.
+            # Read each family separately, swiping sideways within the carousel.
             steps=(
                 ActionSelector(
                     action="open_driving_data",
@@ -994,7 +991,7 @@ _VW = BrandPreset(
                 ),
                 ActionSelector(
                     action="find_vehicle",
-                    content_desc_re=r"^(?:Find\s*vehicle|Fahrzeug\s*finden)$",
+                    content_desc_re=r"^(?:Vehicle\s*location|Find\s*vehicle|Fahrzeug\s*finden)$",
                 ),
                 ActionSelector(
                     action="open_parking_marker",

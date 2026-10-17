@@ -327,3 +327,24 @@ removed from the HA registry on 2026-10-06: `sensor.<car>_vehicle_requests`
 - **D3, driving data:** a new opt-in nav read (gszigethy/vwgroup-connect-ha#16).
 - **D4, health warnings:** read into the warning fields (gszigethy/vwgroup-connect-ha#14).
 - **D5, stale entities:** removed.
+
+
+## VW 4.8.1 read compatibility (16 October 2026)
+
+The compatibility window is defined in [RELEASE_PROCESS.md](../RELEASE_PROCESS.md).
+The changes below preserve existing 4.3.2/4.6.4 fixtures and adapters; retaining
+these fixtures does not establish the identities or validation of the two releases
+immediately preceding 4.8.1. No version is removed by this change.
+
+| Area | 4.8.1 handling | Validation boundary |
+|---|---|---|
+| Parking | Match the installed app's translated Vehicle location label; retain older Find vehicle labels. | Navigation selector and existing Share-preview parser; no recipient selected. |
+| Driving data | Read single, long-haul and refuel/charging cards separately, with at most two horizontal swipes in each direction. | Replay of captured screens and simulated carousel navigation, including stationary and reverse-order cases. Long-haul fields use `long_trip_*`; no new entities are introduced. |
+| Departure timers | Read clock/enabled state and translated weekdays from the list; read Repeat from the new editor. | The new editor does not expose clock or weekday selection state. These are not inferred from its unselected day buttons. Schedule editing remains blocked. Legacy editor parsing/writing is retained and regression-tested with simulated controls. |
+
+Read compatibility does not approve vehicle writes. The exact-version command
+allowlist is unchanged: 4.8.1 commands and automatic vehicle synchronisation
+remain blocked. Completing schedule-write support requires an observable clock
+and weekday state plus authorised, per-operation live validation. No vehicle
+commands were exercised for these fixes, and new integration code was not deployed
+to Home Assistant during development.

@@ -42,6 +42,28 @@ undocumented override is indistinguishable from not having checked.
 
 ---
 
+## Companion app compatibility policy
+
+Support the current official mobile app release and the two immediately preceding
+published releases. Count actual published releases, including patch releases;
+do not infer predecessors by subtracting from version numbers. This window refers
+to mobile app versions, not integration releases.
+
+- Maintain layout adapters and regression fixtures for all three supported app
+  releases. Detect the controls present on screen to select an adapter, preserving
+  older supported layouts when introducing a new one.
+- Track read and write validation separately for each app version and operation.
+  A recognised layout or successful read does not validate a vehicle command.
+  Keep unverified writes blocked; unfamiliar newer versions may use safe reads
+  only where existing safeguards permit them.
+- Before an integration release, record the supported app versions and validation
+  coverage, and check for regressions across the window.
+- Phase older versions out gradually: announce deprecation in release notes when
+  they leave the window, retain their adapters during the deprecation transition,
+  and announce removal before deleting compatibility code. Leaving the window
+  must not silently remove existing support. Apply the semver rules below to
+  compatibility removals.
+
 ## Daily: `[Unreleased]` block
 
 Every commit that touches `custom_components/` needs an entry in the

@@ -65,6 +65,8 @@ from .resources import (
     find_request_limit,
     find_settings_entry,
     find_tile_entry,
+    find_vehicle_location,
+    clickable_target,
     is_power_budget_alert,
     power_budget_labels,
     read_battery_resources,
@@ -84,6 +86,8 @@ from .departure import (
     departure_rows,
     find_toolbar_text,
     page_fields,
+    is_compose_timer_page,
+    read_timer_details,
     read_timer_page,
 )
 from .charging_locations import (
@@ -982,7 +986,7 @@ class CompanionChannel:
         if self._preset.brand == "volkswagen" and nav.name == "vehicle_settings":
             values.update(read_settings_resources(detail, self._app_strings))
         if self._preset.brand == "volkswagen" and nav.name == "departure_times":
-            values.update(read_departure_timers(detail))
+            values.update(read_departure_timers(detail, self._app_strings))
         if self._preset.brand == "volkswagen" and nav.name in (
             "climate_detail", "climate_settings",
         ):
@@ -1085,28 +1089,42 @@ class CompanionChannel:
         return (detail if cleared else None), taps
 
     async def _read_driving_data(self, nodes: list[UiNode]) -> dict[str, object]:
-        """Both trip cards: the first as drawn, the second after one swipe.
+        """Collect cards in any order with at most two swipes each way.
 
-        The carousel shows the second card clipped at the edge, title and
-        labels but no values. A sideways swipe inside the carousel brings it
-        on screen; it moves the cards only and asks the car for nothing.
+        Swipe only a recognised horizontal band, never pull to refresh. A
+        stationary/covered screen or transport failure ends that direction.
+        Long-haul values stay separate from single and refuel/charging trips.
         """
         out = read_driving_data(nodes, self._app_strings)
-        row = trip_carousel_row(nodes, self._app_strings)
         swipe = getattr(self._t, "swipe", None)
-        if "refuel_trip_distance_km" in out or row is None or swipe is None:
+        wanted = {
+            f"{prefix}_{part}" for prefix in ("last_trip", "refuel_trip")
+            for part in ("distance_km", "duration_min", "avg_speed_kmh")
+        }
+        if swipe is None:
             return out
-        left, top, right, bottom = row
-        y = (top + bottom) // 2
-        try:
-            await swipe(left + int((right - left) * 0.85), y, left + int((right - left) * 0.15), y, 400)
-        except CompanionTransportError:
-            return out
-        swiped, cleared = await self._dump_and_clear_overlays(await self._settle())
-        if cleared:
-            for key, val in read_driving_data(swiped, self._app_strings).items():
-                if key.startswith("refuel_trip_"):
+        for forward in (True, False):
+            for _ in range(2):
+                row = trip_carousel_row(nodes, self._app_strings)
+                if wanted <= out.keys() or row is None:
+                    return out
+                left, top, right, bottom = row
+                y = (top + bottom) // 2
+                x1, x2 = left + int((right - left) * 0.85), left + int((right - left) * 0.15)
+                if not forward:
+                    x1, x2 = x2, x1
+                try:
+                    await swipe(x1, y, x2, y, 400)
+                    swiped, cleared = await self._dump_and_clear_overlays(await self._settle())
+                except CompanionTransportError:
+                    return out
+                if not cleared:
+                    return out
+                for key, val in read_driving_data(swiped, self._app_strings).items():
                     out.setdefault(key, val)
+                if swiped == nodes:
+                    break
+                nodes = swiped
         return out
 
     async def _read_departure_pages(self, nodes: list[UiNode]) -> dict[str, object]:
@@ -1120,11 +1138,12 @@ class CompanionChannel:
         out: dict[str, object] = {}
         for slot in range(1, min(3, len(departure_rows(nodes))) + 1):
             page, nodes = await self._open_timer_page(nodes, slot)
-            if page is None:
+            details = read_timer_details(nodes, slot)
+            if page is None and not details and not is_compose_timer_page(nodes):
                 if not departure_rows(nodes):
                     await self._back_to_timer_list()  # off the list: one step back
                 break
-            out.update(page_fields(page, slot))
+            out.update(details)
             back = await self._back_to_timer_list()
             if back is None:
                 break
@@ -1250,10 +1269,12 @@ class CompanionChannel:
         if point is None:
             return None, nodes
         await self._t.tap(*point)
-        settled = await self._settle(lambda n: read_timer_page(n) is not None)
+        settled = await self._settle(
+            lambda n: read_timer_page(n) is not None or is_compose_timer_page(n)
+        )
         page_nodes, cleared = await self._dump_and_clear_overlays(settled)
         if not cleared or self._limit_on_screen(page_nodes):
-            return None, page_nodes
+            return None, []
         return read_timer_page(page_nodes), page_nodes
 
     async def _back_to_timer_list(self) -> list[UiNode] | None:
@@ -1296,7 +1317,13 @@ class CompanionChannel:
         return scrolled if cleared else nodes
 
     def _step_node(self, nodes: list[UiNode], step: "ActionSelector") -> UiNode | None:
+        if step.action == "find_vehicle":
+            node = find_vehicle_location(nodes, self._app_strings)
+            if node is not None:
+                return node
         node = find_node_for(nodes, step)
+        if step.action == "find_vehicle":
+            return clickable_target(nodes, node) if node is not None else None
         if step.action == "open_charge_detail" and node is None:
             node = find_battery_tile(nodes, self._app_strings)
         if step.action == "open_vehicle_settings" and node is None:
@@ -2245,6 +2272,11 @@ class CompanionChannel:
         """Set the timer's page, Save, and read it back; the list after."""
         page, nodes = await self._open_timer_page(listing, slot)
         if page is None:
+            if is_compose_timer_page(nodes):
+                raise CompanionWriteBlocked(
+                    "the app's departure editor does not expose its clock and weekday "
+                    "selection; editing cannot be verified, so nothing was changed"
+                )
             raise CompanionWriteBlocked(f"could not open departure timer {slot} in the app")
         if page.time != departure_rows(listing)[slot - 1].time:
             raise CompanionWriteBlocked(
