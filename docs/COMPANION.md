@@ -780,8 +780,8 @@ which restores the saved timer; it and the helper's removal each retry once afte
 buttons expose no state, so a change of days could only be checked after Save: it is refused after the
 page opened, before any editor control is changed, and the days are changed in the app. A request must
 match the days on the list. A transport without the helper (the add-on bridge, the relay) refuses the
-edit the same way. Live checks were on one Tiguan, in English, on a 12-hour clock; 24-hour phones and
-other languages are covered by tests from the same captures, not live.
+edit the same way. Live checks were on one Tiguan, in English, on a 12-hour clock; other vehicles are
+unvalidated. Tests exercise label variations and a synthetic 24-hour picker derived from these captures.
 
 ### 3.10 Security model
 
