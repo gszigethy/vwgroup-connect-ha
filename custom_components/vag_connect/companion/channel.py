@@ -366,6 +366,8 @@ class CompanionChannel:
         self._nav_only: set[str] = set()
         self._screen_lock = _ScreenLock()
         self._app_strings: dict[str, set[str]] = {}
+        # Trip-card families a full Driving data sweep found; None until one ran.
+        self._trip_families: set[str] | None = None
         # (app version, split list) the current table was successfully read for.
         self._strings_ok_key: tuple[str | None, tuple[str, ...]] | None = None
         self._strings_try_key: tuple[str | None, tuple[str, ...]] | None = None
@@ -1094,14 +1096,17 @@ class CompanionChannel:
 
         Swipe only a recognised horizontal band, never pull to refresh. A
         stationary/covered screen or transport failure ends that direction.
-        Long-haul values stay separate from single and refuel/charging trips;
-        that card is searched for only once its title was on screen.
+        Long-haul values stay separate from single and refuel/charging trips.
+        The first read sweeps both ends of the carousel, since a card left of
+        the starting one may not show its title, and remembers which cards
+        exist; later reads stop once every remembered card was read.
         """
         out = read_driving_data(nodes, self._app_strings)
         swipe = getattr(self._t, "swipe", None)
-        families = {"last_trip", "refuel_trip"}
         if swipe is None:
             return out
+        sweep = self._trip_families is None
+        families = {"last_trip", "refuel_trip"} | (self._trip_families or set())
         for forward in (True, False):
             for _ in range(2):
                 families |= trip_card_families(nodes, self._app_strings)
@@ -1110,7 +1115,7 @@ class CompanionChannel:
                     for part in ("distance_km", "duration_min", "avg_speed_kmh")
                 }
                 row = trip_carousel_row(nodes, self._app_strings)
-                if wanted <= out.keys() or row is None:
+                if row is None or (not sweep and wanted <= out.keys()):
                     return out
                 left, top, right, bottom = row
                 y = (top + bottom) // 2
@@ -1129,6 +1134,8 @@ class CompanionChannel:
                 if swiped == nodes:
                     break
                 nodes = swiped
+        if sweep:
+            self._trip_families = families | trip_card_families(nodes, self._app_strings)
         return out
 
     async def _read_departure_pages(self, nodes: list[UiNode]) -> dict[str, object]:
