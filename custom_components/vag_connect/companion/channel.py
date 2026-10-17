@@ -2406,6 +2406,7 @@ class CompanionChannel:
             )
         opened_days = tuple(str(opened).split(","))
         sent = False
+        staged = False  # a page control or wheel was touched, whatever Save shows
         try:
             await t.a11y_prepare()  # type: ignore[attr-defined]
             now = read_compose_clock(await t.a11y_tree())  # type: ignore[attr-defined]
@@ -2439,17 +2440,21 @@ class CompanionChannel:
                 chip = compose_day_chip(nodes, day)
                 if chip is None or chip.tap_point is None:
                     raise CompanionWriteBlocked(f"the {day} button is not on the page; nothing was saved")
+                staged = True
                 nodes = await self._tap_compose_page(chip)
             # Picking a second day turns Repeat on in the app; read it after the days.
             switch = compose_repeat_switch(nodes)
             if switch is None:
                 raise CompanionWriteBlocked("could not read Repeat on the page; nothing was saved")
             if switch.checked != want_repeat:
+                staged = True
                 nodes = await self._tap_compose_page(switch)
                 switch = compose_repeat_switch(nodes)
                 if switch is None or switch.checked != want_repeat:
                     raise CompanionWriteBlocked("Repeat did not take; nothing was saved")
-            now = await self._set_compose_clock(now, *want_clock)
+            if (now.hour_value, now.minute_value) != want_clock:
+                staged = True
+                now = await self._set_compose_clock(now, *want_clock)
             nodes, _cleared = await self._dump_and_clear_overlays()
             save = find_toolbar_text(nodes, self._toolbar_labels(TIMER_SAVE, "save"), page_top)
             if save is None or save.tap_point is None:
@@ -2457,19 +2462,21 @@ class CompanionChannel:
             sent = True
             self._stamp_write()
             for key in (f"departure_timer_{slot}_time", f"departure_timer_{slot}_weekdays",
-                        f"departure_timer_{slot}_repeat", f"departure_timer_{slot}_enabled"):
+                        f"departure_timer_{slot}_repeat", f"departure_timer_{slot}_enabled",
+                        "departure_timer_enabled_count"):
                 self._nav_cache.pop(key, None)
             self._nav_only.add("departure_times")
             await t.tap(*save.tap_point)
             listing = await self._await_timer_saved(slot, want[0])
-        except (CompanionWriteBlocked, CompanionTransportError) as err:
-            if not sent:
+        except BaseException as err:
+            # Also on task cancellation: a staged page must not be left behind.
+            if not sent and staged:
                 await self._cancel_compose_page(page_top)
             if isinstance(err, CompanionTransportError):
                 raise CompanionWriteBlocked(str(err)) from err
             raise
         finally:
-            await t.a11y_cleanup()  # type: ignore[attr-defined]
+            await self._a11y_cleanup()
         # The list shows the time and the days; the page shows Repeat.
         shown = read_departure_timers(listing, self._app_strings)
         shown_days = shown.get(f"departure_timer_{slot}_weekdays")
@@ -2491,6 +2498,7 @@ class CompanionChannel:
             f"departure_timer_{slot}_weekdays": ",".join(want_days),
             f"departure_timer_{slot}_repeat": want_repeat,
             f"departure_timer_{slot}_enabled": shown.get(f"departure_timer_{slot}_enabled"),
+            "departure_timer_enabled_count": shown.get("departure_timer_enabled_count"),
         }
         for key, val in fields.items():
             if val is None:
@@ -2544,19 +2552,44 @@ class CompanionChannel:
         return now
 
     async def _cancel_compose_page(self, page_top: int) -> None:
-        """Undo unsaved changes with the page's X (Cancel); best effort."""
-        try:
-            nodes, _cleared = await self._dump_and_clear_overlays()
-            if not is_compose_timer_page(nodes):
-                return
-            if find_toolbar_text(nodes, self._toolbar_labels(TIMER_SAVE, "save"), page_top) is None:
-                return  # nothing unsaved
-            cancel = compose_toolbar_leading(nodes, page_top)
-            if cancel is not None and cancel.tap_point is not None:
+        """Undo staged changes with the page's leading control; best effort.
+
+        While the page differs from the saved timer that control is X, which
+        restores it; otherwise it is the back arrow, which leaves without
+        saving. Either way nothing is sent. A dropped link gets one reconnect,
+        as in ``_cancel_timer_page``.
+        """
+        save_labels = self._toolbar_labels(TIMER_SAVE, "save")
+        for attempt in range(2):
+            try:
+                if attempt or not self._t.connected:
+                    await self._t.connect()
+                nodes, _cleared = await self._dump_and_clear_overlays()
+                if not is_compose_timer_page(nodes):
+                    return
+                cancel = compose_toolbar_leading(nodes, page_top)
+                if cancel is None or cancel.tap_point is None:
+                    _LOGGER.warning("companion: the departure timer page shows no X to cancel with")
+                    return
                 await self._t.tap(*cancel.tap_point)
-                await self._settle()
-        except CompanionTransportError:
-            _LOGGER.debug("companion: could not cancel the departure timer page")
+                after, _cleared = await self._dump_and_clear_overlays(await self._settle())
+                if is_compose_timer_page(after) and find_toolbar_text(after, save_labels, page_top):
+                    _LOGGER.warning("companion: the departure timer page still offers Save after X")
+                return
+            except CompanionTransportError:
+                continue
+        _LOGGER.warning("companion: could not cancel the departure timer page")
+
+    async def _a11y_cleanup(self) -> None:
+        """Remove the helper from the phone, reconnecting once if the link dropped."""
+        for attempt in range(2):
+            try:
+                if attempt or not self._t.connected:
+                    await self._t.connect()
+                await self._t.a11y_cleanup()  # type: ignore[attr-defined]
+                return
+            except CompanionTransportError:
+                continue
 
     def _toolbar_labels(self, key: str, fallback: str) -> set[str]:
         """The installed app's word for a toolbar item; English without tables."""

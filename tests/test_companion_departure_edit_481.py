@@ -9,6 +9,7 @@ returns to the list with the new time and recurrence label.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import re
 from dataclasses import dataclass, replace
@@ -51,7 +52,7 @@ SAVE = (
 
 @dataclass(frozen=True)
 class Timer:
-    hour: int  # 1-12, AM only in these tests
+    hour: int  # 0-23
     minute: int
     days: frozenset[str]
     repeat: bool
@@ -66,6 +67,8 @@ class EditorPhone:
         self.edit = self.saved
         self.page = False
         self.wheels_move = wheels_move
+        self.fail_set: BaseException | None = None
+        self.connects = 0
         self.taps: list[str] = []
         self.helper: list[str] = []
         page = parse_ui_dump(PAGE)
@@ -74,7 +77,8 @@ class EditorPhone:
         self.row3 = departure_rows(parse_ui_dump(LIST))[2].clock.bounds
 
     async def connect(self) -> None:
-        pass
+        self.connects += 1
+        self.connected = True
 
     # -- screens --------------------------------------------------------------
 
@@ -82,8 +86,10 @@ class EditorPhone:
         if not self.page:
             t = self.saved
             day = DAY_NAMES[next(iter(t.days))] if len(t.days) == 1 else "Weekdays"
-            return LIST.replace('text="06:00"', f'text="{t.hour:02d}:{t.minute:02d}"').replace(
-                'text="Saturday"', f'text="{day}"')
+            clock = f'text="{(t.hour % 12 or 12):02d}:{t.minute:02d}"'
+            head, _, tail = LIST.partition('text="06:00"')
+            tail = tail.replace('text="AM"', f'text="{"PM" if t.hour >= 12 else "AM"}"', 1)
+            return (head + clock + tail).replace('text="Saturday"', f'text="{day}"')
         xml = PAGE
         if not self.edit.repeat:
             xml = xml.replace('checked="true"', 'checked="false"')
@@ -99,20 +105,28 @@ class EditorPhone:
 
     async def a11y_tree(self) -> str:
         e = self.edit
+        h12 = e.hour % 12 or 12
         tree = re.sub(r"(desc=Hour\trange=)[\d.]+(/\S+\tstate=)\d+",
-                      rf"\g<1>{60000 + e.hour % 12}.0\g<2>{e.hour:02d}", TREE)
+                      rf"\g<1>{60000 + h12 - 1}.0\g<2>{h12:02d}", TREE)
+        tree = re.sub(r"(desc=AM PM\trange=)[\d.]+(/\S+\tstate=)\w+",
+                      rf"\g<1>{1 if e.hour >= 12 else 0}.0\g<2>{'PM' if e.hour >= 12 else 'AM'}", tree)
         return re.sub(r"(desc=Minute\trange=)[\d.]+(/\S+\tstate=)\d+",
                       rf"\g<1>{60000 + e.minute // 5}.0\g<2>{e.minute:02d}", tree)
 
     async def a11y_set_progress(self, index: int, value: float) -> bool:
         self.helper.append(f"set {index} {value:g}")
+        if self.fail_set is not None:
+            raise self.fail_set
         if not self.wheels_move:
             return True
-        item = int(value) % 12
-        if index == 0:
-            self.edit = replace(self.edit, hour=item or 12)
+        e = self.edit
+        if index == 0:  # the hour list is 1..12, so progress 60000 shows 01
+            h12 = int(value) % 12 + 1
+            self.edit = replace(e, hour=h12 % 12 + (12 if e.hour >= 12 else 0))
         elif index == 1:
-            self.edit = replace(self.edit, minute=item * 5)
+            self.edit = replace(e, minute=int(value) % 12 * 5)
+        elif index == 2:
+            self.edit = replace(e, hour=e.hour % 12 + (12 if round(value) == 1 else 0))
         return True
 
     # -- input ----------------------------------------------------------------
@@ -289,3 +303,57 @@ def test_only_the_direct_adb_transport_offers_the_helper():
     assert transport_mod.NetworkAdbTransport.can_read_hidden_nodes is True
     assert AddOnAdbTransport.can_read_hidden_nodes is False
     assert AgentRelayTransport.can_read_hidden_nodes is False
+
+
+
+@pytest.mark.asyncio
+async def test_pm_times_set_the_meridiem_wheel_and_read_back():
+    phone = EditorPhone()
+    ch = _channel(phone)
+    await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (18, 30), None, None)
+    assert phone.saved == Timer(18, 30, frozenset({"sat"}), True)
+    assert any(h.startswith("set 2 ") for h in phone.helper)  # the AM/PM wheel moved
+
+
+@pytest.mark.asyncio
+async def test_task_cancellation_mid_edit_still_presses_x():
+    phone = EditorPhone()
+    phone.fail_set = asyncio.CancelledError()
+    ch = _channel(phone)
+    with pytest.raises(asyncio.CancelledError):
+        await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (7, 0), ("sun",), None)
+    assert "x" in phone.taps and "save" not in phone.taps
+    assert phone.saved == Timer(6, 0, frozenset({"sat"}), True)
+    assert phone.helper[-1] == "cleanup"
+
+
+@pytest.mark.asyncio
+async def test_a_dropped_link_reconnects_to_cancel_and_remove_the_helper():
+    phone = EditorPhone()
+
+    class Dropped(CompanionTransportError):
+        pass
+
+    phone.fail_set = Dropped("link dropped")
+    original = phone.a11y_set_progress
+
+    async def drop(index, value):
+        phone.connected = False
+        return await original(index, value)
+
+    phone.a11y_set_progress = drop
+    ch = _channel(phone)
+    with pytest.raises(CompanionWriteBlocked, match="link dropped"):
+        await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (7, 0), ("sun",), None)
+    assert phone.connects >= 1
+    assert "x" in phone.taps and "save" not in phone.taps
+    assert phone.helper[-1] == "cleanup"
+
+
+@pytest.mark.asyncio
+async def test_saving_refreshes_the_enabled_count():
+    phone = EditorPhone()
+    ch = _channel(phone)
+    ch._nav_cache["departure_timer_enabled_count"] = 7  # stale on purpose
+    await ch._edit_timer(parse_ui_dump(await phone.dump_ui()), 3, (7, 5), None, None)
+    assert ch._nav_cache.get("departure_timer_enabled_count") != 7

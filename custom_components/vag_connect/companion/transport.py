@@ -441,11 +441,8 @@ class NetworkAdbTransport:
         return f"SET {int(index)} true" in out
 
     async def a11y_cleanup(self, timeout_s: float = 10.0) -> None:
-        """Remove the helper again; best effort."""
-        try:
-            await self.shell(f"rm -f {_A11Y_REMOTE}", timeout_s)
-        except CompanionTransportError:
-            pass
+        """Remove the helper again. Raises on a dropped link, so the caller can reconnect."""
+        await self.shell(f"rm -f {_A11Y_REMOTE}", timeout_s)
 
 
 def _a11y_dex_path() -> str:
