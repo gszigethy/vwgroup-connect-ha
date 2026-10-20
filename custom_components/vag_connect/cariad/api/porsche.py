@@ -368,6 +368,11 @@ class PorscheClient:
         # v1.25.0 PR-B: refresh-storm protection state
         self._refresh_lock: asyncio.Lock | None = None
         self._refresh_history: list[float] = []
+        # #1866 — whether the budget has already reported itself as spent.
+        # Same reason as ``CariadBaseClient._refresh_budget_reported``: the
+        # refusal used to log at ERROR on every attempt, so a walled sign-in
+        # produced an identical error line every poll cycle for hours.
+        self._refresh_budget_reported: bool = False
         # v1.25.0 PR-B: rate-limit header capture (read by coordinator
         # for the requests_remaining_today sensor — matches CariadBase
         # surface so coordinator code stays brand-agnostic).
@@ -1441,7 +1446,18 @@ class PorscheClient:
                 if resp.status == 204:
                     self._capture_rate_limit_headers(resp.headers)
                     return {}
-                if resp.status not in (200, 202):
+                # 201 belongs here: POST /vehicles/{vin}/commands answers
+                # "201 Created" for an accepted command, and this client was
+                # the only one in the package that did not accept it — base.py
+                # takes (200, 201, 207) and (200, 201, 202, 207), and
+                # skoda_official takes (200, 201, 202, 204). Leaving it out
+                # cost more than an error message: raising here returns before
+                # resp.json(), so the body carrying `status.id` and "ACCEPTED"
+                # was never parsed, and _command() could not reach
+                # _poll_command() to find out whether the car had actually
+                # taken the command. Every remote command therefore reported
+                # "API error 201" while working (#1853).
+                if resp.status not in (200, 201, 202):
                     body = await resp.text()
                     raise APIError(resp.status, url, body)
                 self._capture_rate_limit_headers(resp.headers)
@@ -1513,15 +1529,41 @@ class PorscheClient:
             cutoff = now - _REFRESH_WINDOW_S
             self._refresh_history = [t for t in self._refresh_history if t > cutoff]
             if len(self._refresh_history) >= _REFRESH_MAX_PER_HOUR:
-                _LOGGER.error(
-                    "Porsche token refresh storm: %d attempts in last %ds — "
-                    "pausing to prevent IP ban; please reauthenticate from the UI",
-                    len(self._refresh_history), _REFRESH_WINDOW_S,
+                # #1866 — nothing pauses here; this refuses ONE attempt and the
+                # next slot frees when the oldest booked one ages out of the
+                # window. ERROR once per episode, DEBUG while it stays spent.
+                # Rounded UP, same reason as in base.py.
+                _frees_s = max(
+                    0.0, self._refresh_history[0] + _REFRESH_WINDOW_S - now
                 )
+                _frees_in = max(1, -(-int(_frees_s) // 60))
+                _args = (
+                    len(self._refresh_history), _REFRESH_WINDOW_S, _frees_in,
+                )
+                if not self._refresh_budget_reported:
+                    self._refresh_budget_reported = True
+                    _LOGGER.error(
+                        "Porsche token refresh budget spent: %d attempts in the "
+                        "last %ds — refusing further refreshes to avoid an "
+                        "account lock; the next one is allowed in about %d min. "
+                        "If the sign-in itself is being refused (see the errors "
+                        "above this line), re-entering credentials will not "
+                        "change that.",
+                        *_args,
+                    )
+                else:
+                    _LOGGER.debug(
+                        "Porsche token refresh budget still spent: %d in %ds; "
+                        "next slot in about %d min",
+                        *_args,
+                    )
                 raise AuthenticationError(
-                    "Porsche token refresh storm — please reauthenticate",
+                    "Porsche token refresh storm — refusing further refreshes "
+                    "until the budget frees; see the log for what is refusing "
+                    "the sign-in",
                 )
             self._refresh_history.append(now)
+            self._refresh_budget_reported = False
 
             if self._tokens and self._tokens.refresh_token:
                 try:

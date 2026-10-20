@@ -724,6 +724,39 @@ class VehicleData:
     climate_heatpump_state: str | None = None
     climate_blower_target_v: float | None = None
 
+    # Scout #1863 (@Massen88, VW ID.4 Pro) — six signals the official
+    # dictionary we ship already lists but with unit AND type NULL. The Scout
+    # sample is what makes them usable: it carried the unit tokens VW omitted.
+    #
+    # "gemessene relative Luftfeuchte" off Klima_Sensor_01. Named after its
+    # SOURCE, not a location: the catalogue says only "measured", and while the
+    # FS_ prefix and the climate-sensor module both point at a cabin sensor,
+    # nothing here proves indoor against intake air. Kept separate from
+    # ``outside_humidity_pct``, which comes off a UDS DID on another channel
+    # entirely, so the two can be compared on a car that reports both.
+    climate_humidity_pct: float | None = None
+    # "Gesamt-Ist-Leistung fuer Komfort- und Thermomanagement" in watts — what
+    # heating and cooling is drawing right now, which on an EV is range.
+    climate_power_w: float | None = None
+    # "Aktuelles DC-Ladeprofil der HV-Batterie" (enum string, e.g. DCLaden).
+    hv_dc_charging_profile: str | None = None
+    # "Kundenwarnung und Ersatzreaktionen aufgrund von Batteriebrandgefahr" —
+    # the battery's OWN warning field, reported verbatim. We detect nothing
+    # ourselves and must not imply otherwise; a healthy pack says keine_Warnung.
+    hv_battery_warning: str | None = None
+    # "Signalisiert aktiven Ladevorgang, Ladegeraet und DC/DC aktiv" — and the
+    # catalogue's own caveat is the reason this is a raw diagnostic and never
+    # feeds ``charging_state``: "Signal bleibt nach Kl.15 ein aktiv, bis
+    # ESP_Stillstandsflag geloescht", i.e. it stays active after ignition-on
+    # until the standstill flag clears, so it reads active when nothing is
+    # charging. The real charging state comes from the brand channels.
+    hv_charging_signal_active: str | None = None
+    # "Fehlerstatus fuer Aussentemperatur (Kombianzeige)" — the fault status of
+    # the very sensor one of the three outside-temperature paths reads
+    # (BCM1_Aussen_Temp_ungef, same Klima_Sensor_02 module). It says whether
+    # the number we publish is trustworthy; a healthy sensor reports iO.
+    outside_temp_sensor_status: str | None = None
+
     # Max AC charging current SETTING (user-requested) vs ACTUAL
     # deliverable amperage. ``maxChargeCurrentAC_setting`` is the
     # value the user picked in the brand app; ``maxChargeCurrentAC``
@@ -1964,6 +1997,20 @@ class VehicleData:
     # 78 vs 92") so a reading's uncertainty is visible per entity. Empty on the
     # vast majority of polls. Same skip/carry handling as field_captured_ts.
     ambiguous_fields: dict[str, str] = field(default_factory=dict)
+    # #465 (@Joassens) — the NAME of the EU-DA source leaf the mapper resolved
+    # onto each attribute. ``field_sources`` says which CHANNEL a value came
+    # from and ``field_captured_ts`` says when the car measured it; neither
+    # says which of the candidate leaf names actually won, and the mapper reads
+    # most fields from a list of aliases, first present wins. So a value that
+    # is plainly wrong could not be traced to the field that produced it: he
+    # reported a PHEV's fuel level pinned at exactly 100 % across 467 km and
+    # ended with "I can't tell which from diagnostics, since they don't include
+    # the raw portal field". Nor could elimination settle it — ``first()``
+    # marks EVERY candidate of a call used, plus their walker synonyms, so all
+    # of them vanish from ``raw_unmapped_fields`` together. ``_record`` is
+    # handed the chosen leaf already and was throwing the name away. Same
+    # skip/carry handling as field_captured_ts.
+    field_source_leaf: dict[str, str] = field(default_factory=dict)
 
     # ── v2.15.1 — EU Data Act + BFF wire-key mapping (2.15.0 plan) ──────────
     # New fields declared once on the shared model; each is written by the EU

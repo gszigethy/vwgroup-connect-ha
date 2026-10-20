@@ -1059,6 +1059,14 @@ class DataActScraper:
                 }),
             ) as resp:
                 if resp.status == 401:
+                    # #1867 (@alagerqv) — the sibling branch four lines down
+                    # logs its status and this one logged nothing, so the
+                    # repair appeared in his log with no line next to it
+                    # saying where it came from.
+                    _LOGGER.debug(
+                        "metadata/partial HTTP 401 for VIN %s — portal "
+                        "session expired", _mask_vin(vin),
+                    )
                     raise DataActSessionExpiredError(
                         "metadata/partial returned 401 - portal session expired"
                     )
@@ -1210,6 +1218,11 @@ class DataActScraper:
                     headers=self._hdrs(headers),
                 ) as resp:
                     if resp.status == 401:
+                        # #1867 — same silent raise as the metadata probe.
+                        _LOGGER.debug(
+                            "requests/partial HTTP 401 for VIN %s — portal "
+                            "session expired", _mask_vin(vin),
+                        )
                         raise DataActSessionExpiredError(
                             "requests/partial returned 401 - portal session expired"
                         )
@@ -1341,7 +1354,15 @@ class DataActScraper:
         # best-effort but do NOT abort when it is absent; that abort silently
         # blocked every one-time export too. The header below is sent only when a
         # token actually exists.
+        # The per-entry portal session closes on unload. Do not start an
+        # export on it, or continue after the best-effort CSRF await if an
+        # unload happened there. A close racing the POST remains covered by
+        # the request exception handler below.
+        if getattr(self._session, "closed", False) is True:
+            return False
         csrf = await self._fetch_csrf_token()
+        if getattr(self._session, "closed", False) is True:
+            return False
 
         # The browser sends millisecond precision (…:46.111Z); match it.
         now = datetime.now(timezone.utc)

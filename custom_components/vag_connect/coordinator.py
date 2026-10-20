@@ -38,6 +38,7 @@ from .const import (
     CONF_KEEP_RAW_DATASETS,
     CONF_MBB_COMMAND_CHANNEL,
     CONF_MBB_COMMAND_FALLBACK,
+    CONF_MBB_COMMANDS_BLOCKED_REASON,
     CONF_MEB_COMMANDS_UNAVAILABLE,
     CONF_PASSWORD,
     CONF_READ_ONLY,
@@ -146,7 +147,7 @@ def _values_moved(
 #: Side maps that describe WHERE a snapshot value came from and WHEN the car
 #: captured it. They are ordinary keys in the snapshot dict, which is why the
 #: gap-fill below has to treat them specially.
-_PROVENANCE_MAPS = ("field_sources", "field_captured_ts")
+_PROVENANCE_MAPS = ("field_sources", "field_captured_ts", "field_source_leaf")
 
 
 def _gap_fill_from_export(
@@ -271,10 +272,75 @@ def _portal_health(
 # slower than the user's configured interval.
 _DROP_BUFFER_S = 60
 _DROP_RETRY_S = 60
+# #1850 — how many consecutive overdue polls the fast retry is worth.
+#
+# The retry above is for a drop that is LATE: polling again in a minute catches
+# a snapshot that is about to land, which is the whole point of aligning. It is
+# not for a drop that is NOT COMING. On an entry whose portal feed has stopped,
+# every poll finds the anchor unmoved, so the "overdue" branch fires forever and
+# the clamp pins the cadence at the floor — for as long as the feed stays down,
+# regardless of what the user configured. @indigomejor measured that: a
+# ``scan_interval`` of 10 minutes polling every 3.4 minutes for three days,
+# ~17/hour, ending in an account-level lockout. Raising the interval could not
+# help, because the interval was only ever the upper bound.
+#
+# So the fast retry gets a budget. After this many consecutive overdue polls
+# with no fresh capture, the configured interval is handed back; the first drop
+# that actually lands resets the budget and alignment resumes. Three keeps the
+# behaviour the alignment exists for (a drop one or two polls late is still
+# caught quickly) and drops the behaviour nobody asked for.
+_DROP_RETRY_MAX_STREAK = 3
+
+
+# How far the capture anchor must move forward to count as a drop having landed.
+#
+# It cannot be an equality test. The poll loop does not keep the car's own
+# ``last_seen_at``; it rebuilds the anchor as ``now - capture_age``, and the
+# ``now`` it subtracts from is a different ``datetime.now()`` call than the one
+# inside the age helper. So a feed that is completely frozen still yields a
+# slightly different anchor on every poll — measured at a few microseconds — and
+# an ``!=`` comparison reads every one of those as a fresh drop. That reset the
+# streak on every poll, which left the budget below permanently unspent and the
+# cadence pinned at the floor exactly as before. One second is orders of
+# magnitude above that jitter and orders of magnitude below a real drop, which
+# arrives on the portal's ~15-minute cadence.
+_DROP_ANCHOR_ADVANCE_S = 1.0
+
+
+def _drop_anchor_advanced(
+    previous: datetime | None, current: datetime | None,
+) -> bool:
+    """True when the capture anchor moved forward enough to be a new snapshot.
+
+    Deliberately one-directional: an anchor that goes *backwards* (a corrected
+    clock, a car leaving the entry and taking the freshest capture with it) is
+    not a drop, so it must not refill the retry budget.
+    """
+    if current is None:
+        return False
+    if previous is None:
+        return True
+    return (current - previous).total_seconds() > _DROP_ANCHOR_ADVANCE_S
+
+
+def _drop_overdue(
+    interval_s: int, newest_capture_at: datetime | None, now: datetime,
+) -> bool:
+    """True when the next portal drop is already later than expected.
+
+    Shared by the scheduler and its caller so the streak is counted against the
+    same condition the sleep is computed from, rather than against a second copy
+    of the arithmetic that could drift away from it.
+    """
+    if newest_capture_at is None:
+        return False
+    target = newest_capture_at + timedelta(seconds=interval_s + _DROP_BUFFER_S)
+    return (target - now).total_seconds() <= 0
 
 
 def _drop_anchored_sleep_s(
     interval_s: int, newest_capture_at: datetime | None, now: datetime, floor_s: int,
+    overdue_streak: int = 0,
 ) -> float:
     """Seconds to sleep until the next expected portal drop.
 
@@ -282,13 +348,26 @@ def _drop_anchored_sleep_s(
     (``<= now``) collapses to a short retry. The result is clamped to
     ``[floor_s, interval_s]`` so alignment can never poll faster than the floor
     nor slower than the configured interval. With no capture time it is a no-op
-    (returns ``interval_s``)."""
+    (returns ``interval_s``).
+
+    ``overdue_streak`` is how many consecutive polls have found the drop overdue
+    without a fresh capture arriving. Once it reaches
+    ``_DROP_RETRY_MAX_STREAK`` the fast retry has stopped paying for itself and
+    the configured interval is returned instead — see that constant for why.
+    """
     if newest_capture_at is None:
         return float(interval_s)
-    target = newest_capture_at + timedelta(seconds=interval_s + _DROP_BUFFER_S)
-    remaining = (target - now).total_seconds()
-    if remaining <= 0:
+    if _drop_overdue(interval_s, newest_capture_at, now):
+        if overdue_streak >= _DROP_RETRY_MAX_STREAK:
+            # Through the same clamp as every other path: an early return of a
+            # bare ``interval_s`` would hand back a sleep BELOW ``floor_s``
+            # whenever the configured interval is shorter than the floor, which
+            # is the one promise this function's docstring makes.
+            return max(float(floor_s), float(interval_s))
         remaining = float(_DROP_RETRY_S)  # drop overdue → poll again soon
+    else:
+        target = newest_capture_at + timedelta(seconds=interval_s + _DROP_BUFFER_S)
+        remaining = (target - now).total_seconds()
     return max(float(floor_s), min(remaining, float(interval_s)))
 
 
@@ -1318,6 +1397,12 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         # Drop-anchored scheduling — the freshest snapshot capture time seen so
         # far, used to align the next portal poll to the ~15-min drop cadence.
         self._newest_capture_at: datetime | None = None
+        # #1850 — consecutive overdue polls with no fresh capture, and the anchor
+        # the last decision was taken against. Together they stop the fast
+        # drop-retry from pinning the cadence at the floor on a feed that has
+        # stopped delivering; see _DROP_RETRY_MAX_STREAK.
+        self._drop_overdue_streak = 0
+        self._drop_anchor_seen: datetime | None = None
         # Consecutive EU-DA portal 5xx outages → escalating poll backoff (5/15/30m).
         self._consecutive_portal_5xx = 0
 
@@ -1417,6 +1502,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             AuthenticationError,
             DeviceLoginExpiredError,
             EmailTwoFactorRequiredError,
+            EuropeAttestationError,
             PortalInteractionRequiredError,
             PortalSessionExpiredError,
             TermsAndConditionsError,
@@ -1749,20 +1835,42 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 "for %s", len(self.vehicles), brand,
             )
 
-        # b13 — MEB/ID known-limitation. Setup flags an entry when the user
-        # asked for MBB commands but the car is MEB-ineligible (the portal
-        # entry was created read-only). Surface a clear repair so it's a known
-        # limit, not a silent missing-command-entities failure.
+        # b13 — setup flags an entry when the user asked for MBB commands but
+        # the command channel could not be minted (the portal entry was created
+        # read-only). Surface a clear repair so it's a known limit, not a
+        # silent missing-command-entities failure.
+        # #1809 — pick the notice by the RECORDED reason. The Car-Net verdict
+        # ("the durable login answered Unknown user") is only told when the
+        # backend actually answered it; an undetermined mint failure gets its
+        # own wording rather than borrowing that one.
+        # An entry written before the reason key existed has no reason, and
+        # falls through to the behaviour it already had.
+        _blocked_reason = str(
+            self.entry.data.get(CONF_MBB_COMMANDS_BLOCKED_REASON, "") or ""
+        )
+        _issue_key = ""
         if self.entry.data.get(CONF_MEB_COMMANDS_UNAVAILABLE):
-            from homeassistant.helpers import issue_registry as ir  # noqa: PLC0415
+            _issue_key = "meb_commands_unavailable"
+        elif _blocked_reason == "unknown":
+            _issue_key = "mbb_mint_failed"
+        from homeassistant.helpers import issue_registry as ir  # noqa: PLC0415
+        # The issue id follows the reason, so a Reconfigure that changes the
+        # reason (or arms the channel) must take the previous notice down,
+        # or two contradictory notices stand side by side for one entry.
+        for _other in ("meb_commands_unavailable", "mbb_mint_failed"):
+            if _other != _issue_key:
+                ir.async_delete_issue(
+                    self.hass, DOMAIN, f"{_other}_{self.entry.entry_id}"
+                )
+        if _issue_key:
             ir.async_create_issue(
                 self.hass,
                 DOMAIN,
-                f"meb_commands_unavailable_{self.entry.entry_id}",
+                f"{_issue_key}_{self.entry.entry_id}",
                 is_fixable=False,
                 is_persistent=False,
                 severity=ir.IssueSeverity.WARNING,
-                translation_key="meb_commands_unavailable",
+                translation_key=_issue_key,
                 translation_placeholders={"brand": self.entry.data.get(CONF_BRAND, "")},
             )
 
@@ -2202,6 +2310,13 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                         self._companion_app_sync_loop(), f"{DOMAIN}_app_sync"
                     )
 
+            # #1866 — clear a stale SEAT/CUPRA OLA repair here, not only in the
+            # poll loop. An entry serving through the portal carried one at a
+            # count of 535 since August because the only clear path sat behind a
+            # completed poll iteration it never reached. Portal branch only; the
+            # helper's docstring says why the rest waits for a poll.
+            self._reconcile_ola_repair(at_setup=True)
+
             self.hass.async_create_background_task(
                 _bg_finish(), f"{DOMAIN}_setup_finish"
             )
@@ -2255,6 +2370,12 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             # Its own reason routes to the QR sign-in that config_flow already
             # offers for this entry shape.
             raise ValueError("device_login_expired") from err
+        except EuropeAttestationError as err:
+            # #1712 — also a subclass of AuthenticationError, so it MUST sit
+            # above the catch-all: the sign-in worked and only the token
+            # exchange was refused, so "invalid credentials" (and a reauth
+            # prompt for a password that is already right) would be wrong.
+            raise ValueError("eu_signin_attestation") from err
         except AuthenticationError as err:
             raise ValueError("invalid_credentials") from err
         except Exception as err:  # noqa: BLE001
@@ -2265,18 +2386,45 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             # <JWT>&code=<JWT>...`. Those JWTs base64-decode to the
             # user's email and a working access token. Log type only at
             # ERROR; route the message to DEBUG for triage.
+            # #1858 — the class name alone is useless for an ImportError:
+            # "setup failed: ImportError" is where @thomascombe's triage
+            # started and immediately stopped. He had to patch a local log in
+            # to find that repairs.py was importing a name his core did not
+            # have. An ImportError carries that in attributes rather than only
+            # in its message:
+            #   err.name       the module that failed  ("homeassistant.
+            #                  components.repairs")
+            #   err.name_from  the symbol that was missing from it
+            #                  ("RepairsFlowResult"); 3.12+, hence getattr
+            # Both are plain dotted names. Neither can carry a URL, an OAuth
+            # code or a token, which is the whole reason str(err) is withheld
+            # here — so these two are safe where the message is not.
+            #
+            # err.path is deliberately NOT logged. It is the filesystem path of
+            # the module, and on anything other than HAOS it carries the
+            # account name of whoever runs Home Assistant (measured: "...\
+            # Users\<account>\...\site-packages\..."). That is personal
+            # data for one line of triage convenience, and str(err) contains
+            # it too, which is the second reason the message stays out.
+            _detail = ""
+            if isinstance(err, ImportError):
+                _parts = [p for p in (err.name, getattr(err, "name_from", None)) if p]
+                if _parts:
+                    _detail = " [failed import: " + " -> ".join(_parts) + "]"
             _LOGGER.error(
-                "VW Group Connect setup failed: %s "
+                "VW Group Connect setup failed: %s%s "
                 "(message redacted, see DEBUG for details)",
                 type(err).__name__,
+                _detail,
             )
             # NB: NOT the raw err — the comment above is the reason (its str()
             # carries code=<JWT> → the user's email + a live token). The class
             # name is already logged at ERROR; nothing more is safe here. (#1355)
             _LOGGER.debug(
-                "VW Group Connect setup failed details withheld (%s) — the"
+                "VW Group Connect setup failed details withheld (%s%s) — the"
                 " exception message can carry an OAuth code/token",
                 type(err).__name__,
+                _detail,
             )
             return False
 
@@ -2447,10 +2595,10 @@ class VagConnectCoordinator(DataUpdateCoordinator):
            user explicitly turned auto-kickoff off) OR ``force`` is set
            (the user pressed the manual "create data request" button, an
            explicit intent that bypasses the toggle).
-        2. The active auth strategy is ``"data_act_portal"`` (the
-           coordinator only knows how to consume the portal's ZIP
-           dumps in that mode; for the live BFF strategies there is
-           no need to ever go through the portal).
+        2. A cookie-authenticated portal is active, either as the primary
+           ``"data_act_portal"`` strategy or as a supplementary channel.
+           Bearer-only ``"device_grant_portal"`` entries must provision
+           requests in the portal UI; this scraper requires cookie login.
         3. The DataActScraper is available (always true since
            v2.10.0; defensive check kept for future refactors).
 
@@ -2485,17 +2633,29 @@ class VagConnectCoordinator(DataUpdateCoordinator):
 
         tokens = getattr(self._cariad_client, "_tokens", None)
         active_strategy = getattr(tokens, "strategy", "") if tokens else ""
-        # v2.13.0 — device-code/QR portal entries (device_grant_portal) use the
-        # same EU-Data-Act portal proxy_api, so they need the continuous
-        # data-request kickoff too, not just the cookie data_act_portal path.
+        # Device-grant portal entries have a bearer, not a cookie login. The
+        # scraper cannot provision requests with that auth mode; neither the
+        # isolated nor the shared session has portal cookies. Leave existing
+        # bearer-backed reads alone and provision requests in the portal UI.
+        if active_strategy == "device_grant_portal":
+            if force:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="portal_request_requires_cookie_login",
+                )
+            _LOGGER.debug(
+                "Data Act kickoff: skipped bearer-only portal entry; create "
+                "the data request in the portal UI (scraper needs cookie login)",
+            )
+            return
         # b12 — AND a portal SUPPLEMENTARY armed on a non-portal primary (e.g.
         # MBB for commands) needs it too: without an active Custom Data Request
         # the portal returns no identifier → no_request → zero reads merged. The
-        # kickoff scraper shares the client session, where the supplementary
-        # portal already logged in (armed before this runs), so it's authed.
+        # supplementary portal already logged in on the entry's isolated
+        # portal session (armed before this runs), which the scraper uses too.
         supp_portal = self.entry.data.get(CONF_SUPPLEMENTARY_EU_PORTAL)
         if (
-            active_strategy not in ("data_act_portal", "device_grant_portal")
+            active_strategy != "data_act_portal"
             and not supp_portal
         ):
             _LOGGER.debug(
@@ -2550,8 +2710,14 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         # its Data Act request probed/kicked ~once/6h in portal mode. Filter it
         # like every other periodic path so a disabled car stays fully quiet.
         for vin in self._active_vins(list(self.vehicles)):
+            # An unload is not a failed provisioning attempt. Persisting its
+            # timestamp would delay the next setup by the full retry window.
+            if getattr(session, "closed", False) is True:
+                return
             try:
                 active = await scraper.get_active_custom_request_identifier(vin)
+                if getattr(session, "closed", False) is True:
+                    return
                 if active:
                     if new_map.get(vin) != active:
                         new_map[vin] = active
@@ -2613,6 +2779,8 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 new_ts[vin] = datetime.now(tz=timezone.utc).isoformat()
                 changed = True
                 new_id = await scraper.kickoff_custom_data_request(vin)
+                if getattr(session, "closed", False) is True:
+                    return
                 # #1439 — record why a kickoff made no request (portal HTTP
                 # status) so the reason survives the backoff window and shows in
                 # diagnostics without the user enabling debug logging.
@@ -2631,8 +2799,24 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                     )
                     self._notify_data_act_kickoff(vin)
             except DataActSessionExpiredError:
+                # #1867 (@alagerqv) — BREAK, not return. The persist at the end
+                # of this method is the ONLY thing that writes the attempt
+                # stamp, and returning jumped straight past it: the comment
+                # above the stamp promises it is "persisted below", and on this
+                # path it never was. So the 24 h backoff window never started,
+                # and the POST plus this repair re-fired on every setup and
+                # every reload — his stamp sat frozen at 2026-10-10T06:53:06Z.
+                #
+                # Stamp this VIN too, if nothing has yet. Only the POST site
+                # above reaches the stamp; a 401 from the probe
+                # (get_active_custom_request_identifier) raises before it, and
+                # that is a failed attempt exactly as much as a failed POST is.
+                # Without this, the probe-side 401 would still leave no record
+                # and keep re-firing.
+                new_ts.setdefault(vin, datetime.now(tz=timezone.utc).isoformat())
+                changed = True
                 self._raise_data_act_session_expired_repair()
-                return  # stop processing further VINs this cycle
+                break  # the session is dead for every VIN; stop, then persist
             except Exception as exc:  # noqa: BLE001
                 _LOGGER.debug(
                     "Data Act kickoff: VIN %s probe failed (%s) - skipping",
@@ -2694,9 +2878,14 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             raise ServiceValidationError(
                 translation_domain=DOMAIN, translation_key="historical_disabled",
             )
-        session = _portal_scraper_session(
-            getattr(self, "_cariad_client", None), async_get_clientsession(self.hass)
-        )
+        client = getattr(self, "_cariad_client", None)
+        tokens = getattr(client, "_tokens", None)
+        if getattr(tokens, "strategy", "") == "device_grant_portal":
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="portal_request_requires_cookie_login",
+            )
+        session = _portal_scraper_session(client, async_get_clientsession(self.hass))
         scraper = DataActScraper(session, brand_name=self.entry.data[CONF_BRAND])
         try:
             # Wedge-guard (#923, @naked-head — field-corrected). The portal
@@ -2717,7 +2906,24 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             ok = await scraper.kickoff_historical_export(vin)
         except DataActSessionExpiredError:
             self._raise_data_act_session_expired_repair()
-            return False
+            # The card alone is not enough here: this is a button press, and a
+            # method that returns quietly draws a success tick. Same reason the
+            # import beside it was changed for @placidcasual98 — the two halves
+            # of the same feature should not disagree about whether a failure
+            # is worth telling the user about.
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="portal_session_expired",
+            ) from None
+        # NOTE: a plain False is returned for a refusal rather than raised.
+        # This method is also reached while Home Assistant is tearing the entry
+        # down, where the session closes under the request and there is nobody
+        # to tell — ``test_export_unload_returns_false_without_reauth_or_pending``
+        # pins that, and an unload cannot be told apart from a refusal here
+        # without the scraper reporting which it was. The BUTTON turns a False
+        # into a visible error instead, because a button press always has
+        # someone in front of it. (The session-expired branch above does raise:
+        # it is unreachable during an unload, which the same test asserts.)
         if ok:
             # The portal gives this request no terminal state (it can silently
             # vanish ~24-36h later), so start our own client-side deadline clock.
@@ -2766,7 +2972,24 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 "but has not produced the file yet, which can take a while.",
                 mask_vin(vin), reason,
             )
-            return False
+            # @placidcasual98 (#1403) — the log line above was added so this
+            # service would stop being silent, and it still left the one place
+            # the user is actually looking saying the opposite: returning False
+            # ends the service call normally, so Home Assistant draws a green
+            # tick. His old export had expired off the portal, he got that tick
+            # with nothing imported, and only found out why by opening the
+            # portal himself. "A message saying no file was found would have
+            # saved me some time."
+            #
+            # Raising is what the branch twenty lines up already does for the
+            # portal-not-ready case, and this is the same kind of outcome: a
+            # user-triggered action that could not do the thing it was asked to
+            # do. The log keeps the detail; the UI now at least says it failed.
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="historical_export_empty",
+                translation_placeholders={"reason": reason},
+            )
         hist = historical.to_dict()
         merged_any = False
         with self._vehicles_lock:
@@ -3071,15 +3294,35 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 type(exc).__name__,
             )
 
-    async def async_create_data_act_request(self) -> None:
+    async def async_create_data_act_request(self, vin: str | None = None) -> None:
         """User-triggered (button): (re)create/refresh the EU-Data-Act
         continuous data request now. Runs even when automatic provisioning
-        is turned off — pressing the button is explicit intent (``force``)."""
+        is turned off — pressing the button is explicit intent (``force``).
+
+        Raises when the portal refused, because a button that returns quietly
+        draws a success tick in Home Assistant whatever happened. @Dulcow
+        pressed this one, watched nothing happen, and worked out only from the
+        portal itself that his request had never been created. The kickoff
+        already records the portal's status for diagnostics — it just had no
+        way to reach the person standing in front of the button.
+        """
         import time  # noqa: PLC0415
         # Rate-limit the runtime auto-path after a manual press (a request
         # now exists), but the create itself always runs via force=True.
         self._last_runtime_kickoff = time.monotonic()
+        if vin is not None:
+            # Clear any status left by an earlier press, so what we read back
+            # below is this attempt's verdict and not a stale one.
+            self._data_act_kickoff_error.pop(vin, None)
         await self._ensure_data_act_custom_request_kickoff(force=True)
+        if vin is not None:
+            reason = self._data_act_kickoff_error.get(vin)
+            if reason:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="data_act_request_refused",
+                    translation_placeholders={"reason": str(reason)},
+                )
         await self.async_request_refresh()
 
     def _raise_data_act_session_expired_repair(self) -> None:
@@ -3089,11 +3332,24 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         """
         from homeassistant.helpers import issue_registry as ir  # noqa: PLC0415
 
-        # v4.7.8 — remember that we raised it, so the per-poll repair refresh
-        # can clear it again once the portal session is demonstrably alive
-        # (data flowed). Before this the Repair was never deleted at all: a
-        # user who re-logged in kept seeing "session expired" forever.
-        self._data_act_session_expired_pending = True
+        # #1867 (@alagerqv) — the card appeared in his log with nothing next to
+        # it saying why. The two raise sites now log their 401 at debug; this
+        # one says the card is being raised, at a level a normal install
+        # records, so "where did this come from" is answerable without turning
+        # debug logging on first.
+        _LOGGER.warning(
+            "EU Data Act portal: the session was rejected (HTTP 401), raising "
+            "the re-authentication notice. Reads through the portal stay on "
+            "their last known values until it is signed in again."
+        )
+        # v4.7.8 remembered here that we had raised it, so the per-poll refresh
+        # could clear it again once the portal session was demonstrably alive.
+        # #1867 removed that: the flag lived on this coordinator instance while
+        # the repair lives in Home Assistant's issue registry, so a reload left
+        # the repair with nothing able to delete it. The clear now keys on the
+        # evidence alone — data flowing through the portal — and needs no
+        # memory of who raised it. Nothing is recorded here on purpose; a
+        # write-only attribute reads like state that matters.
         ir.async_create_issue(
             self.hass,
             DOMAIN,
@@ -3228,15 +3484,25 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         # is proof the session is alive again → clear it. Deliberately NOT
         # cleared on a no-data poll: the kickoff can raise it mid-cycle and the
         # same cycle's empty dataset must not immediately erase it.
-        if (
-            portal is not None
-            and not reason
-            and getattr(self, "_data_act_session_expired_pending", False)
-        ):
+        #
+        # #1867 (@Anoxym) — this used to require ``_data_act_session_expired_
+        # pending`` as well, an attribute set on the coordinator instance that
+        # raised the repair. A reload builds a new coordinator, so the new
+        # instance answered False, while the repair itself lives in Home
+        # Assistant's issue registry and survives the reload. The repair
+        # therefore outlived every object able to delete it, and a user who had
+        # signed in again kept being told their session was expired.
+        #
+        # The attribute was never part of the proof — data flowing through the
+        # portal is just as good on the second instance as on the first. It was
+        # there to avoid calling delete on every poll, and deleting an issue
+        # that does not exist is a no-op, so it was saving nothing and costing
+        # the reload. ``not reason`` is the condition that carries meaning and
+        # it stays.
+        if portal is not None and not reason:
             ir.async_delete_issue(
                 self.hass, DOMAIN, f"data_act_session_expired_{entry_id}"
             )
-            self._data_act_session_expired_pending = False
         if portal is None or not reason:
             ir.async_delete_issue(self.hass, DOMAIN, issue_id)
             return
@@ -4564,12 +4830,38 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 self._cariad_client, "_supplementary_eu_portal", None
             )
             _cap_anchor = getattr(self, "_newest_capture_at", None)
+            # #1850 — count consecutive overdue polls, so the fast retry gets a
+            # budget instead of pinning the cadence at the floor for as long as
+            # the feed stays down. A capture time we have not decided against
+            # before means a drop landed: alignment is working, start over.
+            _decision_now = datetime.now(tz=timezone.utc)
+            # getattr with defaults, like `_newest_capture_at` above and the
+            # rest of this loop: several tests drive the loop body on a
+            # coordinator that never ran __init__, and an unconditional
+            # attribute read here raises AttributeError for them. The previous
+            # revision of this block happened to survive that only because its
+            # `and` short-circuited before touching the attribute.
+            _prev_anchor = getattr(self, "_drop_anchor_seen", None)
+            self._drop_overdue_streak = getattr(self, "_drop_overdue_streak", 0)
+            if _drop_anchor_advanced(_prev_anchor, _cap_anchor):
+                self._drop_overdue_streak = 0
+            elif _drop_overdue(interval_s, _cap_anchor, _decision_now):
+                self._drop_overdue_streak += 1
+                if self._drop_overdue_streak == _DROP_RETRY_MAX_STREAK:
+                    _LOGGER.debug(
+                        "EU Data Act portal: %d polls with no fresh snapshot — "
+                        "standing down from the %ds drop-retry to the configured "
+                        "%ds until one lands (#1850)",
+                        self._drop_overdue_streak, _DROP_RETRY_S, interval_s,
+                    )
+            self._drop_anchor_seen = _cap_anchor
             if not nightly and _portal is not None and _cap_anchor is not None:
                 sleep_s: float = _drop_anchored_sleep_s(
                     interval_s,
                     _cap_anchor,
-                    datetime.now(tz=timezone.utc),
+                    _decision_now,
                     _CC_MIN_INTERVAL_S,
+                    self._drop_overdue_streak,
                 )
             else:
                 sleep_s = float(interval_s)
@@ -8934,8 +9226,10 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         primary.
 
         Both can use the portal's one-time historical export and the continuous
-        data-request button; the kickoff scraper is authed on the shared session
-        where the (primary or supplementary) portal logged in — see
+        data-request button for cookie-authenticated entries; the scraper uses
+        the entry's portal session where the primary or supplementary portal
+        logged in. Bearer-only device-grant entries must create requests in the
+        portal UI — see
         ``async_create_data_act_request`` and its b12 note. #923
         (@naked-head/@dazzzl): the export button was gated on read-only-portal
         mode only, so a merged ``eu_data_act+website_authproxy`` setup never got
@@ -8972,9 +9266,27 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         )
         return bool(identifiers)
 
-    def _reconcile_ola_repair(self) -> None:
+    def _reconcile_ola_repair(self, *, at_setup: bool = False) -> None:
         """Raise/clear the SEAT/CUPRA ``ola_headers_outdated`` Repair from the
         client's persistent-403 counter (#281/#282), with a portal-mode guard.
+
+        ``at_setup`` runs ONLY the portal-mode clear below, and exists because
+        the fix this docstring describes could not be reached from where it was
+        needed. #1866 (@georghaberkorn68-ctrl): a CUPRA entry serving its data
+        through the portal carried this repair at a count of 535 since August.
+        The portal-mode auto-resolve was working — it simply lives in the poll
+        loop, which is the one place his entry does not get to, and nothing else
+        in the integration clears that repair. So it froze "on" exactly as
+        #1301 describes, one level further out.
+
+        Why the setup call is narrowed to the portal branch rather than running
+        the whole reconcile: at setup the client is new, so its counters are
+        zero, and the "no history, clear it" branch would fire for every entry
+        on every restart — including one whose OLA access really is revoked,
+        whose repair would then vanish at each restart and come back after the
+        first poll. Flicker on a real problem is a worse trade than a stale
+        repair on a moot one. The portal branch has no such ambiguity: #1301
+        already decided that a portal-served entry's OLA history is moot.
 
         #1301 (@anju1337): SEAT/CUPRA OLA is server-side revoked. Once an entry
         reads via the EU Data Act portal, ``get_vehicles`` / ``get_status``
@@ -9000,10 +9312,18 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 raise_issue_ola_headers_outdated,
             )
             if portal_active:
-                if ola_flag or consecutive_403:
-                    clear_ola_headers_issue(self.hass, self.entry.entry_id)
-                    setattr(client, "ola_headers_repair_needed", False)
-                    setattr(client, "_ola_consecutive_403", 0)
+                # #1866 — at setup the counters are zero on a fresh client, so
+                # the old `if ola_flag or consecutive_403` guard skipped the
+                # clear on exactly the entry that needed it: the repair is in
+                # HA's issue registry and outlives the client whose counters
+                # raised it. Deleting an issue that is not there is a no-op, so
+                # the guard was only ever saving a no-op call.
+                clear_ola_headers_issue(self.hass, self.entry.entry_id)
+                setattr(client, "ola_headers_repair_needed", False)
+                setattr(client, "_ola_consecutive_403", 0)
+            elif at_setup:
+                # Nothing else is decided at setup — see the docstring.
+                return
             elif ola_flag and consecutive_403 > 0:
                 raise_issue_ola_headers_outdated(
                     self.hass, self.entry.entry_id,
@@ -9525,7 +9845,10 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 pass  # bookkeeping must never affect command outcome
             _LOGGER.debug("VW Group Connect: %s(%s) OK", method, mask_vin(vin))
         except Exception as err:  # noqa: BLE001
-            from .cariad.exceptions import classify_command_failure  # noqa: PLC0415
+            from .cariad.exceptions import (  # noqa: PLC0415
+                VehicleCommandError,
+                classify_command_failure,
+            )
 
             try:
                 reason = classify_command_failure(err)
@@ -9538,11 +9861,40 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 pass
             # class + status only — raw err str() can carry the VIN-path command
             # URL; the classified reason is already logged one branch up.
-            _LOGGER.error(
-                "VW Group Connect: %s(%s) failed: %s (status=%s)",
-                method, mask_vin(vin), type(err).__name__,
-                getattr(err, "status", None),
-            )
+            #
+            # #584 (@Joassens) — EXCEPT for a VehicleCommandError that carries
+            # its own reason. He read a refusal that explains itself in full in
+            # the UI ("the car's gateway accepted your S-PIN and then refused
+            # this integration's client identity…") and found the log file had
+            # only "VehicleCommandError (status=None)" for the same event. Every
+            # reason this class carries is prose written for the owner and
+            # already shown to them, so withholding it from the log protects
+            # nothing and costs the one reader who has only the log — which, on
+            # a command, is usually the person being asked for it.
+            # ``classify_command_failure``'s verdict goes out at INFO, a level
+            # many installs never record.
+            #
+            # The blanket rule above still holds for everything else, but note
+            # WHY: it is not about APIError, whose message has been redacted to
+            # ``<vin>`` since #1355 (``_redact_url`` in exceptions.py). It is
+            # about the arbitrary exceptions that also land in this handler —
+            # an aiohttp, httpx or adb-shell error whose ``str()`` nobody here
+            # has vetted and which can carry a full URL or response body.
+            _reason = getattr(err, "reason", "") if isinstance(
+                err, VehicleCommandError
+            ) else ""
+            if _reason:
+                _LOGGER.error(
+                    "VW Group Connect: %s(%s) failed: %s (status=%s) — %s",
+                    method, mask_vin(vin), type(err).__name__,
+                    getattr(err, "status", None), _reason,
+                )
+            else:
+                _LOGGER.error(
+                    "VW Group Connect: %s(%s) failed: %s (status=%s)",
+                    method, mask_vin(vin), type(err).__name__,
+                    getattr(err, "status", None),
+                )
             # b15 — a two-way primary (Audi BFF) that refuses a command with an
             # auth 401/403 (the shape a revoked device-grant takes) → try the
             # durable MBB fallback ONCE before surfacing, iff the user opted in

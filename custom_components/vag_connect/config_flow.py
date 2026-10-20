@@ -53,6 +53,7 @@ from .const import (
     CONF_MBB_COMMAND_CHANNEL,
     CONF_CAPTCHA_CODE,
     CONF_MBB_COMMAND_FALLBACK,
+    CONF_MBB_COMMANDS_BLOCKED_REASON,
     CONF_MEB_COMMANDS_UNAVAILABLE,
     CONF_MBB_COMMAND_CLIENT_ID,
     CONF_MBB_COMMAND_TOKENS,
@@ -90,6 +91,29 @@ def _brand_label(brand: str) -> str:
     entry-title formatting never KeyErrors."""
     return BRANDS.get(brand, brand.replace("_", " ").title())
 
+
+#: #1801 (@benbrummer) — brands allowed to add the supplementary
+#: volkswagen.de read channel.
+#:
+#: This was a bare ``!= "volkswagen"`` and refused Commercial Vehicles for no
+#: measured reason: nothing downstream of the gate is brand-specific, the
+#: connector is constructed with ``brand="volkswagen"`` either way, and the two
+#: brands are already treated as one thing where it matters most — Commercial
+#: Vehicles uses the same We Connect app, and its EU Data Act configuration is
+#: the Volkswagen one with a different state name (#1316). The reporter's own
+#: T6.1 returns an identical entity count and identical values whether the
+#: entry is set up as Volkswagen EU or as Commercial Vehicles.
+#:
+#: What is NOT established is whether volkswagen.de serves a Commercial VIN
+#: once the sign-in is allowed to start. That is a question about VW's site,
+#: and the gate was the thing preventing anyone from asking it. The channel is
+#: read-only, so the cost of being wrong is a failed sign-in the owner sees
+#: immediately — not a silent one. If it turns out Commercial VINs are not
+#: served, the gate comes back WITH a reason attached to it.
+#:
+#: The abort string ("This channel is only available for Volkswagen") stays
+#: correct in all twelve languages: both members are Volkswagen.
+_VWDE_BRANDS = frozenset({"volkswagen", "volkswagen_commercial"})
 
 # ── Brand selector options with icons ────────────────────────────────────────
 # HA renders these as a visual select list (not a plain dropdown)
@@ -211,6 +235,7 @@ async def _validate_credentials(
     from .cariad.api.porsche import PorscheClient  # noqa: PLC0415
     from .cariad.exceptions import (  # noqa: PLC0415
         AuthenticationError,
+        EuropeAttestationError,
         MarketingConsentError,
         NorthAmericaAttestationError,
         PorscheCaptchaRequiredError,
@@ -310,6 +335,16 @@ async def _validate_credentials(
                 "device attestation (not a credentials problem): %s", brand, err,
             )
             raise ValueError("na_signin_attestation") from err
+        except EuropeAttestationError as err:
+            # #1712 — the EU twin. The login worked and an authorization code
+            # came back; the token exchange refused the assertion headers. Also
+            # a subclass of AuthenticationError, so it must precede that catch,
+            # or VW EU and Audi owners are told their password is wrong.
+            _LOGGER.warning(
+                "VW Group Connect (%s): sign-in blocked by VW device "
+                "attestation (not a credentials problem): %s", brand, err,
+            )
+            raise ValueError("eu_signin_attestation") from err
         except PorscheLoginWallError as err:
             # b23 (#1337) — login got past credentials but hit a captcha/consent
             # wall in the redirect chain. NOT a wrong password (both reporters
@@ -414,6 +449,7 @@ def _map_error(err_code: str) -> str:
         "brand_not_dag_eligible",  # v2.7.0 — user picked non-DAG brand for browser login
         "portal_interaction_required",  # v2.15.4 (#527) — non-credential portal stop
         "na_signin_attestation",  # #1165/#659 — VW NA Play-Integrity sign-in wall
+        "eu_signin_attestation",  # #1712 — the same wall on the CARIAD BFF (EU)
         "porsche_login_wall",  # b23 #1337 — Porsche captcha/consent wall past password
         "website_login_failed",  # #1679/#1313 — vw.de login failed, but NOT on the password
     } else "cannot_connect"
@@ -437,6 +473,55 @@ def _is_grant_retired(err: object) -> bool:
     """
     text = str(err).lower()
     return "unauthorized_client" in text or "not allowed" in text
+
+
+# #1809 — the ONLY positive proof that a car/account has no legacy Car-Net
+# enrolment. Live-measured against the MBB token endpoint (Audi e-tron 50
+# quattro MY2022, an MLB-evo car): ``error=invalid_grant`` plus
+# ``error_description="Unknown user <account-uuid>"``. The marker lives in the
+# description, which is why #1355's redaction had to start carrying it as an
+# attribute (see ``CariadError.oauth_error_description``).
+_MBB_NOT_ENROLLED_MARKERS: tuple[str, ...] = ("unknown user",)
+
+
+def classify_mbb_mint_failure(err: object) -> str:
+    """Why did the durable-MBB mint fail?
+
+    Returns ``"not_enrolled"`` or ``"unknown"``.
+
+    #1809 fixed the repair text so it no longer calls a backend refusal an
+    MEB/ID car. What it now says instead is narrower and checkable: "the durable
+    Car-Net login answered ``Unknown user`` for this car". The rule that decides
+    when to say it was left as it was — ``"unknown user" in low or
+    "invalid_grant" in low`` — and on that rule the sentence reaches users whose
+    login never answered it. ``invalid_grant`` is the generic OAuth2 rejection:
+    the register/exchange chain returns it for an account with no MBB enrolment,
+    for an audience mismatch (#464) and for a failed register alike, and the
+    second write site fires on ANY mint failure, a 5xx or a timeout included.
+
+    So: only a POSITIVE marker may claim "no MBB enrolment" — and the marker
+    lives in ``error_description``, which the #1355 redaction dropped before the
+    flow could read it, so the claim could not be substantiated even when true.
+    Measured on an MLB-evo Audi e-tron 50 quattro (MY2022): the live rejection
+    is ``error=invalid_grant`` with ``error_description="Unknown user <uuid>"``.
+    Everything else stays ``"unknown"``, so the notice says what we actually
+    know. That includes ``unauthorized_client`` / "not allowed": in Phase 1
+    ``_is_grant_retired`` reads those as the manufacturer withdrawing the
+    device-code grant (#1364), but on the MBB register/exchange they far more
+    plausibly mean a client-id / audience mismatch (#464). Telling the user
+    "the manufacturer switched this off" on that evidence would be the same
+    kind of unbacked claim this classifier exists to stop.
+
+    Reads the description via the ``CariadError`` attribute and ``APIError.body``
+    — never echoes either, because the live description embeds an account UUID.
+    """
+    description = str(getattr(err, "oauth_error_description", "") or "")
+    haystack = " ".join(
+        (str(err), description, str(getattr(err, "body", "") or ""))
+    ).lower()
+    if any(marker in haystack for marker in _MBB_NOT_ENROLLED_MARKERS):
+        return "not_enrolled"
+    return "unknown"
 
 
 def _extract_user_id_from_id_token(id_token: str, fallback: str) -> str:
@@ -594,9 +679,15 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
         self._dag_mbb_tokens: Any = None
         self._dag_mbb_client_id: str = ""
         # v2.15.0a8 — set when the MBB exchange says "Unknown user" (account/car
-        # has no legacy Car-Net/MBB enrolment → newer ID/MEB car). Aborts the
-        # flow with a clear "not eligible, use EU Data Act" message.
+        # has no legacy Car-Net/MBB enrolment). Aborts the flow with a clear
+        # "not eligible, use EU Data Act" message.
+        # #1809 — this no longer implies an MEB/ID car: an MLB car whose account
+        # was never Car-Net-enrolled answers exactly the same way.
         self._dag_mbb_ineligible: bool = False
+        # #1809 — ``classify_mbb_mint_failure`` verdict of the last MBB mint
+        # attempt, so the entry records WHY commands are unavailable instead of
+        # asserting a platform nobody checked.
+        self._dag_mbb_failure_reason: str = ""
         # b12 — MBB COMMAND-CHANNEL setup: the Portal (email/pw) login can tick
         # "enable MBB commands" → after the portal validates, chain to the MBB
         # QR; the finish then creates a PORTAL-primary entry (reads) WITH the
@@ -973,6 +1064,7 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                     self._dag_mbb_tokens = None
                     self._dag_mbb_client_id = ""
                     self._dag_mbb_ineligible = False
+                    self._dag_mbb_failure_reason = ""
                     self._dag_user_id = ""
                     self._dag_error = ""
                     return await self.async_step_browser_login_pending()
@@ -1266,6 +1358,7 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             self._dag_mbb_tokens = None
             self._dag_mbb_client_id = ""
             self._dag_mbb_ineligible = False
+            self._dag_mbb_failure_reason = ""
             self._dag_user_id = ""
             self._dag_error = ""
             return await self.async_step_browser_login_pending()
@@ -1327,6 +1420,7 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             self._dag_mbb_tokens = None
             self._dag_mbb_client_id = ""
             self._dag_mbb_ineligible = False
+            self._dag_mbb_failure_reason = ""
             self._dag_user_id = ""
             self._dag_error = ""
             self._dag_user_input = dict(user_input)
@@ -1561,35 +1655,37 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                 )
                 if minted_ok:
                     return await self.async_step_browser_login_finish()
-                # v2.15.0a8 — MBB exchange said "Unknown user": this car is a
-                # newer ID/MEB model with no legacy Car-Net/MBB enrolment, so
-                # MBB will never work for it. Abort with a clear pointer to the
-                # EU Data Act / email-password channels rather than looping.
+                # #1809 follow-up — on the portal + MBB-command path EVERY mint
+                # failure keeps the read-only portal entry, not just the
+                # confirmed "Unknown user" one: the portal reads were validated
+                # before the QR, and a 5xx or a bare invalid_grant on the
+                # command channel is no reason to lose them. The finish step
+                # records WHY (CONF_MBB_COMMANDS_BLOCKED_REASON) so the
+                # coordinator picks the matching notice. A Phase-1 failure (no
+                # app tokens) still routes back to retry below.
+                if (
+                    self._dag_mbb_command
+                    and self._pending_portal_data
+                    and self._dag_tokens is not None
+                    and not self._reauth_qr
+                    and not self._dag_mbb_fallback
+                ):
+                    return await self.async_step_browser_login_finish()
+                # v2.15.0a8 — MBB exchange said "Unknown user": no legacy
+                # Car-Net/MBB enrolment, so MBB will never work for this
+                # account. Abort with a clear pointer to the EU Data Act /
+                # email-password channels rather than looping.
                 if self._dag_mbb and self._dag_mbb_ineligible:
-                    # b12 — when MBB was an add-on command channel on a portal
-                    # entry, an MBB-ineligible (MEB/ID) car must NOT lose the
-                    # portal reads: create the portal entry without commands.
-                    if self._dag_mbb_command and self._pending_portal_data:
-                        # b13 — flag the read-only fallback so the coordinator
-                        # raises a clear "commands unavailable" repair instead
-                        # of silently missing the command entities the user
-                        # ticked the box for.
-                        #
-                        # #1809 (jocke-w, Audi e-tron 55 MY2019) — the flag is
-                        # set from the backend REFUSAL, not from any platform or
-                        # model check, so it must not be read as "this is an MEB
-                        # car". An original e-tron is a GE-platform car and was
-                        # told it was an ID/MEB model, because "Unknown user" is
-                        # also what an older car answers once the brand has
-                        # migrated it off Car-Net. The user-facing texts now say
-                        # what we actually know; the key name stays as it is
-                        # because it is persisted in entry.data and renaming it
-                        # would silently drop the flag for existing entries.
-                        return await self._create_or_update_portal_entry(
-                            title=self._pending_portal_title,
-                            data={**self._pending_portal_data,
-                                  CONF_MEB_COMMANDS_UNAVAILABLE: True},
-                        )
+                    # b12/b13 — the portal + command case is handled above
+                    # (read-only portal entry, reason recorded). A pure MBB
+                    # entry has nothing to fall back to.
+                    #
+                    # #1809 (jocke-w, Audi e-tron 55 MY2019) — reaching here
+                    # REQUIRES the positive "Unknown user" marker
+                    # (``classify_mbb_mint_failure`` → not_enrolled). It says
+                    # the car is not enrolled in Car-Net, NOT that it is an
+                    # MEB/ID car: an older car answers the same once the brand
+                    # has migrated it off that system.
                     return self.async_abort(reason="mbb_not_eligible")
                 # Poll/mint completed with error — reset state and route
                 # back to the right brand/MBB picker so user can retry.
@@ -1866,19 +1962,25 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
             self._dag_error = str(err)
             # v2.15.0a8 — the MBB token exchange returns
             # ``invalid_grant: "Unknown user"`` when the account/vehicle has no
-            # legacy Car-Net/MBB enrolment — i.e. a newer ID/MEB car. That's
-            # not a transient failure: MBB (durable login + commands) simply
-            # doesn't cover MEB cars. Flag it so the flow aborts with a clear
-            # "use EU Data Act instead" message rather than looping the VIN form.
-            # Read the marker from message AND the raw body attribute: APIError's
-            # message is now redacted (body stripped, #1355), so an MBB exchange
-            # that raises APIError would otherwise hide "invalid_grant" here.
-            low = (str(err) + " " + str(getattr(err, "body", ""))).lower()
-            if self._dag_mbb and ("unknown user" in low or "invalid_grant" in low):
-                self._dag_mbb_ineligible = True
+            # legacy Car-Net/MBB enrolment. That's not a transient failure, so
+            # flag it and abort with a clear "use EU Data Act instead" message
+            # rather than looping the VIN form.
+            # #1809 — it also flagged that on a BARE ``invalid_grant``, so the
+            # notice's "the durable Car-Net login answered Unknown user" reached
+            # users whose login never answered it. Measured on an MLB-evo Audi
+            # e-tron 50 quattro (MY2022): the real rejection is
+            # ``invalid_grant`` + ``error_description="Unknown user <uuid>"``.
+            # Classify on that marker and record WHY, so an audience mismatch
+            # (#464), unauthorized_client, a failed register and a 5xx get an
+            # honest "undetermined" instead of borrowing this one.
+            reason = classify_mbb_mint_failure(err)
+            self._dag_mbb_failure_reason = reason
+            if self._dag_mbb:
+                # The flag is derived from the reason, never set on its own.
+                self._dag_mbb_ineligible = reason == "not_enrolled"
             _LOGGER.warning(
-                "Browser login Phase 2 failed for %s: %s",
-                self._dag_brand, type(err).__name__,
+                "Browser login Phase 2 failed for %s: %s (%s)",
+                self._dag_brand, type(err).__name__, reason,
             )
         finally:
             sess = getattr(self, "_dag_session", None)
@@ -1973,7 +2075,16 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
         # (reads) as a command channel. The portal's unique_id was already set +
         # de-duped in async_step_email_password, so don't touch it here.
         if self._dag_mbb_command:
-            entry_data = dict(self._pending_portal_data)
+            # #1809 follow-up — Reconfigure seeds _pending_portal_data from the
+            # existing entry.data, so a verdict from an EARLIER attempt would
+            # survive this one: a later 5xx would still show "Unknown user", and
+            # a successful re-approval would keep "commands unavailable". Each
+            # attempt states its own outcome.
+            entry_data = {
+                k: v for k, v in self._pending_portal_data.items()
+                if k not in (CONF_MEB_COMMANDS_UNAVAILABLE,
+                             CONF_MBB_COMMANDS_BLOCKED_REASON)
+            }
             if self._dag_mbb_tokens is not None:
                 entry_data[CONF_MBB_COMMAND_CHANNEL] = True
                 entry_data[CONF_MBB_COMMAND_TOKENS] = {
@@ -1990,7 +2101,16 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                 # surfaces a clear "commands unavailable" repair. #1809 — this
                 # says the mint failed, NOT that the car is MEB/ID; see the
                 # other call site for the e-tron that was told it was an ID.
-                entry_data[CONF_MEB_COMMANDS_UNAVAILABLE] = True
+                #
+                # #1809 follow-up — but it must not borrow the "Unknown user"
+                # explanation either. This branch is reached by EVERY mint
+                # failure: a 5xx, a timeout, a ClientError, an audience mismatch
+                # (#464), a refused register. Record which one it was, and only
+                # claim the Car-Net verdict when the backend actually gave it.
+                reason = self._dag_mbb_failure_reason or "unknown"
+                entry_data[CONF_MBB_COMMANDS_BLOCKED_REASON] = reason
+                if reason == "not_enrolled":
+                    entry_data[CONF_MEB_COMMANDS_UNAVAILABLE] = True
             return await self._create_or_update_portal_entry(
                 title=self._pending_portal_title, data=entry_data,
             )
@@ -2101,6 +2221,7 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                     self._dag_mbb_tokens = None
                     self._dag_mbb_client_id = ""
                     self._dag_mbb_ineligible = False
+                    self._dag_mbb_failure_reason = ""
                     self._dag_user_id = ""
                     self._dag_error = ""
                     return await self.async_step_browser_login_pending()
@@ -2589,17 +2710,46 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                     )
                 errors["base"] = _map_error(str(err))
             else:
+                _new_data = {
+                    **reauth_entry.data,
+                    CONF_USERNAME: username,
+                    CONF_PASSWORD: password,
+                    CONF_SPIN: spin,
+                    # v4.7.7 (#1337) — bridge a Porsche login token so the
+                    # reload reuses it (refresh) instead of re-logging in.
+                    **({"porsche_initial_tokens": _tok} if _tok else {}),
+                }
+                # #1813 — the credentials just changed UNDER the stored token,
+                # and neither copy of that token was being replaced. The QR
+                # branch below states the rule in its own docstring: the
+                # coordinator prefers the persisted store over
+                # ``dag_initial_tokens``, so a reauth that leaves the store
+                # alone re-loads the very token set it was meant to replace. The
+                # QR branch overwrites both; this branch overwrote neither.
+                #
+                # What that cost @ratclma: a converted entry loaded its expired
+                # device-grant token, spent a doomed refresh against a client the
+                # manufacturer has retired, and only then logged in with the new
+                # password — with the wasted refresh counted by the storm guard
+                # that then pauses the entry. The leftover ``dag_initial_tokens``
+                # is harmless at runtime (it is read only when the store is
+                # empty) but it sits in the diagnostics looking exactly like a
+                # cause, which is how it misled the reporter.
+                #
+                # Scoped to ``_needs_username`` on purpose. That is the entry
+                # which had NO password at all, so there is no password-based
+                # channel here whose tokens could be discarded. An ordinary
+                # Audi, Škoda, SEAT or CUPRA device-login entry never reaches
+                # this branch — it is routed to the code sign-in above — and the
+                # durable MBB channels attach their tokens to entries that
+                # already have a password. Widening this to every entry with a
+                # stored token set would repeat #118 in a new place: throwing
+                # away a refreshable token on every reauth.
+                if _needs_username:
+                    _new_data.pop("dag_initial_tokens", None)
+                    await self._clear_token_store(reauth_entry.entry_id)
                 self.hass.config_entries.async_update_entry(
-                    reauth_entry,
-                    data={
-                        **reauth_entry.data,
-                        CONF_USERNAME: username,
-                        CONF_PASSWORD: password,
-                        CONF_SPIN: spin,
-                        # v4.7.7 (#1337) — bridge a Porsche login token so the
-                        # reload reuses it (refresh) instead of re-logging in.
-                        **({"porsche_initial_tokens": _tok} if _tok else {}),
-                    },
+                    reauth_entry, data=_new_data,
                 )
                 await self._persist_porsche_token_store(reauth_entry.entry_id, _tok)
                 await self.hass.config_entries.async_reload(reauth_entry.entry_id)
@@ -2633,6 +2783,33 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                 ),
             },
         )
+
+    async def _clear_token_store(self, entry_id: str) -> None:
+        """Drop an entry's persisted TokenSet so the next load logs in cleanly.
+
+        Used when a reauth replaces the credentials that minted the stored
+        token, which makes that token not merely stale but unusable. Clearing
+        rather than overwriting because ``_validate_credentials`` only hands
+        back a token set for Porsche; for every other brand there is nothing
+        fresh to save, and an empty store is exactly what makes the coordinator
+        do a clean login on the reload.
+
+        Failures are swallowed by ``TokenStorage.clear`` itself, which is the
+        behaviour we want here: a store that cannot be removed leaves the old
+        bad-token path in place, and that is strictly better than aborting a
+        reauth that has already succeeded against the identity service.
+        """
+        from homeassistant.helpers.storage import Store  # noqa: PLC0415
+
+        from .cariad.auth._token_storage import (  # noqa: PLC0415
+            _STORAGE_VERSION,
+            TokenStorage,
+            storage_key_for_entry,
+        )
+        store: Store[dict[str, Any]] = Store(
+            self.hass, _STORAGE_VERSION, storage_key_for_entry(entry_id)
+        )
+        await TokenStorage(store).clear()
 
     async def async_step_reauth_qr(
         self, user_input: dict[str, Any] | None = None
@@ -2670,6 +2847,7 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
         self._dag_mbb_tokens = None
         self._dag_mbb_client_id = ""
         self._dag_mbb_ineligible = False
+        self._dag_mbb_failure_reason = ""
         self._dag_user_id = ""
         self._dag_error = ""
         return await self.async_step_browser_login_pending()
@@ -2853,6 +3031,7 @@ class VagConnectConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # type: i
                     self._dag_mbb_tokens = None
                     self._dag_mbb_client_id = ""
                     self._dag_mbb_ineligible = False
+                    self._dag_mbb_failure_reason = ""
                     self._dag_user_id = ""
                     self._dag_error = ""
                     return await self.async_step_browser_login_pending()
@@ -3939,7 +4118,7 @@ class VagConnectOptionsFlow(VwDeReauthMixin, config_entries.OptionsFlow):
         only; on success stores the session cookies as a supplementary channel
         and reloads so the coordinator merges it onto the primary."""
         errors: dict[str, str] = {}
-        if self._config_entry.data.get(CONF_BRAND) != "volkswagen":
+        if self._config_entry.data.get(CONF_BRAND) not in _VWDE_BRANDS:
             return self.async_abort(reason="not_volkswagen")
 
         if user_input is not None:
