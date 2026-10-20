@@ -25,13 +25,32 @@ from ..exceptions import (
     APIError,
     AuthenticationError,
     AuthProxyUnavailableError,
+    EuropeAttestationError,
+    RateLimitError,
     TokenExpiredError,
+    UpstreamUnavailableError,
 )
 from ..models import BrandConfig, TokenSet, VehicleData
 
 _LOGGER = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT = 60
+
+#: #1855 — error classes ``authenticate`` lets through unchanged instead of
+#: flattening into ``AuthenticationError`` on the last strategy.
+#:
+#: The bar for being in here is narrow and should stay narrow: the message must
+#: be one WE wrote, built from a status code and a brand name, and must never
+#: be able to carry a URL, a token or an account identifier. That is the whole
+#: reason the surrounding handler redacts foreign exceptions, and it is why
+#: ``APIError`` is absent despite also being ours — its message is derived from
+#: a request URL (redacted, but derived), so it stays on the safe side of the
+#: line. Each of the three below is constructed from literals plus an int.
+_SELF_DESCRIBING_ERRORS = (
+    UpstreamUnavailableError,
+    RateLimitError,
+    AuthProxyUnavailableError,
+)
 
 # Token-refresh storm protection (v1.8.7).
 # Capped at 3 successful-or-attempted refreshes per rolling hour. If the
@@ -85,6 +104,23 @@ _PROBE_CB_THRESHOLD  = 3
 # requests on this client for a cool-down window instead of hammering. A hammered
 # account can get locked for hours (myskoda #1053 precedent), so the cure must not
 # be more polling. The hold is per-client = per-account (one client per entry).
+#: Floor and ceiling for a server-supplied ``Retry-After`` on a 429.
+#:
+#: The floor keeps a ``Retry-After: 1`` from turning into a thrash loop.
+#:
+#: The ceiling is ``_LOCKOUT_429_S``, i.e. what an exhausted 429 already held
+#: for, and NOT the 430 hold. Clamping to the 430 value was the first attempt
+#: and it was wrong: the bound worth keeping is what a soft 429 could do
+#: BEFORE, not what an explicit hard lockout does. With 7200 a single header
+#: value could have taken the whole account dark for two hours, four times
+#: longer than any number of 429s had ever managed.
+#:
+#: A backend asking for longer than 30 minutes is therefore not honoured in
+#: full. That is deliberate: resuming at 30 minutes sends ONE request, because
+#: the retries are gone, and if it is refused again that refusal is honoured in
+#: turn. One request per half hour is a smaller risk than an account-wide
+#: two-hour stall arming on a value we cannot audit.
+_RETRY_AFTER_MIN_S = 30
 _LOCKOUT_429_S = 1800   # 30 min once 429 retries are exhausted
 _LOCKOUT_430_S = 7200   # 2 h on a hard 430 (explicit lockout signal)
 # VW EU Two-Way (650d46ca): the ~1 h device-grant Bearer is NON-refreshable, and
@@ -117,6 +153,21 @@ _TRANSIENT_NET_ERRORS: tuple[type[BaseException], ...] = (
     ClientPayloadError,
     asyncio.TimeoutError,
 )
+
+
+def _format_duration(seconds: int) -> str:
+    """A pause the reader can act on: seconds under a minute, minutes above.
+
+    Introduced with #1850, where the lockout gained holds shorter than a minute
+    and the previous ``%d min`` rendered all of them as "0 min".
+    """
+    if seconds < 60:
+        return f"{int(seconds)}s"
+    minutes = int(seconds) // 60
+    if minutes < 60:
+        return f"{minutes} min"
+    hours, rest = divmod(minutes, 60)
+    return f"{hours}h" if rest == 0 else f"{hours}h {rest} min"
 
 
 class CariadBaseClient:
@@ -256,6 +307,14 @@ class CariadBaseClient:
         # refreshes here, so a command failure can never knock the reads (and
         # thus the whole integration) offline. Reads keep ``_refresh_history``.
         self._cmd_refresh_history: list[float] = []
+        # #1866 (@georghaberkorn68-ctrl) — whether the budget below has already
+        # reported itself as spent, per plane. The refusal used to log at ERROR
+        # on EVERY attempt: his CUPRA logged it three times per poll cycle for
+        # hours on 17 and 18 October, which reads as a runaway loop rather than
+        # as a limit doing its job. The first refusal is news; the hundredth is
+        # the same news. Cleared whenever an attempt is actually booked, so a
+        # later episode reports itself again.
+        self._refresh_budget_reported: dict[bool, bool] = {False: False, True: False}
         # v2.9.0 - VW account-lock detection sliding window. Tuples of
         # (monotonic_seconds, http_status). Coordinator drains via
         # ``self.account_lock_signal`` to decide whether to raise the
@@ -442,6 +501,12 @@ class CariadBaseClient:
             strategies = [("idk", {"hybrid_full": False})]
 
         last_err: Exception | None = None
+        # #1712 — an earlier IDK strategy that hit the EU attestation wall.
+        # The strategies after it still run (the portal is the read path these
+        # owners rely on), but if they fail too, a GENERIC failure from them
+        # must not be what the user sees: it maps to "invalid credentials", and
+        # the attestation answer is the proof that the password is fine.
+        attestation_err: EuropeAttestationError | None = None
         for idx, (kind, opts) in enumerate(strategies):
             try:
                 if kind == "idk":
@@ -500,7 +565,13 @@ class CariadBaseClient:
                 return
             except AuthenticationError as err:
                 last_err = err
+                if isinstance(err, EuropeAttestationError):
+                    attestation_err = err
                 if idx == len(strategies) - 1:
+                    # Specific subclasses (terms, consent, portal stop, …) name
+                    # an action the user can take and keep precedence.
+                    if attestation_err is not None and type(err) is AuthenticationError:
+                        raise attestation_err from err
                     raise
                 _LOGGER.info(
                     "Auth strategy #%d (kind=%s opts=%s) failed for %s: %s — "
@@ -523,6 +594,24 @@ class CariadBaseClient:
                     idx, kind, opts, type(err).__name__, self._brand.name,
                 )
                 if idx == len(strategies) - 1:
+                    if attestation_err is not None:
+                        raise attestation_err from err
+                    # #1855 — but NOT for our own error classes. The redaction
+                    # above exists because a foreign exception's __str__ can
+                    # carry a callback URL or a token; it was never a reason to
+                    # throw the CLASS away as well, and doing so told the user
+                    # their password was wrong whenever VW's backend was 5xx-ing
+                    # or had rate-limited the account.
+                    #
+                    # It is not only the wording: an AuthenticationError on the
+                    # poll path becomes "invalid_credentials" and starts a
+                    # reauth flow, so a server outage asked people to re-enter
+                    # working credentials. The coordinator already classifies
+                    # UpstreamUnavailableError as a self-healing poll error, and
+                    # the config flow already has distinct translated messages
+                    # for both — all of that was simply unreachable from here.
+                    if isinstance(err, _SELF_DESCRIBING_ERRORS):
+                        raise
                     raise AuthenticationError(
                         f"Auth failed with {type(err).__name__} "
                         f"(no usable strategy left)"
@@ -1450,13 +1539,47 @@ class CariadBaseClient:
             return 0
         return int(remaining)
 
+    @staticmethod
+    def _retry_after_seconds(headers: Any) -> int | None:  # noqa: D401
+        """``Retry-After`` from THIS response, in seconds, or None.
+
+        A staticmethod on purpose: it is handed the headers and has no instance
+        to consult, so it cannot decide from remembered state even by accident.
+
+        That is not a stylistic choice. The official Škoda channel keeps a
+        ``retry_after_s`` attribute and had to learn the hard way that reading
+        it here is wrong — it is set on a 429 and never cleared, so any later
+        4xx inherited the old window and parked a healthy read channel. This
+        class holds no such attribute, and the signature is what keeps it that
+        way.
+
+        Only the delta-seconds form is honoured. RFC 9110 also allows an
+        HTTP-date, and a half-parsed date is worse than no value: an unparsed
+        header simply leaves the existing backoff in charge.
+        """
+        raw = headers.get("Retry-After") if headers is not None else None
+        if raw is None:
+            return None
+        text = str(raw).strip()
+        if not text.isdigit():
+            return None
+        return int(text)
+
     def _enter_rate_lockout(self, seconds: int, status: int) -> None:
-        """Pause all requests on this client for ``seconds`` (B4)."""
+        """Pause all requests on this client for ``seconds`` (B4).
+
+        The duration is formatted rather than divided. ``seconds // 60`` read
+        "0 min" for every hold under a minute, which since #1850 is a whole
+        band of real holds — a short server-supplied ``Retry-After`` lands
+        there — and the sentence went on to say "to avoid a multi-hour account
+        lock", so the one line a reporter pastes claimed both no wait and a
+        multi-hour threat.
+        """
         self._rate_limit_locked_until = time.monotonic() + seconds
         _LOGGER.warning(
             "Account rate-limit lockout (HTTP %d) on %s — pausing all requests"
-            " for %d min to avoid a multi-hour account lock",
-            status, self._brand.name, seconds // 60,
+            " for %s",
+            status, self._brand.name, _format_duration(seconds),
         )
 
     async def _request(
@@ -1468,7 +1591,12 @@ class CariadBaseClient:
 
         - HTTP 401 → token refresh + 1 retry. Refresh itself is throttled
           to ``_REFRESH_MAX_PER_HOUR`` per rolling hour (storm protection).
-        - HTTP 429 → exponential backoff up to 3 attempts (5s/10s/20s).
+        - HTTP 429 with ``Retry-After`` → NO retry; the client holds for the
+          stated time (clamped to ``_RETRY_AFTER_MIN_S``..``_LOCKOUT_430_S``).
+          Spending retries against an explicit instruction is how a 429
+          becomes a 430 (#1850).
+        - HTTP 429 without it → exponential backoff up to 3 attempts
+          (5s/10s/20s), then the account lockout.
         - HTTP 500/502/503/504 → exponential backoff up to 3 attempts
           (3s/6s/12s). 504 added in v1.8.7 — Gateway Timeouts from the
           CARIAD BFF are routine on weekends and were previously surfaced
@@ -1530,14 +1658,57 @@ class CariadBaseClient:
                 if resp.status == 401 and retry:
                     await self._refresh_tokens(stale_access_token=token_used)
                     return await self._request(method, url, retry=False, **kwargs)
-                if resp.status == 429 and _attempt < 3:
-                    wait = (2 ** _attempt) * 5
-                    _LOGGER.debug("Rate limited (429) — retrying in %ds", wait)
-                    await asyncio.sleep(wait)
-                    return await self._request(method, url, retry=retry, _attempt=_attempt + 1, **kwargs)
+                if resp.status in (429, 430):
+                    # #1850 — these two are the responses whose headers are ABOUT
+                    # the rate limit, so this is exactly when the quota is worth
+                    # recording. The 2xx-only rule below exists because an
+                    # arbitrary 4xx may omit or staleify them; a 429 reporting
+                    # ``remaining: 0`` is neither omitted nor stale, and a
+                    # reporter attaching diagnostics after a lockout could not
+                    # previously show us their budget at all.
+                    self._capture_rate_limit_headers(resp.headers)
                 if resp.status == 429:
-                    # retries exhausted — back off the whole account (B4)
-                    self._enter_rate_lockout(_LOCKOUT_429_S, 429)
+                    # #1850 — when the backend says HOW LONG, stop asking.
+                    #
+                    # @indigomejor measured an account lockout and then a hard
+                    # 430 at a LOWER request rate with no second client. Part of
+                    # the reason is here: a 429 was retried three times at
+                    # 5/10/20 s before the account lockout engaged, so a
+                    # throttled call spent three more requests at the precise
+                    # moment the backend had said "too many" — and
+                    # ``Retry-After`` was never read on this shared path, so the
+                    # wait that followed was our 30 minutes rather than the
+                    # server's number, in either direction.
+                    #
+                    # With the header present there is nothing to probe for: the
+                    # answer is in hand, so the retries are skipped entirely and
+                    # the client holds for what was asked. Clamped at both ends
+                    # so neither a 1-second nor a day-long value is taken
+                    # literally.
+                    _retry_after = self._retry_after_seconds(resp.headers)
+                    if _retry_after is not None:
+                        _hold = max(
+                            _RETRY_AFTER_MIN_S, min(_retry_after, _LOCKOUT_429_S)
+                        )
+                        _LOGGER.debug(
+                            "Rate limited (429) with Retry-After %ds — honouring"
+                            " it instead of retrying (holding %ds)",
+                            _retry_after, _hold,
+                        )
+                        self._enter_rate_lockout(_hold, 429)
+                    elif _attempt < 3:
+                        # No instruction from the server: unchanged behaviour,
+                        # because a bare 429 can still be a momentary burst and
+                        # giving up on it would lose reads that work today.
+                        wait = (2 ** _attempt) * 5
+                        _LOGGER.debug("Rate limited (429) — retrying in %ds", wait)
+                        await asyncio.sleep(wait)
+                        return await self._request(
+                            method, url, retry=retry, _attempt=_attempt + 1, **kwargs
+                        )
+                    else:
+                        # retries exhausted — back off the whole account (B4)
+                        self._enter_rate_lockout(_LOCKOUT_429_S, 429)
                 if resp.status == 430:
                     # explicit hard lockout signal — long account-scoped hold (B4)
                     self._enter_rate_lockout(_LOCKOUT_430_S, 430)
@@ -1625,23 +1796,59 @@ class CariadBaseClient:
             )
             history[:] = [t for t in history if t > cutoff]
             if len(history) >= _REFRESH_MAX_PER_HOUR:
-                _LOGGER.error(
-                    "Token refresh storm: %d attempts in last %ds for %s (%s) —"
-                    " pausing to prevent IP ban; please reauthenticate from the UI",
-                    len(history),
-                    _REFRESH_WINDOW_S,
-                    self._brand.name,
-                    "command" if for_command else "data",
+                # #1866 — the message used to say "pausing to prevent IP ban",
+                # and nothing pauses. This refuses ONE attempt; the budget is a
+                # rolling window, so the next slot frees when the oldest booked
+                # attempt ages out of it. Saying "pausing" while refusing, once
+                # every poll, described an action the code does not take — and
+                # a reader who checks the claim and finds it false stops
+                # believing the next message too.
+                # Rounded UP: this is a "wait at least" figure, and
+                # flooring it would advertise a slot that is not free yet.
+                _frees_s = max(0.0, history[0] + _REFRESH_WINDOW_S - now)
+                _frees_in = max(1, -(-int(_frees_s) // 60))
+                _plane = "command" if for_command else "data"
+                _args = (
+                    len(history), _REFRESH_WINDOW_S, self._brand.name, _plane,
+                    _frees_in,
                 )
+                # ERROR once per episode, DEBUG while it stays spent. The limit
+                # is doing its job on every one of those calls; only the first
+                # is information.
+                if not self._refresh_budget_reported.get(for_command, False):
+                    self._refresh_budget_reported[for_command] = True
+                    _LOGGER.error(
+                        "Token refresh budget spent: %d attempts in the last "
+                        "%ds for %s (%s) — refusing further refreshes to avoid "
+                        "an account lock; the next one is allowed in about "
+                        "%d min. If the sign-in itself is being refused (see "
+                        "the errors above this line), re-entering credentials "
+                        "will not change that.",
+                        *_args,
+                    )
+                else:
+                    _LOGGER.debug(
+                        "Token refresh budget still spent: %d in %ds for %s "
+                        "(%s); next slot in about %d min",
+                        *_args,
+                    )
                 # #1078 — flag the DATA-plane storm so the coordinator can raise
                 # a "raise your update interval" Repair. Commands have their own
                 # bounded budget and a separate remedy, so don't flag those.
                 if not for_command:
                     self.refresh_storm_detected = True
+                # The word "storm" stays: it is the condition, and the
+                # reporter asked for it to stay. What is gone is the claim
+                # that re-entering credentials is the remedy.
                 raise AuthenticationError(
-                    "Token refresh storm — please reauthenticate"
+                    "Token refresh storm — refusing further refreshes until "
+                    "the budget frees; see the log for what is refusing the "
+                    "sign-in"
                 )
             history.append(now)
+            # An attempt was booked, so the budget is not spent; the next
+            # refusal is a new episode and says so at ERROR again.
+            self._refresh_budget_reported[for_command] = False
 
             # v2.15.0 — durable MBB bearer refresh. The MBB OAuth backend
             # (mbboauth-1d) refreshes via grant_type=refresh_token with the

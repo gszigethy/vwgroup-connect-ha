@@ -47,6 +47,611 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 ## [Unreleased]
 
 
+## [5.1.0] - 2026-10-20 — Saying what actually happened / Sagen, was wirklich passiert ist
+
+### Hinzugefügt / Added
+
+- **Six more readings from the EU Data Act feed: climate humidity and power
+  draw, two battery states, the battery's own warning field, and the outside
+  temperature sensor's health.** @Massen88's ID.4 Pro reported all six, and the
+  report is what made them usable rather than merely visible: the official
+  dictionary this integration ships already lists all six, but with **no unit
+  and no type** — the car supplied the units VW left out (`Unit_PerCent`,
+  `Unit_Watt`). Two of the new readings are real measurements, the humidity at
+  the climate sensor and what heating and cooling are drawing in watts, which on
+  an electric car is range you can watch. The other four are states, and all six
+  arrive as diagnostics, switched off by default, on the portal cars whose feed
+  carries them.
+
+  Two were traps worth describing, because both are documented by VW's own
+  catalogue and neither is obvious from the name. The battery's
+  "charging active" signal **latches**: it stays active after the ignition goes
+  on until the standstill flag clears, so it reads active while the car is
+  merely switched on. It is therefore published as a raw signal and deliberately
+  never becomes the charging state your automations use — that still comes from
+  the brand channels. And the leaf whose name reads like an outside temperature
+  is the outside temperature sensor's *fault status*; it is published as a
+  status, and it is genuinely useful, because it says whether the outside
+  temperature this integration already shows you can be trusted.
+
+  The humidity reading is named after its source rather than a place: the
+  catalogue says only "measured relative humidity", and while the signal's
+  prefix and its sensor module both point at a cabin sensor, nothing available
+  here proves cabin against intake air. It is kept separate from the existing
+  outside-humidity reading, which comes off a different channel entirely, so a
+  car reporting both will settle it ([#1863](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1863)).
+
+- **Volkswagen Companion (ADB): VW app 4.8.1 support.** The Companion's reads
+  and controls work again on VW app 4.8.1; departure time and Repeat edits need
+  a direct ADB connection, and weekday changes stay in the app. Developed and
+  checked on a Tiguan eHybrid in
+  [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha)
+  (gszigethy/vwgroup-connect-ha#112, gszigethy/vwgroup-connect-ha#113,
+  gszigethy/vwgroup-connect-ha#115): each read was compared with the app, and
+  each control was sent once to the car through this code, read back and put
+  back. Thanks @gszigethy.
+  - **Commands on 4.8.1:** charging start/stop, the charge target, climate
+    start/stop, the temperature dial, window heating alone, climate at unlock,
+    automatic window heating, the climate zones, *Synchronise now*, and the
+    departure timers (on/off, time and Repeat). 4.8.1 is listed per command
+    after its own live test, not in the preset's read list, so app builds
+    between 4.6.4 and 4.8.1, which nobody has checked, keep their reads and
+    stay without commands.
+  - **Departure timer editor on 4.8.1.** The app rebuilt the timer page; its
+    time picker is hidden from `uiautomator` and its day buttons show no
+    state. A 6 kB helper (`companion/a11y/`, Java source and build steps
+    included, SHA-256 pinned) is pushed over ADB for the edit and removed
+    afterwards. It reads the hidden wheels and sets them with their own
+    accessibility action, so the time is checked before Save. A change of
+    weekdays cannot be checked before Save on this page, so it is refused
+    there (change the days in the app). The ADB Bridge add-on and the agent
+    relay cannot run the helper and refuse the edit before changing anything
+    on the page.
+  - **Last long-haul trip:** five new Companion-only sensors (distance,
+    duration, average speed, fuel and electric consumption) from the Driving
+    data card 4.8.1 added. They appear only on Companion entries once the card
+    was read, and are not mapped to any cloud or EU Data Act field.
+
+### Geändert / Changed
+
+- **The volkswagen.de HTTP/2 channel now uses Home Assistant's own SSL context
+  instead of a private one.** When that channel was built, handing httpx a
+  shared context was genuinely dangerous: httpx sets the ALPN protocols on
+  whatever context it is given, so a context shared with the rest of Home
+  Assistant made every *other* integration's connections try HTTP/2 and die
+  with a garbled status line. @eurojojo hit exactly that, and it surfaced as a
+  bogus "invalid credentials" on an unrelated login — the worst possible
+  symptom, because it sends people hunting for a password problem they do not
+  have ([#1679](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1679)). This integration therefore built its own
+  context, in a background thread, because loading the certificate bundle
+  blocks. Home Assistant 2026.2 fixed the problem at its root: it keeps a
+  separate context per protocol set, so the HTTP/2 one it hands out is a
+  different object from the HTTP/1.1 one everything else uses, and it builds
+  them all up front. Asking for that one removes the private context, the
+  background thread and the lock around it, and puts this channel on the
+  sanctioned route. Nothing changes for cars. Which context gets handed over
+  is now pinned by a test that checks the object itself, rather than one that
+  checked how it was built.
+
+- **The read-only volkswagen.de channel can now be added to a Volkswagen
+  Commercial Vehicles entry.** @benbrummer could not add it to a T6.1, and when
+  I went looking for the reason I expected to find one. The whole restriction
+  was a single equality check at the top of the sign-in step, comparing the
+  entry's brand against one exact string. Nothing downstream of it is
+  brand-specific: the connector identifies itself to the site as `volkswagen`
+  either way, because that names *volkswagen.de* rather than our brand list.
+  And the two brands are already treated as one thing where it matters most —
+  Commercial Vehicles uses the same We Connect app, and its EU Data Act
+  configuration is the Volkswagen one with a different state name. His own
+  report said the same from the outside: identical entity count and identical
+  values whether the van is set up as Volkswagen EU or as Commercial Vehicles.
+
+  What is still not established is whether volkswagen.de serves a Commercial
+  VIN once the sign-in is allowed to start. That is a question about VW's site,
+  and the gate was the thing preventing anyone from asking it; the channel is
+  read-only, so the cost of being wrong is a failed sign-in the owner sees at
+  once rather than anything silent. If Commercial VINs turn out not to be
+  served, the gate comes back — this time with a reason attached to it. Every
+  other brand is still refused, the abort text is unchanged so its twelve
+  translations stay accurate, and a test checks that the commercial client
+  really does inherit the arming method, because a widened gate that handed
+  someone a channel which is stored, shown as configured and never armed would
+  be a worse outcome than the refusal it replaces
+  ([#1801](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1801)).
+
+### Behoben / Fixed
+
+- **When the manufacturer says "too many requests, wait N seconds", the
+  integration now waits instead of asking three more times.** A throttled
+  request was retried after 5, 10 and 20 seconds before the account-level pause
+  engaged — three further requests at the exact moment the backend had said to
+  stop — and the `Retry-After` header it sends with that refusal was not read on
+  this path at all, so the pause that followed was a flat 30 minutes rather than
+  the time actually asked for, which can be wrong in either direction. With the
+  header present there is nothing left to find out by asking again: the retries
+  are skipped and the client holds for what was requested, with a floor so a
+  one-second value cannot become a loop and a ceiling at the half hour this
+  kind of refusal already held for, so no header can stall things for longer
+  than they could be stalled before. A backend asking for more than that is
+  not waited out in full on purpose: resuming after half an hour now sends one
+  request rather than four, and if that one is refused the refusal is honoured
+  in turn. A refusal that carries no
+  such instruction behaves exactly as before, because that one can still be a
+  momentary burst.
+
+  Two smaller things in the same place. The remaining-request-budget headers
+  were being discarded on precisely the two responses that are *about* the
+  budget, so someone sending diagnostics after a lockout could not show us
+  their quota; they are now kept. And the pause is logged with the number that
+  produced it.
+
+  @indigomejor found this in his own lockout log and said what was wrong with
+  it, after the first half of this issue was already fixed: the lockout came
+  back at a *lower* request rate with no second client on the account, which
+  ruled out the explanation everyone including me was leaning on and pointed
+  here instead ([#1850](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1850)).
+
+- **A portal feed that has stopped no longer overrides your polling interval.**
+  For a car with the EU Data Act portal armed, the integration aligns its next
+  poll to the portal's own delivery cadence — a snapshot a minute late is worth
+  catching a minute later rather than a whole interval later. That retry had no
+  limit, so on a feed that had stopped delivering it fired on every poll: the
+  expected drop stayed permanently overdue and the cadence stuck at the
+  three-minute lower bound for as long as the outage lasted, whatever interval
+  you had configured. The retry now gets a budget of three polls, after which
+  your configured interval applies again, and the first snapshot that actually
+  lands restores the alignment. @indigomejor measured this on an Octavia:
+  ten minutes configured, a flat 3.4-minute cadence across three days, roughly
+  seventeen polls an hour, ending in a rate-limit lockout — and raising the
+  interval could not help, because the interval was only ever the upper bound
+  ([#1850](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1850)).
+
+- **The volkswagen.de sign-in works again on accounts that get an e-mail
+  code.** The advertising opt-in VW put in front of the login was already being
+  declined, but only on the two paths that reach it before the code is
+  entered. On an account that uses a code, that is never the case: the sign-in
+  stops at the challenge page to collect the code, and the opt-in appears only
+  after it is submitted — so for exactly the people reporting this, the fix in
+  5.0.0 could not run. Entering a correct code ended with "login did not
+  complete" and asking for a new one could not help, because the next one
+  landed on the same page. The code step now declines the opt-in as the other
+  two do, and it does so before judging the landing, which also covers the
+  opt-in being served with an error status. @nuggie found the cause on 5.0.0
+  and posted the log line that proves it — a sign-in chain ending at
+  `consent.vwgroup.io` after the code POST, which only exists to be read
+  because the same report round added logging to that step. @Fishermanjb
+  reported it first and supplied the original logs, and @Ra72xx hit it
+  independently on a second account and confirmed the workaround of declining
+  the opt-in once in a browser
+  ([#1827](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1827)).
+
+- **Setup no longer fails on Home Assistant versions before 2026.6.** Every
+  release since 4.13.0 stopped during setup with `setup failed: ImportError
+  (message redacted)` and then looped on "No vehicles found for this account",
+  because the repair-notice module imported a name — `RepairsFlowResult` —
+  that Home Assistant only began exporting in 2026.6. That name is used
+  nowhere except in type annotations, so it is no longer imported while the
+  integration runs. Two things made this far harder to diagnose than it needed
+  to be, and both are fixed as well: `hacs.json` still advertised `2024.4.0`,
+  so HACS offered the update to precisely the installations it would break (it
+  now declares `2026.6.0`), and the setup error withheld everything but the
+  exception class, so "ImportError" was the entire diagnosis. It now also names
+  the module and the symbol that could not be imported. Those are plain names;
+  the exception message and the module's file path stay withheld, because the
+  message can carry an access token and the path carries the account name of
+  whoever runs Home Assistant. @thomascombe diagnosed the whole chain on a
+  Golf 8 GTE — down to the file, the line and the version boundary, having
+  first added that missing log line locally himself — and confirmed the same
+  release sets up after upgrading the core ([#1858](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1858)).
+
+
+- **A Škoda account no longer gets rate-limited by this integration's own
+  retrying.** @indigomejor measured an account-level lockout and handed over
+  what it took to find the cause: roughly 176 requests an hour, an HTTP 429 and
+  then a hard refusal that pauses the integration for two hours. The official
+  Škoda channel kept calling after it had started failing, because the guard in
+  front of it only reacted to an explicit rate-limit answer — a 5xx was
+  invisible to it, so a channel that was down was asked again every cycle. It
+  now stands back for 5, then 15, then 30 minutes per channel after repeated
+  failures, and resets as soon as a call succeeds. The reactive rate-limit
+  guard still runs first, so nothing that worked before changes. He also ruled
+  out the duplicate GitHub suggested, on version, cause, remedy and repair
+  state, before filing ([#1850](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1850)).
+- **Porsche remote commands no longer report "API error 201" while working.**
+  Every lock, unlock, climate and charging call surfaced an error in Home
+  Assistant although the car carried the command out. Porsche answers
+  "201 Created" for an accepted command, and this was the one brand client that
+  did not count 201 as success. The error message was the smaller half: the
+  failure happened before the response body was read, and that body is where
+  the command's own id and its "accepted" verdict live — which this integration
+  uses to check afterwards whether the car really did take the command. So a
+  command Porsche went on to reject looked exactly like one it performed.
+  @tp9csmv79n-code found the cause and verified the fix before filing
+  ([#1853](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1853)).
+- **The "EU Data Act portal session expired" repair no longer opens after every restart.**
+  The session had not expired. Since each entry got its own portal cookie jar (#1793), the
+  startup check for the continuous data request, and the one-time export, still went out on
+  Home Assistant's shared session. After a restart that session has no portal cookies, so
+  the portal answered 401 and the repair asked you to sign in again, only for it to come
+  back on the next restart. Both now use the entry's own portal session for cookie
+  logins, including supplementary portals. Bearer-only device-grant entries skip the
+  cookie-only kickoff and must create requests in the portal UI; manual request and
+  export actions explain this requirement. An entry unloading during a data-request
+  check or export no longer attempts a closed session or saves a retry timestamp
+  that would delay provisioning after reload. Thanks @gszigethy.
+
+- **The "Unknown user" notice now only says that when the login actually answered it.**
+  `17eab6f9` (#1809) stopped the repair notice and the setup abort from calling a backend
+  refusal "an MEB / ID-family car" — an Audi e-tron 55 quattro, a GE-platform car from 2019,
+  had been told it was an ID.3/ID.4/Enyaq/Born/Q4. What replaced that claim was narrower and
+  checkable: "the durable Car-Net login answered Unknown user for this car". The rule deciding
+  when to say that was left exactly as it was, and on that rule the sentence reaches people
+  whose login never answered it. A bare `invalid_grant` — the generic OAuth2 rejection, also
+  produced by an audience mismatch (#464) and by a refused register — was read as the same
+  verdict, and the entry's *other* write site flagged it on ANY mint failure at all, a 5xx or a
+  timeout included. The one field that would have told the two apart, `error_description`,
+  carries the actual "Unknown user" text, but the #1355 redaction dropped it before the setup
+  flow ever saw it, so even a true claim could not have been substantiated. Measured live
+  against an Audi e-tron 50 quattro, MY2022 — MLB-evo, not MEB: `HTTP 400`, `error=invalid_grant`,
+  `error_description="Unknown user <account-uuid>"`. The description is now carried on the
+  exception as an attribute (never in its message — it embeds an account UUID), and a new
+  classifier decides on it: only a confirmed "Unknown user" keeps the Car-Net wording, and
+  everything else — a 5xx, a timeout, an audience mismatch, an `unauthorized_client` — gets its
+  own notice that says the cause is undetermined rather than guessing one. Ten of the twelve shipped languages still carried the pre-`17eab6f9` "this is an
+  ID/MEB model" wording in this same notice and in the setup abort — `en` and `de` were fixed,
+  the other ten were not caught by the translation-parity test because the keys still existed,
+  just with the old text — so this PR carries the correction and the new notice to all of
+  them. Setting up the EU Data Act portal with MBB commands no longer loses the portal when the
+  command channel fails for any other reason: every mint failure now keeps the read-only
+  portal entry with the reason recorded, a refusal already at register is classified like one
+  at the token exchange, a Reconfigure no longer carries an earlier verdict into the next
+  attempt, and the previous notice is taken down when the reason changes. Measured on, and the
+  fix contributed by, @woifh's own Audi e-tron.
+
+- **A sign-in Volkswagen has walled off no longer costs up to eight rejected attempts and a
+  wrong explanation.** On VW EU and Audi the primary login reaches the very last step — right page,
+  right POST, `authenticated`, authorization code in hand — and then the exchange of that code
+  for a token is refused with `400 invalid assertion headers`. Nothing about the account is
+  wrong, but the integration treated it as one more rejection to retry: it walked the whole
+  `client_id × qmauth` candidate chain — **eight rejected sign-ins per login on VW EU** (four
+  client ids × two qmauth secrets; the log in #1712 shows attempts #0–#6 moving on, then the
+  last one failing) **and six on Audi** (three × two), and a refresh that fails falls back to a
+  login — and ended on "all candidates exhausted" — a message that reads
+  like a credentials problem, which is what sent people re-entering a password that was already
+  correct. It now stops once every qmauth secret has drawn that answer (two attempts on either
+  brand;
+  one refused secret alone does not stop it, because the chain keeps the prior pair for VW
+  re-rotations), and only for Audi and VW, the brands that sign those headers. This is the same
+  wall as #1165 on VW North America, which has failed fast with its own honest error since
+  July; the European side simply had no equivalent, so it now gets one — in the config flow,
+  and also at setup and on re-login, where the read-only portal fallback used to hide it: if
+  the portal fails too, the entry now stops with this reason and its own repair notice instead
+  of "invalid credentials". (It already stopped there before rather than retrying, because
+  "invalid credentials" is a hard setup reason too; what changes is what it tells you.) Why
+  retrying cannot help was settled against the shipping app rather than assumed: myAudi 5.8.1 carries no
+  `qmauth` symbol in any of its six DEX files or its native libraries, nor the HMAC secret the
+  integration signs `x-qmauth` with, while it does carry the Play Integrity client
+  (`StandardIntegrityManager`, `requestIntegrityToken`) and still sends `x-assertion`. The app
+  has moved from the HMAC scheme to a Google-signed attestation bound to VW's package and
+  signing certificate, which no open-source client can mint — so there is no candidate left for
+  the chain to find. That also answers the question #1712 left open, and not in the hoped-for
+  direction: the credentials have not merely rotated. What changes for you is honesty and cost,
+  not access — the primary login stays blocked, vehicle data keeps flowing through the
+  read-only EU Data Act portal where that works for your car, and where it does not, the
+  integration now says so in every shipped language instead of blaming your password. Measured on an Audi e-tron 50 quattro, MY2022, and
+  contributed by @woifh (#1712).
+
+- **Signing in again with an e-mail address and a password now discards the
+  expired sign-in it replaces.** On an entry first set up with the brand app's
+  code sign-in, the old token was kept in two places and neither was replaced,
+  so the reload spent a refresh attempt on a sign-in the manufacturer has
+  retired before it got round to using the new password — and that wasted
+  attempt counted towards the pause that protects the account from being
+  rate-limited. The leftover was also still listed in the diagnostics
+  afterwards, where it looked exactly like the cause of the failure that
+  followed; @ratclma spotted it there and asked the right question about it.
+  Entries that do have a password keep their stored tokens, because for Audi,
+  Škoda, SEAT and CUPRA the same kind of token is the normal durable channel
+  ([#1813](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1813)).
+
+- **A "portal session expired" notice no longer survives the sign-in that fixed
+  it.** The notice asks you to sign in again, and data arriving through the
+  portal afterwards is the proof that you did — but clearing it also required a
+  flag that only existed on the object which had raised it, and reloading the
+  entry replaces that object while the notice itself persists. So anyone who
+  reloaded, or whose entry was reloaded for them, kept being told their session
+  had expired while their car was updating normally. The clear now rests on the
+  evidence alone. Found by @Anoxym, who read the code and sent the sequence
+  rather than the symptom ([#1867](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1867)).
+
+- **A SEAT or CUPRA entry reading through the portal stops being nagged about an
+  access path it no longer uses.** The notice about outdated app headers is
+  cleared for a portal-served entry, and has been since 4.7.x — but only from
+  inside the polling loop, so an entry whose poll does not complete kept the
+  notice for as long as the entry existed. @georghaberkorn68-ctrl reported one
+  standing at 535 since August, next to a car whose data was arriving fine. It
+  is now also cleared when the entry starts up. An entry that is *not* reading
+  through the portal keeps its notice, including across a restart: a real
+  access problem should not blink out and come back
+  ([#1866](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1866)).
+
+- **When the SEAT/CUPRA user lookup fails, the log now says what happened.** It
+  used to print one sentence with nothing in it, so a refused request, a
+  forbidden one, a timeout and a malformed answer were indistinguishable — and
+  @georghaberkorn68-ctrl spent a twelve-minute debug capture on a question that
+  no log this code could produce was able to answer. The exception and, where
+  there is one, the HTTP status are now named. Deliberately nothing else: that
+  error object also holds the request address and the response body, which are
+  the two things this line must never grow
+  ([#1866](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1866)).
+
+- **Diagnostics now name the portal field a value came from, not only the
+  channel.** @Joassens reported a Passat GTE whose fuel level sat at exactly
+  100 % across 467 km of driving while the tank went to half, killed his own
+  "stale because I hadn't burned any fuel" theory with the odometer, and ended
+  with the sentence this change exists for: *"I can't tell which from
+  diagnostics, since they don't include the raw portal field."*
+
+  He was right, and nothing in the file could have told him. The portal parser
+  reads most fields from a list of candidate leaf names, first present wins —
+  the fuel level alone has five. `field_sources` recorded which *channel* won
+  and `field_captured_ts` when the car measured it; neither recorded which
+  *leaf* won. Elimination could not recover it either, because `first()` marks
+  every candidate of a call as consumed along with their walker synonyms, so all
+  five vanish from the unmapped-field list together. And the function that
+  stashes the provenance was already being handed the chosen leaf — it used it
+  to look up a timestamp and then discarded the name.
+
+  It is kept now, as `field_source_leaf`, following the same path as its two
+  siblings: never gap-filled field by field, rebuilt in the channel merge from
+  whichever channel owns the surviving value, and carried with the value through
+  a historical import. That last part is the one with teeth — a leaf name that
+  outlived the value it described would blame a portal field for a reading that
+  came from somewhere else, which is worse than recording nothing, so a test
+  measures a merge where one field keeps its leaf and another loses it in the
+  same pass. The fuel level, having now been disputed by two reporters, was also
+  added to the handful of fields that record their provenance at all
+  ([#465](https://github.com/its-me-prash/vwgroup-connect-ha/issues/465)).
+- **A refused command now explains itself in the log, not only in the Home
+  Assistant dialog.** @Joassens tested the MBB client-identity refusal on a
+  Passat GTE and confirmed the message reads correctly in the UI — the car's
+  gateway accepted the S-PIN and then refused this integration's client
+  identity, none of it the owner's fault. Then he looked at the log file for the
+  same event and found one line: `command_start_climate(***074295) failed:
+  VehicleCommandError (status=None)`. The whole explanation lived only in the
+  error the UI surfaced, so anyone working from a log — which, when a command
+  fails, is usually the person who was asked to send one — got a class name and
+  a null status.
+
+  The reason a command error carries is now part of that error line. It applies
+  to `VehicleCommandError` alone, because every reason that class carries is
+  prose written for the owner and already shown to them; for every other
+  exception the line still logs the class and HTTP status only. That restriction
+  was already there and stays, but its stated justification was out of date: it
+  said a raw exception string can carry the VIN-bearing command URL, and
+  `APIError` has masked the VIN out of its own message since the #1355 redaction
+  work. What the restriction actually protects against is the arbitrary
+  exceptions that land in the same handler — a network or ADB library error
+  whose text nobody here has vetted. Both halves of that are now pinned by
+  tests, including one that fails if `APIError` ever stops redacting, so the
+  comment above the log line cannot quietly become wrong again
+  ([#584](https://github.com/its-me-prash/vwgroup-connect-ha/issues/584)).
+- **A Companion screen that could not be read is no longer reported as a screen
+  with nothing on it, and one failed read no longer costs half an hour of
+  them.** Two defects of the same shape, found by reading the three Companion
+  transports against each other.
+
+  The direct-ADB transport has refused a screen dump with no node tree in it
+  since v2.26.0, because a failed `uiautomator` run leaves its output file
+  untouched and the previous screen would otherwise be parsed as the live one.
+  The phone-agent relay overrode that method and returned whatever the agent
+  sent, so an agent that walked the accessibility tree and found no window —
+  display off, a secure screen, the car app not in front — reported success with
+  nothing in it. Zero nodes is what the read path treats as a car that had
+  nothing to say: the overview anchor check is skipped, the adaptive failure
+  backoff is reset, and the poll is recorded as healthy. The one outcome that
+  most needed to be visible was the only one that left no trace anywhere. The
+  relay now applies the same guard as its sibling.
+
+  And on the ADB side a single empty dump bought the full failure backoff — 30
+  minutes, doubling per consecutive failure to six hours — with no second
+  attempt. But `uiautomator dump` gives up when the screen does not go idle,
+  and an animation or a passing toast is enough to cause that; it is gone a
+  second later. The dump is now retried once, after a short settle, before it
+  becomes a failure, and the error says it tried twice. Three deliberate limits:
+  the retry re-runs the whole command rather than only re-reading the dump file,
+  so the stale-screen protection stays intact; a transport error is **not**
+  retried, because the connection has already been dropped for the next read to
+  rebuild and a second attempt could only report "not connected" over the real
+  reason; and the healthy path still costs exactly one round trip. On the relay
+  there is no retry, because another attempt there means another trip through
+  the agent's own poll and the usual cause of an empty tree does not change in
+  that time.
+- **The token refresh limit no longer announces a pause it never takes, and no
+  longer reports itself at error level once every poll.** The limit itself is
+  unchanged and correct: three refreshes per rolling hour, which is what keeps a
+  misbehaving entry from hammering the sign-in until the account is locked. What
+  was wrong was everything it said about itself. The message read *"pausing to
+  prevent IP ban; please reauthenticate from the UI"*, and nothing paused — the
+  call refuses one attempt and returns, so the next poll asks again and is
+  refused again. @georghaberkorn68-ctrl's CUPRA logged that sentence three times
+  per cycle, every three minutes, for hours across two days, which reads as a
+  runaway loop rather than as a limit doing its job. And the one instruction it
+  gave could not help him: his primary sign-in was being refused outright before
+  the portal fallback took over, so no credential he could type would change the
+  answer.
+
+  The refusal now says what it does — that it is refusing further refreshes, and
+  roughly when the next one is allowed, computed from the oldest attempt still
+  inside the window rather than from a constant. It is logged at error level
+  once per episode and at debug level while the budget stays spent, and the
+  "episode" resets as soon as an attempt is actually booked, so a genuinely new
+  storm weeks later is reported as news again. Where credentials are mentioned
+  at all, it is to say that re-entering them will not help when the sign-in
+  itself is what is being refused, and the errors that say *why* it is refused
+  sit directly above the line. The same guard exists a second time in the
+  Porsche client, which is not a subclass and had its own copy of both the
+  wording and the level; both are fixed, and a test fails if a third copy of the
+  old sentence ever ships
+  ([#1866](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1866)).
+- **Volkswagen Companion (ADB) reads on VW app 4.8.1.** The parking position
+  read taps the button around the app's *Vehicle location* label (4.8.1 made
+  the label itself not clickable) and never the map. The Driving data
+  carousel is read whatever card it opens on; the first read sweeps both ends
+  and remembers which cards exist, again daily. Departure timers read their
+  weekdays from the list's recurrence label and Repeat from the new editor
+  (gszigethy/vwgroup-connect-ha#112, gszigethy/vwgroup-connect-ha#113).
+
+- **Importing a historical export that no longer exists now says so, instead of
+  showing a green tick.** @placidcasual98 confirmed that after v5.0.0 the
+  import works — battery level, electric range, charging schedule and the three
+  departure timers all arrived on his car and stayed — but he got there the slow
+  way. His first attempt ran against an export that had expired off the portal,
+  and `vag_connect.import_historical_export` returned quietly, which ends the
+  service call normally and makes Home Assistant draw a success tick. Nothing
+  had been imported. He only worked out why by opening the portal himself, and
+  said what would have saved him the time: *"A message saying no file was found
+  would have saved me some time."*
+
+  The service already logged which of the failure modes it was; what it did not
+  do was fail. It now raises, exactly as the neighbouring branch already does
+  when the portal is not ready at all, and the message carries the portal's own
+  reason — `no_request` means the one-time export was never requested or has
+  since expired, `empty` or `no_content` means the portal took the request but
+  has not produced the file yet. In all twelve languages. A failed import still
+  writes nothing, pushes nothing and leaves the snapshot untouched, which is the
+  half of the old behaviour that was always right
+  ([#1403](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1403)).
+
+- **A Companion cancellation test no longer fails at random.**
+  `test_cancelling_during_the_upload_lets_it_finish_before_cleanup` waited a
+  fixed 0.05 s and then assumed the helper upload was in flight. In a full-suite
+  run on a loaded thread pool it sometimes is not: the work item is still queued,
+  cancelling drops it before it ever starts, and the test then fails for the one
+  reason that is not a defect — there was no upload to let finish, and so no
+  cleanup race either. It now waits for the upload thread to actually start
+  before cancelling, which is what the test's own name claims it does. No
+  production code changed; the behaviour it guards is unaltered.
+
+- **A portal session that has expired no longer makes the integration re-post a
+  data request and re-raise the same notice on every restart.** @alagerqv read
+  the kickoff loop and found what his own entry was doing: his recorded attempt
+  time sat frozen at 10 October, long past the 24-hour window that is supposed
+  to hold the next attempt off, so every setup tried again and raised the
+  "portal session expired" card again.
+
+  The cause is one word. The loop records the attempt before posting, with a
+  comment explaining that the record is what makes the backoff survive a
+  restart — and the session-expired handler then returned straight out of the
+  method, past the only line that writes it. The promise in the comment and the
+  behaviour of the code had been disagreeing since the handler was added. It
+  breaks out of the loop now instead, so the record reaches the write.
+
+  That alone would have fixed only half of it. The handler also records the
+  attempt itself when nothing has yet: a refused *probe* raises before the
+  record is made, and a probe the portal refuses is a failed attempt exactly as
+  much as a refused post is. An identifier adopted for an earlier vehicle in the
+  same pass now survives too, instead of being discarded along with everything
+  else.
+
+  And three places raised this condition without logging anything, which is why
+  the card turned up in his log with no line next to it saying where it came
+  from — one of them sitting directly above a sibling branch that has always
+  logged its status. All three now say what happened, and the card itself
+  announces that it is being raised at a level a normal installation records
+  ([#1867](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1867)).
+- **A trigger or condition scoped to one car no longer applies to every car on
+  the account when the scope cannot be resolved.** The helper that turns a
+  config's `vin:` option or `target: device_id` into a set of VINs returned an
+  empty set for four different situations and documented one of them: nothing
+  was asked for; a config shape we cannot read; a `device_id` the registry no
+  longer knows, which is what a car removed and re-added leaves behind; and a
+  `target:` expressed with any other field, such as an area or a label.
+
+  Both callers then failed open on all four. The trigger ended up subscribing
+  with `vin=None`, which is the account-wide listener the dispatcher fires for
+  every VIN, and the condition's `if vins and …` guard is skipped entirely on a
+  falsy empty set, so every vehicle was tested. The two cases that say *"I meant
+  one car"* therefore did the opposite of what was asked, and said nothing about
+  it — an automation written to unlock-trigger on one car ran for all of them.
+
+  The helper now answers three ways instead of two: nothing asked for, a
+  resolved scope, or **asked and resolved to nothing** — and the last of those
+  matches nothing rather than everything. It also logs a warning naming the
+  target that could not be resolved, because an automation that has been firing
+  account-wide by accident would otherwise just stop one day with no
+  explanation. Unscoped triggers and conditions are untouched and still apply
+  to every vehicle, which is their documented behaviour.
+
+- **Two portal buttons no longer show a success tick over a refusal.**
+  @Dulcow pressed "Create EU Data Act data request", watched his activity list,
+  and saw the press recorded and then nothing at all — no success, no failure.
+  He found out only by opening the portal himself that no request had been
+  created. The integration had the portal's answer the whole time: it records
+  the status for diagnostics, and had no way to reach the person standing in
+  front of the button.
+
+  Its sibling had the same shape. The one-time historical export returned
+  quietly both when the portal refused the request and when the session had
+  expired, so that button reported success too — while the *import* half of the
+  same feature was changed for exactly this a few hours earlier. Two halves of
+  one feature should not disagree about whether a failure is worth mentioning.
+
+  Both now say what happened, with the portal's own reason where there is one,
+  in all twelve languages. The create button passes its vehicle so the answer
+  is about *that* car, and clears any verdict left by an earlier press so the
+  message belongs to the press you just made. Two things deliberately did not
+  change: a successful press is still silent, and a refused one still leaves
+  nothing behind — in particular a refused export does not start the
+  client-side "pending" clock, which would have shown an export that does not
+  exist. The export's error is raised by the button rather than deeper down,
+  because the same code also runs while Home Assistant is shutting the entry
+  down, where a failure is neither a refusal nor something anyone is waiting
+  to be told about.
+- **A Volkswagen server outage or a rate-limited account is no longer reported
+  as a wrong password.** The login walks a list of strategies, and its catch-all
+  redacts the message of whatever the last one raised — for a good reason,
+  written at the site: a low-level network error's text can carry the full OAuth
+  callback URL, and those tokens decode to the owner's e-mail and a working
+  access token. That redaction stays. What was wrong is that the error's **class**
+  was thrown away with its message, so everything came out as a plain
+  authentication failure.
+
+  That was never only a wording problem. On the polling path an authentication
+  failure becomes "invalid credentials" and starts a re-authentication flow, so
+  a VW 5xx storm or an account their backend had temporarily rate-limited asked
+  people to re-enter credentials that were never wrong — the exact
+  reconfiguring-during-an-outage that the dedicated error classes were created
+  to prevent, with their own translated messages already sitting in the config
+  flow and their own handling already in the coordinator's self-healing-error
+  check. All of it was simply unreachable from that one `raise`.
+
+  Three classes now come through as themselves: the backend-unavailable error,
+  the rate-limit error, and the volkswagen.de site-unavailable error. The bar
+  for being on that list is deliberately narrow and is pinned by a test: the
+  message has to be one this integration wrote, built from a status code and a
+  brand name, and must never be able to carry a URL, an address or a token.
+  Everything else, including an error carrying a request URL of our own, is
+  still redacted and still flattened exactly as before
+  ([#1855](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1855)).
+
+### Sicherheit / Security
+
+- **Sign-in host hardening.** Two guards in the login code decided whether a
+  host was the manufacturer's by looking for a name *inside* it rather than
+  matching the name itself, and one step followed a continuation link offered
+  by a page without checking where that link pointed. All three now match on a
+  name boundary, and the link is followed only back to the page that offered
+  it, to the manufacturer's own sign-in hosts, or to the portal.
+
+  **Nothing about a working sign-in changes.** The same reference
+  implementations the portal operator points maintainers at already validate
+  the same thing, every legitimate value in the project's own fixtures was
+  checked against the new rule, and a live read-only portal login completes
+  unchanged. A value outside that set now ends the sign-in with the same notice
+  an absent one already produced, instead of being followed, and the notice
+  names the page rather than the value.
+
 ## [5.0.0] - 2026-10-16 — Two doors the manufacturer closed / Zwei Türen, die der Hersteller zugemacht hat
 
 - **Volkswagen Companion (ADB): VW app 4.6.4 mapping, controls, more reads and safety gates.** Developed against a Tiguan eHybrid (reads verified on the car) in [gszigethy/vwgroup-connect-ha](https://github.com/gszigethy/vwgroup-connect-ha) (fork releases 4.11.0-1 to 4.13.0-4, plus the fixes from this PR's review; PR numbers below refer to that repository). Thanks @gszigethy; app captures from @plainmad (Mk8 Golf GTE), @kgroshert (ID.4, e-up!) and @WEZANGO (CUPRA Born) ([#968](https://github.com/its-me-prash/vwgroup-connect-ha/issues/968)). Functional and technical design: [docs/COMPANION.md](docs/COMPANION.md).

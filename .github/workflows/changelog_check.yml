@@ -1,4 +1,4 @@
-name: Changelog Required
+name: Changelog Pflicht
 
 # Runs on EVERY pull request, deliberately. This job is a required check on
 # main, and a required check that is filtered out by path never reports at
@@ -9,37 +9,78 @@ name: Changelog Required
 # so, instead of the trigger deciding whether anyone hears from it.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, releases]
 
 jobs:
   check:
-    name: CHANGELOG.md updated?
+    name: CHANGELOG.md aktualisiert?
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0  # need full history for git diff origin/main...HEAD
+          fetch-depth: 0  # need full history for git diff "origin/${{ github.base_ref }}"...HEAD
 
-      - name: Check whether CHANGELOG.md was updated
+      - name: Prüfen ob CHANGELOG.md geändert wurde
+        id: scope
         run: |
-          FILES=$(git diff --name-only origin/main...HEAD)
-          if ! echo "$FILES" | grep -qE '^(custom_components/|CHANGELOG\.md$|docs/CHANGELOG_TECHNICAL\.md$)'; then
-            echo "No integration code changed (docs/CI/tests only) — CHANGELOG update is not required."
+          FILES=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)
+          # Published so the structure step can skip a pull request that does
+          # not touch this file at all; without it that step would judge main's
+          # existing state and refuse work that cannot fix it.
+          {
+            echo "files<<__EOF__"
+            echo "$FILES"
+            echo "__EOF__"
+          } >> "$GITHUB_OUTPUT"
+          if ! echo "$FILES" | grep -qE '^(custom_components/|CHANGELOG\.md$)'; then
+            echo "Kein Integrations-Code geändert (nur Doku/CI/Tests) — CHANGELOG-Pflicht gilt hier nicht."
             exit 0
           fi
           if ! echo "$FILES" | grep -q "CHANGELOG.md"; then
             echo ""
             echo "══════════════════════════════════════════"
-            echo "  CHANGELOG.md was not updated!"
+            echo "  CHANGELOG.md wurde nicht aktualisiert!"
             echo "══════════════════════════════════════════"
             echo ""
-            echo "Please add your changes to the Unreleased section:"
+            echo "Bitte trage deine Änderungen im Unreleased-Block ein:"
             echo ""
             echo "  ## [Unreleased]"
-            echo "  ### Added / Changed / Fixed"
-            echo "  - Description of the change"
-            echo "    Author: @your-name"
+            echo "  ### Hinzugefügt / Geändert / Behoben"
+            echo "  - Beschreibung der Änderung"
+            echo "    Autor: @dein-name"
             echo ""
             exit 1
           fi
-          echo "CHANGELOG.md was updated — OK"
+          echo "CHANGELOG.md wurde aktualisiert — OK"
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      # The step above asks whether CHANGELOG.md was *touched*. That is a
+      # different question from whether the result is intact, and twice in one
+      # day the difference cost an entry: a merge left the Unreleased block with
+      # two "### Behoben / Fixed" headings, and a conflict resolution dropped
+      # main's whole "### Hinzugefuegt / Added" section. Both times the file WAS
+      # modified, so the step above passed it.
+      #
+      # What runs here is the conflict-marker check and the duplicate-heading
+      # check, and nothing else. In particular NOT --base: the lost-entry
+      # comparison was measured against this file's own history and would have
+      # refused 18 of the last 79 commits to it, 14 of them purely because a
+      # bold title had been copy-edited. A required check that refuses close to
+      # one pull request in five gets a --skip added to it and then protects
+      # nothing, so it stays a local diagnostic (see the script's docstring).
+      # Dropping it also removes two separate ways --base turns an innocent pull
+      # request red: comparing against main's tip rather than the merge base,
+      # and racing a main that advances between the event and a re-run.
+      #
+      # The `if` guard matters for the same reason. A step with no guard runs
+      # after the docs-only `exit 0` above, which ends that STEP and not the
+      # job — so a pull request changing one documentation file would be
+      # refused for damage already sitting on main. That is not hypothetical:
+      # three of the last 80 revisions of CHANGELOG.md on main carried a
+      # duplicated heading in the Unreleased block.
+      - name: CHANGELOG-Struktur pruefen (Konfliktmarker, Dubletten-Heading)
+        if: contains(steps.scope.outputs.files, 'CHANGELOG.md')
+        run: python scripts/check_changelog_structure.py
