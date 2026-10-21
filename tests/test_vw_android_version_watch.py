@@ -55,7 +55,11 @@ def test_lookup_failure_never_reads_or_writes_issues(monkeypatch):
 
 
 def test_current_version_does_not_call_github(monkeypatch):
-    monkeypatch.setattr(watch, "scrape_version", lambda *a: ("4.6.4", "google_play"))
+    def fetch(url):
+        assert "id=com.volkswagen.weconnect&" in url
+        return '{"softwareVersion":"4.6.4"}'
+
+    monkeypatch.setitem(watch.scrape_version.__globals__, "_fetch", fetch)
     monkeypatch.setattr(watch.subprocess, "run", lambda *a, **kw: pytest.fail("GitHub called"))
     assert watch.check(watch.REPOSITORY, "4.6.4") == "No newer version detected."
 
