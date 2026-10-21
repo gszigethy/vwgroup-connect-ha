@@ -46,6 +46,21 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [5.1.2-dev1] - 2026-10-28
+
+### Changed
+
+- **Fork rebased onto upstream v5.1.2.** Released [v5.1.2](https://github.com/its-me-prash/vwgroup-connect-ha/releases/tag/v5.1.2), including all upstream changes since this fork's v5.1.0-dev1. No unreleased upstream commits are included. Integration code matches v5.1.2 except for this development version in the manifest. ([#1957](https://github.com/its-me-prash/vwgroup-connect-ha/pull/1957))
+- **Fork CI keeps branch validation, coverage and SonarCloud analysis.** Upstream-only automation and HACS validation stay disabled. ([gszigethy/vwgroup-connect-ha#118](https://github.com/gszigethy/vwgroup-connect-ha/pull/118))
+- **Development releases use `X.Y.Z-devN` versions and GitHub pre-releases.** Release links point at the fork; the short release body built from this changelog is kept. ([gszigethy/vwgroup-connect-ha#118](https://github.com/gszigethy/vwgroup-connect-ha/pull/118))
+- **The Volkswagen Android app version watcher is retained.** It keeps its corrected scraper arguments. ([gszigethy/vwgroup-connect-ha#119](https://github.com/gszigethy/vwgroup-connect-ha/pull/119))
+- **Fork guidance and the Companion compatibility policy are retained.** Fork differences are consolidated into four subject commits on the released upstream base. ([gszigethy/vwgroup-connect-ha#118](https://github.com/gszigethy/vwgroup-connect-ha/pull/118))
+
+### Notes
+
+- This fork is used for development only. The next release on this base will be `5.1.2-dev2`.
+- Companion compatibility and command safeguards are inherited unchanged from upstream v5.1.2. This release adds no new app-version or vehicle-command validation. ([gszigethy/vwgroup-connect-ha#118](https://github.com/gszigethy/vwgroup-connect-ha/pull/118))
+
 ## [5.1.2] - 2026-10-28 — Ten things it reported wrongly / Zehn Dinge, die es falsch gemeldet hat
 
 ### Behoben / Fixed
@@ -901,8 +916,6 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
   a mutation, because `release.yml` carries a second `exit 1` in an unrelated
   step. That assertion is scoped to its own step now.
   ([#1916](https://github.com/its-me-prash/vwgroup-connect-ha/pull/1916))
-
-
 ## [5.1.0] - 2026-10-20 — Saying what actually happened / Sagen, was wirklich passiert ist
 
 ### Hinzugefügt / Added

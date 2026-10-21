@@ -10,11 +10,11 @@ Last updated: 2026-04-26 — current version: v1.8.0
 
 This fork develops on `releases` and bases each series on an exact published
 upstream tag. Do not import unreleased upstream changes into a released-base
-series. The current base is `v5.1.0`.
+series. The current base is `v5.1.2`.
 
 Use `X.Y.Z-devN` versions, starting at `dev1` for each upstream base and
 incrementing N for each development release. The manifest version is
-`5.1.0-dev1`, the tag is `v5.1.0-dev1`, and all development releases are GitHub
+`5.1.2-dev1`, the tag is `v5.1.2-dev1`, and all development releases are GitHub
 pre-releases. Keep tags immutable. The release workflow recognises `-devN`
 independently of the optional `FORK_PRERELEASE` repository variable.
 
