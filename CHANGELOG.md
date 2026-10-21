@@ -46,6 +46,22 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [5.1.0-dev1] - 2026-10-21
+
+### Changed
+
+- **Upstream base:** released [v5.1.0](https://github.com/its-me-prash/vwgroup-connect-ha/releases/tag/v5.1.0), including all upstream changes since this fork's v4.13.0-4 release. No unreleased upstream commits are included. Integration code matches v5.1.0 except for this development version in the manifest.
+- **CI:** retain fork branch validation, coverage and SonarCloud analysis; keep upstream-only automation and HACS validation disabled.
+- **Release publishing:** use `X.Y.Z-devN` development versions and GitHub pre-releases, with fork links and English release notes.
+- **Android version automation:** retain the Volkswagen app watcher and its corrected scraper arguments.
+- **Documentation:** retain fork guidance, Companion compatibility policy and development notes. Fork differences are consolidated into four subject commits on the released upstream base.
+
+### Notes
+
+- This fork is used for development only. The next release on this base will be `5.1.0-dev2`.
+- Companion compatibility and command safeguards are inherited unchanged from upstream v5.1.0. This release adds no new app-version or vehicle-command validation.
+
+
 
 ## [5.1.0] - 2026-10-20 — Saying what actually happened / Sagen, was wirklich passiert ist
 
