@@ -284,10 +284,11 @@ class TestPreReleaseChecklistClaim:
         _, _, jobs_block = text.partition("\njobs:\n")
         assert jobs_block, "ci.yml has no top-level 'jobs:' block."
         jobs = re.findall(r"^  ([a-z][a-z0-9-]*):$", jobs_block, re.MULTILINE)
-        assert jobs == ["lint-and-validate", "tests", "hassfest", "hacs"], (
+        # Fork: the HACS Validation job is dropped (RELEASE_PROCESS.md says so).
+        assert jobs == ["lint-and-validate", "tests", "hassfest"], (
             "ci.yml's job list changed to "
             f"{jobs} — RELEASE_PROCESS.md's pre-release checklist section "
-            "describes four jobs by name and has to be updated with it."
+            "describes the jobs by name and has to be updated with it."
         )
 
 

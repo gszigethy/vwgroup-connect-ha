@@ -6,6 +6,26 @@ Last updated: 2026-04-26 — current version: v1.8.0
 
 ---
 
+## Development fork releases
+
+This fork develops on `releases` and bases each series on an exact published
+upstream tag. Do not import unreleased upstream changes into a released-base
+series. The current base is `v5.1.0`.
+
+Use `X.Y.Z-devN` versions, starting at `dev1` for each upstream base and
+incrementing N for each development release. The manifest version is
+`5.1.0-dev1`, the tag is `v5.1.0-dev1`, and all development releases are GitHub
+pre-releases. Keep tags immutable. The release workflow recognises `-devN`
+independently of the optional `FORK_PRERELEASE` repository variable.
+
+The four fork subjects are CI, release publishing, Android version automation,
+and documentation. Keep runtime code aligned with the selected upstream release
+unless a development release explicitly documents a runtime change.
+
+The inherited release process below applies except that this development-only
+fork uses `releases`, the `devN` numbering above and development pre-releases.
+
+
 ## When to release
 
 Release whenever a coherent, atomic batch of changes is on `main` and CI is
@@ -41,6 +61,28 @@ was, who was affected by name, and that the decision was taken knowingly. An
 undocumented override is indistinguishable from not having checked.
 
 ---
+
+## Companion app compatibility policy
+
+Support the current official mobile app release and the two immediately preceding
+published releases. Count actual published releases, including patch releases;
+do not infer predecessors by subtracting from version numbers. This window refers
+to mobile app versions, not integration releases.
+
+- Maintain layout adapters and regression fixtures for all three supported app
+  releases. Detect the controls present on screen to select an adapter, preserving
+  older supported layouts when introducing a new one.
+- Track read and write validation separately for each app version and operation.
+  A recognised layout or successful read does not validate a vehicle command.
+  Keep unverified writes blocked; unfamiliar newer versions may use safe reads
+  only where existing safeguards permit them.
+- Before an integration release, record the supported app versions and validation
+  coverage, and check for regressions across the window.
+- Phase older versions out gradually: announce deprecation in release notes when
+  they leave the window, retain their adapters during the deprecation transition,
+  and announce removal before deleting compatibility code. Leaving the window
+  must not silently remove existing support. Apply the semver rules below to
+  compatibility removals.
 
 ## Daily: `[Unreleased]` block
 
@@ -206,7 +248,7 @@ cosmetic:
 
 | Reader | What it looks for | With `## [vX.Y.Z]` instead |
 |---|---|---|
-| `ci.yml`, step *CHANGELOG.md enthält aktuelle Version* | `[` + the bare `manifest.json` version + `]` | **CI goes red** on every push and pull request |
+| `ci.yml`, step *CHANGELOG.md contains current version* | `[` + the bare `manifest.json` version + `]` | **CI goes red** on every push and pull request |
 | `release.yml`, step *Release-Notes generieren* | `## [X.Y.Z]` opening the section | the notes lose this version's section and fall back to a bare *see the CHANGELOG* link |
 | `release.yml`, the version/date list in the same step | `## [X.Y.Z]`, optionally followed by `- YYYY-MM-DD` | this version drops out of the parsed list |
 
@@ -413,16 +455,16 @@ grep -nE 'python-version|ruff==|--cov-fail-under=' .github/workflows/ci.yml
 ```
 
 **These are the gates worth running locally, not all of CI.**
-`.github/workflows/ci.yml` has four jobs; the commands above cover four checks
-from two of them. CI also runs, and this page deliberately does not duplicate:
+`.github/workflows/ci.yml` has three jobs in this fork (upstream's fourth, HACS
+Validation, is dropped here); the commands above cover four checks from two of them. CI also runs, and this page deliberately does not duplicate:
 
 | Also enforced by CI | Where |
 |---|---|
-| `manifest.json` carries every required field and a valid `iot_class` | `ci.yml`, *manifest.json validieren* |
-| every `*.json` under `custom_components/` parses | `ci.yml`, *Alle JSON-Dateien validieren* |
-| `CHANGELOG.md` contains the `manifest.json` version as `[X.Y.Z]` | `ci.yml`, *CHANGELOG.md enthält aktuelle Version* |
+| `manifest.json` carries every required field and a valid `iot_class` | `ci.yml`, *Validate manifest.json* |
+| every `*.json` under `custom_components/` parses | `ci.yml`, *Validate all JSON files* |
+| `CHANGELOG.md` contains the `manifest.json` version as `[X.Y.Z]` | `ci.yml`, *CHANGELOG.md contains current version* |
 | Home Assistant **hassfest** | `ci.yml`, `hassfest` job |
-| **HACS Validation** | `ci.yml`, `hacs` job |
+| **HACS Validation** | upstream's `ci.yml` only (`hacs` job); not run in this fork |
 
 Two things a green local run does not prove, both pinned in `ci.yml` and both
 left out of this page on purpose so it cannot drift against them:
