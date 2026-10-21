@@ -80,7 +80,7 @@ def check(repo: str, baseline: str, dry_run: bool = False) -> str:
     if repo != REPOSITORY:
         raise ValueError(f"This watcher is restricted to {REPOSITORY}")
     version_key(baseline)
-    version, source = scrape_version("volkswagen", {"package_id": PACKAGE})
+    version, source = scrape_version("volkswagen", PACKAGE)
     if not version or source != "google_play":
         raise RuntimeError("Google Play returned no version; no issue was opened")
     version_key(version)
