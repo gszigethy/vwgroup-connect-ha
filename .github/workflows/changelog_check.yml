@@ -9,7 +9,7 @@ name: Changelog Pflicht
 # so, instead of the trigger deciding whether anyone hears from it.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, releases]
 
 jobs:
   check:
@@ -18,12 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0  # need full history for git diff origin/main...HEAD
+          fetch-depth: 0  # need full history for git diff "origin/${{ github.base_ref }}"...HEAD
 
       - name: Prüfen ob CHANGELOG.md geändert wurde
         id: scope
         run: |
-          FILES=$(git diff --name-only origin/main...HEAD)
+          FILES=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)
           # Published so the structure step can skip a pull request that does
           # not touch this file at all; without it that step would judge main's
           # existing state and refuse work that cannot fix it.

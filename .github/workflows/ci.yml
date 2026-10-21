@@ -1,24 +1,28 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, releases]
   pull_request:
-    branches: [main]
+    branches: [main, releases]
+
+permissions:
+  contents: read
 
 jobs:
   lint-and-validate:
     name: Lint & Validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Python 3.14 einrichten
         uses: actions/setup-python@v7
         with:
           python-version: "3.14"
 
-      - name: Abhängigkeiten installieren
+      - name: Install dependencies
         run: |
           pip install \
             ruff==0.15.12 \
@@ -37,7 +41,7 @@ jobs:
             --warn-return-any \
             --no-error-summary
 
-      - name: manifest.json validieren
+      - name: Validate manifest.json
         run: |
           python3 -c "
           import json, sys
@@ -45,17 +49,17 @@ jobs:
           required = ['domain', 'name', 'version', 'requirements', 'iot_class', 'config_flow']
           missing = [k for k in required if k not in m]
           if missing:
-              print('FEHLER: Fehlende Felder:', missing); sys.exit(1)
+              print('ERROR: Missing fields:', missing); sys.exit(1)
           # requirements can be empty (we bundle our own client) or contain pypi packages
           print('requirements:', m.get('requirements', []))
           valid_iot = ('cloud_push', 'cloud_polling', 'local_push', 'local_polling')
           if m.get('iot_class') not in valid_iot:
-              print('FEHLER: iot_class ungültig:', m.get('iot_class')); sys.exit(1)
+              print('ERROR: Invalid iot_class:', m.get('iot_class')); sys.exit(1)
           print('iot_class:', m['iot_class'])
           print('manifest.json OK — Version:', m['version'])
           "
 
-      - name: Alle JSON-Dateien validieren
+      - name: Validate all JSON files
         run: |
           python3 -c "
           import json, os, sys
@@ -68,7 +72,7 @@ jobs:
                           json.load(open(p))
                           print(f'OK: {p}')
                       except Exception as e:
-                          errors.append(f'FEHLER {p}: {e}')
+                          errors.append(f'ERROR {p}: {e}')
           if errors:
               for e in errors: print(e)
               sys.exit(1)
@@ -78,19 +82,19 @@ jobs:
       # it binds maintainers as well as contributors. Runs here rather than only
       # in a git hook, because .git/hooks is not committed and so does not
       # protect a fork PR at all.
-      - name: Keine echten VINs im Repo
+      - name: No real VINs in the repo
         run: python3 scripts/check_no_real_vins.py
 
-      - name: CHANGELOG.md enthält aktuelle Version
+      - name: CHANGELOG.md contains current version
         run: |
           python3 -c "
           import json, sys
           version = json.load(open('custom_components/vag_connect/manifest.json'))['version']
           changelog = open('CHANGELOG.md').read()
           if f'[{version}]' not in changelog:
-              print(f'FEHLER: Version {version} nicht im CHANGELOG.md!')
+              print(f'ERROR: Version {version} not found in CHANGELOG.md!')
               sys.exit(1)
-          print(f'CHANGELOG.md enthält Version {version} — OK')
+          print(f'CHANGELOG.md contains version {version} — OK')
           "
 
   tests:
@@ -98,13 +102,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Python 3.14 einrichten
         uses: actions/setup-python@v7
         with:
           python-version: "3.14"
 
-      - name: Test-Abhängigkeiten installieren
+      - name: Install test dependencies
         run: |
           pip install \
             pytest \
@@ -114,7 +120,7 @@ jobs:
             voluptuous \
             homeassistant
 
-      - name: Tests mit Coverage ausführen
+      - name: Run tests with coverage
         id: pytest
         run: |
           set -o pipefail
@@ -122,8 +128,16 @@ jobs:
           # Docs point at this line; never restate the number next to it.
           python3 -m pytest tests/ -v --tb=long \
             --cov=custom_components/vag_connect \
+            --cov=scripts.watch_vw_android \
             --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
             --cov-fail-under=75 2>&1 | tee pytest_output.log
+
+      - name: SonarQube Cloud analysis
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       - name: Show pytest output in step summary on failure
         if: failure()
@@ -144,7 +158,7 @@ jobs:
 
       - name: Upload pytest log as artifact
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: pytest-output
           path: pytest_output.log
@@ -155,29 +169,8 @@ jobs:
     name: HA Hassfest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # SHA-pinned per supply-chain-hardening (v1.24.1, 2026-05-08).
       # home-assistant/actions has no semver tags — pin to commit SHA.
       # Bump manually when upstream announces breaking changes.
       - uses: "home-assistant/actions/hassfest@cd6f3635a740c84d8a14f6121a90068b8ece6bf6"
-
-  hacs:
-    name: HACS Validation
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      # hacs/action's repo-load phase hits rare transient GitHub API 404s
-      # ("Not Found" -> "not loaded properly in HACS", ~1/40 runs) BEFORE any
-      # validator runs. Retry absorbs the flake so CI stays deterministically green.
-      # NB: hacs/action@22.5.0 internally runs ghcr.io/hacs/action:main (rolling) --
-      # the dated tag does NOT pin the validation logic, only this wrapper's inputs do.
-      # wretry.action SHA-pinned per supply-chain-hardening (v3.8.0).
-      - name: HACS Validation
-        uses: Wandalen/wretry.action@e68c23e6309f2871ca8ae4763e7629b9c258e1ea  # v3.8.0
-        with:
-          action: hacs/action@22.5.0
-          with: |
-            category: integration
-            github_token: ${{ github.token }}
-          attempt_limit: 3
-          attempt_delay: 15000
