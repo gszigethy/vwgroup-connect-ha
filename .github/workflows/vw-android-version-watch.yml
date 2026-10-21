@@ -1,0 +1,44 @@
+name: Volkswagen Android app version watch
+
+on:
+  schedule:
+    - cron: "27 6 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Check the version without opening an issue
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+# Serialize scheduled and manual checks so they cannot open duplicate issues.
+concurrency:
+  group: vw-android-version-watch
+  cancel-in-progress: false
+
+jobs:
+  check-version:
+    if: github.repository == 'gszigethy/vwgroup-connect-ha'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+      - name: Check Google Play and report a newer version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WATCH_REPOSITORY: ${{ github.repository }}
+          # Update this repository variable after verifying a newer APK.
+          WATCH_BASELINE: ${{ vars.VW_ANDROID_BASELINE_VERSION || '4.6.4' }}
+          WATCH_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+        run: |
+          args=(--repo "$WATCH_REPOSITORY" --baseline "$WATCH_BASELINE")
+          if [ "$WATCH_DRY_RUN" = true ]; then
+            args+=(--dry-run)
+          fi
+          python scripts/watch_vw_android.py "${args[@]}"
