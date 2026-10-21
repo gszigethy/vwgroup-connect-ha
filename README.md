@@ -1,3 +1,5 @@
+> **Development fork (gszigethy/vwgroup-connect-ha):** based on released [upstream](https://github.com/its-me-prash/vwgroup-connect-ha) versions, with fork CI, release tooling and the Volkswagen Android version watcher. The current base is **v5.1.0**; its Companion implementation already includes our contributed app support. Development releases use **`5.1.0-dev1`, `5.1.0-dev2`, …** and are published as pre-releases. See the [Companion design](docs/COMPANION.md) for functionality and limits.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/its-me-prash/vwgroup-connect-ha/main/custom_components/vag_connect/logo.png" alt="VW Group Connect" width="180">
 </p>
