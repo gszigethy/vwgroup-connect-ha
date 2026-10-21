@@ -682,7 +682,10 @@ class TestTheCiJobGatesOnlyWhatItCan:
         """Two dots compare against main's tip, which turns an advancing main
         into a false refusal and races a re-run. The three-dot form asks the
         merge base. Adding the push half must not quietly change this."""
-        assert "origin/main...HEAD" in self._scope()["run"], (
+        run = self._scope()["run"]
+        # The fork also runs this check for pull requests into ``releases``,
+        # so the base is the pull request's target branch, defaulting to main.
+        assert "origin/main...HEAD" in run or "origin/${BASE_REF:-main}...HEAD" in run, (
             "the pull-request comparison is no longer against the merge base"
         )
 

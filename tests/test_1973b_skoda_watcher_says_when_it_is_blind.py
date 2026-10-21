@@ -172,6 +172,10 @@ class TestABlipDoesNotFileAnIssue:
         assert len(calls) == 1
 
 
+@pytest.mark.skipif(
+    not _WF.exists(),
+    reason="the fork does not carry the upstream-only Skoda watcher workflow",
+)
 class TestTheWorkflowWiring:
     """The script can only say BLIND; the workflow is what makes it visible."""
 

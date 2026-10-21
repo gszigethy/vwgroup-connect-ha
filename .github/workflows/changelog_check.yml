@@ -22,7 +22,7 @@ name: Changelog Pflicht
 # a property of pushing straight to a protected branch, not of this file.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, releases]
   push:
     branches: [main]
 
@@ -44,6 +44,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PUSH_BEFORE: ${{ github.event.before }}
           PUSH_AFTER: ${{ github.sha }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
           # A pull request is judged against its merge base; a push is judged
           # against the commit the branch pointed at BEFORE the push, so a
@@ -64,7 +65,7 @@ jobs:
               FILES=$(git show --name-only --format= HEAD)
             fi
           else
-            FILES=$(git diff --name-only origin/main...HEAD)
+            FILES=$(git diff --name-only "origin/${BASE_REF:-main}...HEAD")
           fi
           # Published so the structure step can skip a change set that does
           # not touch this file at all; without it that step would judge
