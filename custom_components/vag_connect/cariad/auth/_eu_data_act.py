@@ -373,6 +373,34 @@ def _login_fields(html: str) -> tuple[dict[str, str], str | None]:
     return fields, form.action
 
 
+def _single_page_login_keys(fields: dict[str, str]) -> tuple[str, str] | None:
+    """Return ``(identifier_key, password_key)`` when this is a ONE-PAGE form.
+
+    #1947 — the classic flow asks for the identifier and the password on two
+    separate pages, and the first carries a token that binds the two steps
+    together. A page that asks for both at once has no second step to bind, so
+    that token is simply absent — and until this function existed, its absence
+    was read as "we failed to understand the page" and the password was never
+    sent at all.
+
+    The distinguishing fact is not the missing token. It is that the page
+    offers an identifier input **and** a password input simultaneously, which
+    the two-step pages never do. Keyed on that rather than on the absence,
+    because "a shape we recognise" is a claim we can make and "not the shape we
+    knew" is not.
+
+    Returns ``None`` for anything that is not unambiguously a one-page form, so
+    a page we genuinely cannot read still fails loudly instead of being posted
+    a password on a guess.
+    """
+    if "password" not in fields:
+        return None
+    for identifier in ("username", "email", "identifier", "user", "userId"):
+        if identifier in fields:
+            return identifier, "password"
+    return None
+
+
 def _resolve_action(base_url: str, action: str | None) -> str:
     """Resolve a form ``action`` against *base_url*, guarding the
     doubled-``/login/login/`` trap.
@@ -1669,6 +1697,57 @@ def _finished_time_to_min(value: str | None, unit: str | None) -> int | None:
         return None
     factor = _TIME_UNIT_TO_MIN.get(str(unit or "").strip().lower(), 1.0)
     return int(f * factor)
+
+
+def _local_wallclock(raw: str | None) -> str | None:
+    """Normalise a timestamp the feed states as LOCAL wall-clock time.
+
+    #1903 (@keylogicjohan) — the charge-timer fields arrive as the car's own
+    wall-clock time carrying a ``Z``. His ID.7 in Sweden (UTC+2) reported
+    ``2026-10-20T18:28:00Z`` for a session the charger itself logged starting at
+    ``18:28:00+02:00``, so the ``Z`` is wrong rather than the clock. Taken at
+    face value the sensors and the charging calendar were two hours late.
+
+    His report is also what made this fixable narrowly rather than globally:
+    the OTHER timestamps in the same feed are genuinely UTC — he cross-checked
+    ``last_seen_at`` against ``instrument_cluster_time`` and they agree. So this
+    is not a feed-wide offset needing the car's timezone; it is two fields that
+    are naive local wearing a UTC suffix, and only those two call this.
+
+    Naive is NOT an option as the output. Every timestamp consumer in this
+    integration reads a naive value as UTC (``raw.replace(tzinfo=timezone.utc)``
+    in the sensor layer, ``dt.replace(tzinfo=dt_util.UTC)`` in the calendar), so
+    stripping the suffix would re-introduce the same two-hour error one layer
+    down. The wall-clock reading is therefore re-stamped with the system's local
+    zone, which is the Home Assistant timezone in every normal install.
+
+    The limitation, stated rather than hidden: for a car in a different timezone
+    from the Home Assistant instance this is wrong by the difference between
+    them, and the feed carries nothing that would let us do better — the
+    correct value is only knowable in the car's own local time.
+
+    A numeric value is an epoch, which is absolute and needs none of this, so it
+    is handed to :func:`_epoch_or_iso` unchanged.
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    try:
+        float(s)
+    except (ValueError, TypeError):
+        pass
+    else:
+        return _epoch_or_iso(s)
+    from datetime import datetime  # noqa: PLC0415
+
+    try:
+        parsed = datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return s  # unparseable — pass through, same contract as _epoch_or_iso
+    local_zone = datetime.now().astimezone().tzinfo
+    return parsed.replace(tzinfo=local_zone).isoformat()
 
 
 def _epoch_or_iso(raw: str | None) -> str | None:
@@ -5088,14 +5167,20 @@ def map_dataset_to_vehicle_data(
         "estimated_start_time",
     )
     if _ncs is not None and d.next_charge_timer_start_at is None:
-        d.next_charge_timer_start_at = _epoch_or_iso(_ncs)
+        # #1903 — stated as local wall-clock, not UTC. See
+        # _local_wallclock; the other timestamps in this feed are
+        # genuinely UTC and keep using _epoch_or_iso.
+        d.next_charge_timer_start_at = _local_wallclock(_ncs)
     _ncf = first(
         "profile_state_report.next_charging_timer_information.estimated_finish_time",
         "next_charging_timer_information.estimated_finish_time",
         "estimated_finish_time",  # v2.15.4: unique bare leaf — safe alias.
     )
     if _ncf is not None and d.next_charge_timer_finish_at is None:
-        d.next_charge_timer_finish_at = _epoch_or_iso(_ncf)
+        # #1903 — stated as local wall-clock, not UTC. See
+        # _local_wallclock; the other timestamps in this feed are
+        # genuinely UTC and keep using _epoch_or_iso.
+        d.next_charge_timer_finish_at = _local_wallclock(_ncf)
     _ncr = first(
         "profile_state_report.next_charging_timer_information.target_reachability",
         "next_charging_timer_information.target_reachability",
@@ -5505,6 +5590,16 @@ def map_dataset_to_vehicle_data(
         and d.hv_battery_pack_voltage_v >= 60
     ):
         d.has_battery = True
+    # #1902 (@keylogicjohan's ID.7) — the same class as #1661, for a feed that
+    # carries the pack's energy content (REPORT_TYPE_ENERGY_CONTENTS) instead of
+    # its voltage: no SoC, range, charging state or pack voltage, so the EV
+    # entities stayed hidden although battery_available_kwh and battery_cap_kwh
+    # were right there. A capacity in the traction-pack range is the same kind of
+    # evidence and gets the same treatment: has_battery only, never is_electric.
+    # 5 kWh is well above any 48 V mild-hybrid pack (under 2 kWh) and well below
+    # the smallest plug-in hybrid pack.
+    if d.battery_cap_kwh is not None and d.battery_cap_kwh >= 5:
+        d.has_battery = True
     if has_e:
         d.has_battery = True
     if has_c:
@@ -5661,6 +5756,22 @@ class EUDataActConnector:
         # returned None, so get_vehicle_data can tell a 404 "not provisioned yet"
         # (→ delivery_not_ready) apart from a 5xx/429 portal outage (→ portal_error).
         self._last_soft_status: int | None = None
+        # #1932/#1933 — a soft miss that never got a response AT ALL. The
+        # handler for (TimeoutError, ClientConnectionError) returned None
+        # without touching _last_soft_status, so a portal we could not reach
+        # was indistinguishable from one that answered "404, not provisioned".
+        #
+        # Measured, not inferred: on 2026-10-22 VW let the portal's TLS
+        # certificate expire (NotAfter 23:59:59 UTC, renewed by ~08:25 UTC the
+        # next morning). aiohttp raises ClientConnectorCertificateError for
+        # that, which is a ClientConnectionError subclass, so every poll took
+        # the branch above and the log told people to "enable the continuous
+        # data request" — for a request that was alive and still producing
+        # files. Users deleted working requests on that advice.
+        #
+        # Holds the exception CLASS name only. Never the message: a transport
+        # error's __str__ can carry the full request URL.
+        self._last_soft_transport_error: str | None = None
         # StartDate (ISO-8601) of the currently-active data request — i.e. WHEN the
         # portal data request was created. Refreshed each poll from the metadata.
         self.data_request_started_at: str | None = None
@@ -6291,44 +6402,78 @@ class EUDataActConnector:
             signin_url = str(resp.url)
             signin_html = await resp.text(errors="replace")
 
-        # 2. POST email (identifier step).
+        # 2. Read the sign-in page and work out WHICH page it is before
+        #    assuming. #1947 — on 2026-10-26 the portal replaced the two-step
+        #    sign-in with one that asks for the identifier and the password
+        #    together. The old code required the token that binds step one to
+        #    step two, so the new page failed the check and the password was
+        #    never sent. Twelve reporters across SEAT and CUPRA, in three
+        #    countries, within two days, and because the other sign-in route
+        #    fails for those brands at the same moment the dialog told all of
+        #    them their password was wrong.
         fields, action = _login_fields(signin_html)
-        if "hmac" not in fields:
+        one_page = (
+            _single_page_login_keys(fields) if "hmac" not in fields else None
+        )
+        if one_page is not None:
+            # Both inputs on one page: fill both and post once. There is no
+            # second page to fetch, so there is no second token to carry.
+            identifier_key, password_key = one_page
+            fields[identifier_key] = email
+            fields[password_key] = password
+            _LOGGER.debug(
+                "EU Data Act portal: single-page sign-in form (identifier "
+                "field %r); posting both credentials in one step",
+                identifier_key,
+            )
+            landing, landing_html, status = await self._follow_login_redirects(
+                "POST",
+                _resolve_action(signin_url, action),
+                data=fields,
+                headers={**headers, "Referer": signin_url},
+            )
+        elif "hmac" not in fields:
+            # Neither shape. Keep failing loudly and keep printing the field
+            # names: that list is what let the reporters on #1947 identify the
+            # new page from the outside before anyone had read the code.
             raise AuthenticationError(
                 "EU Data Act portal: could not parse the sign-in form "
                 f"(fields: {sorted(fields)})"
             )
-        fields["email"] = email
-        identifier_action = _resolve_action(signin_url, action)
-        async with self._session.post(
-            identifier_action, data=fields, headers={**headers, "Referer": signin_url},
-            allow_redirects=True, timeout=ClientTimeout(total=_TIMEOUT_S),
-        ) as resp:
-            authenticate_url = str(resp.url)
-            authenticate_html = await resp.text(errors="replace")
+        else:
+            # 2a. POST email (identifier step).
+            fields["email"] = email
+            identifier_action = _resolve_action(signin_url, action)
+            async with self._session.post(
+                identifier_action, data=fields,
+                headers={**headers, "Referer": signin_url},
+                allow_redirects=True, timeout=ClientTimeout(total=_TIMEOUT_S),
+            ) as resp:
+                authenticate_url = str(resp.url)
+                authenticate_html = await resp.text(errors="replace")
 
-        # 3. POST credentials (password step). The hmac on this page is a
-        #    FRESH one bound to the password session.
-        fields2, action2 = _login_fields(authenticate_html)
-        if "hmac" not in fields2:
-            err = _login_error(authenticate_html)
-            raise AuthenticationError(
-                err or "EU Data Act portal: no password form returned "
-                "(check email address or the login flow changed)"
+            # 3. POST credentials (password step). The hmac on this page is a
+            #    FRESH one bound to the password session.
+            fields2, action2 = _login_fields(authenticate_html)
+            if "hmac" not in fields2:
+                err = _login_error(authenticate_html)
+                raise AuthenticationError(
+                    err or "EU Data Act portal: no password form returned "
+                    "(check email address or the login flow changed)"
+                )
+            fields2["email"] = email
+            fields2["password"] = password
+            # CRITICAL: post to the clean /login/authenticate URL. Posting to
+            # authenticate_url (which carries ?relayState=) duplicates the
+            # param and the IDP rejects it with HTTP 400. _resolve_action
+            # strips the query AND guards the doubled-/login/login/ trap.
+            authenticate_action = _resolve_action(authenticate_url, action2)
+            landing, landing_html, status = await self._follow_login_redirects(
+                "POST",
+                authenticate_action,
+                data=fields2,
+                headers={**headers, "Referer": authenticate_url},
             )
-        fields2["email"] = email
-        fields2["password"] = password
-        # CRITICAL: post to the clean /login/authenticate URL. Posting to
-        # authenticate_url (which carries ?relayState=) duplicates the
-        # param and the IDP rejects it with HTTP 400. _resolve_action
-        # strips the query AND guards the doubled-/login/login/ trap.
-        authenticate_action = _resolve_action(authenticate_url, action2)
-        landing, landing_html, status = await self._follow_login_redirects(
-            "POST",
-            authenticate_action,
-            data=fields2,
-            headers={**headers, "Referer": authenticate_url},
-        )
 
         # 3b. (#527, v2.15.5) — generic OAuth/IDP consent grant page. After
         # correct credentials the IDP can interject a server-rendered consent
@@ -6575,6 +6720,11 @@ class EUDataActConnector:
         request hasn't been enabled / hasn't propagated yet (#393, #424) —
         that's an expected transient, not a hard error.
         """
+        # #1932 — reset per call, so the flag always describes THIS read. Its
+        # sibling _last_soft_status is reset by its CALLERS instead, which left
+        # the metadata path reading a status from an earlier poll; doing it
+        # here closes that hole for the new flag by construction.
+        self._last_soft_transport_error = None
         # v2.13.0 — Bearer mode: attach the device-grant token. Covers every
         # JSON proxy_api call (vehicles list, metadata, datadelivery list,
         # relation) since they all funnel through here. No-op in cookie mode.
@@ -6701,7 +6851,7 @@ class EUDataActConnector:
                             f"EU Data Act GET {_safe_api_url(url)} → HTTP {resp.status}"
                         )
                     return await resp.json(content_type=None)
-            except (TimeoutError, ClientConnectionError):
+            except (TimeoutError, ClientConnectionError) as err:
                 # v2.14.8 — a transport-level timeout/disconnect (portal slow or
                 # briefly unreachable) is NOT an auth failure. Retry with the
                 # same backoff as a transient 5xx; a soft call then gives up as
@@ -6713,6 +6863,10 @@ class EUDataActConnector:
                     await asyncio.sleep(_PORTAL_RETRY_DELAYS[attempt])
                     continue
                 if soft:
+                    # #1932 — record THAT the portal was unreachable, and with
+                    # which exception class, so the caller stops reporting a
+                    # transport failure as "your data request is missing".
+                    self._last_soft_transport_error = type(err).__name__
                     return None
                 raise
         return None
@@ -6829,6 +6983,31 @@ class EUDataActConnector:
                 or ""
             )
         if not identifier:
+            # #1932/#1933 — "no identifier" has two causes that call for
+            # opposite actions from the user, so they must not share a message.
+            # If the metadata read never reached the portal, NOTHING was learned
+            # about the data request: that is a VW-side outage, which is exactly
+            # what portal_error already means, and the request must be left
+            # alone. Only a portal that ANSWERED and still named no identifier
+            # is a genuine "not provisioned yet".
+            #
+            # ``meta is None`` is not load-bearing today: the flag is reset at
+            # the top of every _get_json, and the metadata read is the last one
+            # before this check, so a set flag already implies meta is None.
+            # It is kept because that argument rests on call ORDER — insert one
+            # soft read between them and the flag would describe that read
+            # instead. Pairing the two makes the branch true by its own terms.
+            if meta is None and self._last_soft_transport_error:
+                self._note_no_data("portal_error")
+                _LOGGER.warning(
+                    "EU Data Act portal: could not be reached for %s (%s) — "
+                    "this is a VW-side outage, not a problem with your account "
+                    "or your consent. Your data request was NOT checked, so do "
+                    "not change or delete it; polling resumes on its own once "
+                    "the portal answers again.",
+                    vin[-6:], self._last_soft_transport_error,
+                )
+                return d
             self._note_no_data("no_request")
             _LOGGER.info(
                 "EU Data Act portal: no data-request yet for %s — enable the "
@@ -6857,15 +7036,21 @@ class EUDataActConnector:
             # A 404/410 here means "no delivery yet" (delivery_not_ready); a
             # 5xx/429 is a genuine VW-side outage (portal_error). _get_json records
             # which on a soft miss, so a normal wait isn't mislabelled a fault.
+            # #1932 — a read that never got a response is the third case, and
+            # it is an outage too. "empty" claims the portal answered and had
+            # nothing for us, which is the opposite of what happened.
+            unreachable = self._last_soft_transport_error
             self._note_no_data(
                 "portal_error"
-                if (self._last_soft_status or 0) in _PORTAL_OUTAGE_STATUSES
+                if unreachable
+                or (self._last_soft_status or 0) in _PORTAL_OUTAGE_STATUSES
                 else "empty"
             )
             _LOGGER.info(
-                "EU Data Act portal: dataset listing unavailable for %s "
-                "(HTTP %s); treating as no data this poll.",
-                vin[-6:], self._last_soft_status or "n/a",
+                "EU Data Act portal: dataset listing unavailable for %s (%s); "
+                "treating as no data this poll.",
+                vin[-6:],
+                unreachable or f"HTTP {self._last_soft_status or 'n/a'}",
             )
             return d
         files = listing if isinstance(listing, list) else listing.get("files", [])

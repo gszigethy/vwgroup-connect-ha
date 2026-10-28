@@ -46,23 +46,876 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
-## [5.1.0-dev1] - 2026-10-21
+## [5.1.2-dev1] - 2026-10-28
 
 ### Changed
 
-- **Upstream base:** released [v5.1.0](https://github.com/its-me-prash/vwgroup-connect-ha/releases/tag/v5.1.0), including all upstream changes since this fork's v4.13.0-4 release. No unreleased upstream commits are included. Integration code matches v5.1.0 except for this development version in the manifest.
-- **CI:** retain fork branch validation, coverage and SonarCloud analysis; keep upstream-only automation and HACS validation disabled.
-- **Release publishing:** use `X.Y.Z-devN` development versions and GitHub pre-releases, with fork links and English release notes.
-- **Android version automation:** retain the Volkswagen app watcher and its corrected scraper arguments.
-- **Documentation:** retain fork guidance, Companion compatibility policy and development notes. Fork differences are consolidated into four subject commits on the released upstream base.
+- **Fork rebased onto upstream v5.1.2.** Released [v5.1.2](https://github.com/its-me-prash/vwgroup-connect-ha/releases/tag/v5.1.2), including all upstream changes since this fork's v5.1.0-dev1. No unreleased upstream commits are included. Integration code matches v5.1.2 except for this development version in the manifest. ([#1957](https://github.com/its-me-prash/vwgroup-connect-ha/pull/1957))
+- **Fork CI keeps branch validation, coverage and SonarCloud analysis.** Upstream-only automation and HACS validation stay disabled. ([gszigethy/vwgroup-connect-ha#118](https://github.com/gszigethy/vwgroup-connect-ha/pull/118))
+- **Development releases use `X.Y.Z-devN` versions and GitHub pre-releases.** Release links point at the fork; the short release body built from this changelog is kept. ([gszigethy/vwgroup-connect-ha#118](https://github.com/gszigethy/vwgroup-connect-ha/pull/118))
+- **The Volkswagen Android app version watcher is retained.** It keeps its corrected scraper arguments. ([gszigethy/vwgroup-connect-ha#119](https://github.com/gszigethy/vwgroup-connect-ha/pull/119))
+- **Fork guidance and the Companion compatibility policy are retained.** Fork differences are consolidated into four subject commits on the released upstream base. ([gszigethy/vwgroup-connect-ha#118](https://github.com/gszigethy/vwgroup-connect-ha/pull/118))
 
 ### Notes
 
-- This fork is used for development only. The next release on this base will be `5.1.0-dev2`.
-- Companion compatibility and command safeguards are inherited unchanged from upstream v5.1.0. This release adds no new app-version or vehicle-command validation.
+- This fork is used for development only. The next release on this base will be `5.1.2-dev2`.
+- Companion compatibility and command safeguards are inherited unchanged from upstream v5.1.2. This release adds no new app-version or vehicle-command validation. ([gszigethy/vwgroup-connect-ha#118](https://github.com/gszigethy/vwgroup-connect-ha/pull/118))
 
+## [5.1.2] - 2026-10-28 — Ten things it reported wrongly / Zehn Dinge, die es falsch gemeldet hat
 
+### Behoben / Fixed
 
+- **A readiness reading that never arrived was reported as the car being
+  offline.** On the Volkswagen EU connector — which serves **Audi** as well —
+  a missing field was collapsed into a definite *offline* instead of being
+  left unknown. `None is True` is `False`, and that was the whole mechanism.
+
+  @Mex-ai11's Audi A6 is where it surfaced
+  ([#1851](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1851)):
+  his entry reported *connection state: online* and *vehicle status: OFFLINE*
+  at the same moment, on a feed that had been frozen since 12 October. On a
+  feed that has stopped, the readiness field stops arriving with everything
+  else — so the integration stated his car was offline while the official app
+  showed it online. That contradiction is what sent him to re-authenticate and
+  rebuild his entry twice, for nothing.
+
+  The integration's own dataclass has said this must not happen since v2.0.1:
+  *"Parser miss must NOT default to 'vehicle parked + offline'. Conditional
+  automations like 'wake car when leaving driveway' relied on `is_online`
+  being honest about its uncertainty."* The field is `bool | None` on purpose.
+  Three of the four brand connectors check the type before assigning; this one
+  did not.
+
+  **A test was holding it in place**, which is the part worth saying out loud:
+  `test_empty_payload_no_crash` asserted `is_online is False` on an empty
+  payload — one line below asserting `battery_soc is None`, which gets the
+  same question right. Changing that assertion is the point of the fix, not a
+  casualty of it.
+
+  Nothing downstream needed touching: the coordinator has treated the field as
+  tri-state since #923 and reads only an explicit `False` as offline.
+
+  Pinned by seven mutations. Two of the tests were wrong first, both in the
+  same way and both caught by the mutation check rather than by review: one
+  asserted a sentence appeared anywhere in `models.py`, where that phrase
+  occurs three times, so deleting the one that governs this field passed on
+  the other two; the other accepted **any** enclosing `isinstance` as a guard,
+  and Škoda's assignment sits inside a type check on a different object, so
+  removing its real guard passed as well. Proximity is not containment.
+  ([#1921](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1921))
+
+- **The "vehicle data hasn't refreshed" card now uses the name you gave the
+  car.** @starwarsfan checked the previous fix on v5.1.1 and found it still
+  wrong, in two ways, and he was right about both
+  ([#1896](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1896)).
+
+  **It ignored your rename.** The card was routed through the helper that
+  builds a device name out of data — brand plus model, or brand plus the last
+  six VIN characters — and that helper never consults Home Assistant's device
+  registry. Renaming a device is an explicit statement about what the car is
+  called, so a card that then calls it something else reintroduces the very
+  "which car does this mean" problem it was built to solve. A name you set now
+  wins over anything derived.
+
+  **And on his car it fell through to the bare brand label**, `Audi (myAudi)`,
+  which is what that helper returns when it has neither a model nor a VIN to
+  work with. The VIN *was* known — it is what raised the card — but the call
+  handed over the vehicle snapshot instead of the VIN, and on a snapshot that
+  has gone thin the key is missing. The VIN is passed explicitly now, so the
+  last-six fallback is always available.
+
+  The registry lookup is wrapped: naming a car is a courtesy, the warning is
+  the point, and a registry that cannot be read costs the nicer name rather
+  than the card.
+
+  **The previous close was wrong on its own terms**, and that is worth saying
+  here rather than only in the thread. It described the design; his screenshot
+  showed the implementation. The test that came with it asserted the card was
+  named through the data helper — so it was pinning the defect, which is why
+  nothing failed. That assertion now points at the corrected helper.
+
+  Eight mutations, each breaking one part and asserting the named test catches
+  it — including the two shapes of the original fault and a registry error
+  being allowed to suppress the warning.
+- **The service calendar showed nothing, on every brand, since it was built.**
+  *Service due* and *Oil service due* have never rendered for anybody.
+  @nijaobscvra666 reported it on a CUPRA Leon and did not stop at the symptom —
+  he found the cause at the line, and he was right
+  ([#1923](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1923)).
+
+  The calendar's date parser accepted only strings, and **no writer in the
+  integration produces a string for those two fields**. Every one of them —
+  Škoda, SEAT/CUPRA, Volkswagen EU and the EU Data Act parser — stores an
+  integer day count, because that is what the backends send and what the
+  day-counter sensors read. So both events were dropped on every brand and
+  both channels. The other seven events on that calendar were fine; their
+  writers already convert at the source.
+
+  It presented as an **empty** calendar rather than a missing one, which is
+  why it survived so long: the setup gate only asks whether a service field is
+  truthy, and a day count is, so the entity was created and then everything in
+  it was discarded.
+
+  The parser now takes day counts as well as dates, guards bools (`True` would
+  have meant tomorrow) and rejects the sentinel integers backends ship inside
+  error envelopes, where `-2147483648` would otherwise have become a calendar
+  entry 5.8 million years in the past.
+
+  **One decision worth recording, because it is invisible except for a few
+  minutes around midnight.** Three places in the integration convert a day
+  count to a date and all three anchor differently: `cariad/_util.py` on UTC
+  midnight, the sensors on the machine's own zone, and the calendar on Home
+  Assistant's configured zone. The calendar keeps its own, so it agrees with
+  itself; making all three agree is a separate change with a wider blast
+  radius.
+
+  **Why this reached a reporter instead of a test**: the test that covers this
+  fed the parser `"2026-12-01"` — a shape nothing in the integration produces.
+  It was green, had always been green, and asserted a case that cannot occur.
+  It now drives day counts, and the regression has its own tests alongside.
+
+  Found in the same reading and not fixed here: the **HU/TÜV** entry on that
+  calendar has no writer anywhere, so it can never fire
+  ([#1925](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1925)).
+
+- **The "data outdated" indicator never re-decided its verdict once a snapshot
+  was republished.** On an entry whose feed had stopped, it kept reading
+  *no* — indefinitely.
+
+  **What this does not cover, so nobody updates expecting it to.** The verdict
+  is computed from when the delivery was last seen, not from when the car
+  actually captured the values inside it. A feed that keeps delivering on time
+  while the payload is two days old therefore still reads as fresh, and
+  @tdrieshof measured exactly that on an Audi Q6 e-tron: 56 % shown against 38 %
+  in the car, with the indicator saying *no* and nothing in the interface
+  suggesting the reading was old. That is a different hole in the same
+  indicator, it is open, and it is the next piece of work rather than part of
+  this one. His measurement also killed a heuristic I had been relying on —
+  the values do move, because an old curve is being replayed late, so movement
+  is not evidence of freshness
+  ([#1917](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1917))
+  ([#1920](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1920)).
+
+  The verdict was decided in one place, during enrichment, and enrichment only
+  runs on a poll that actually brought data back. Five separate paths
+  republish the previous snapshot when a poll brings nothing — a failed poll,
+  an empty one, a parse failure, an unexpected result shape, and a setup read
+  that returned nothing — and every one of them carried the old verdict along
+  with the old data. It also reached the on-disk store, because only keys
+  beginning with an underscore are stripped before saving, so a restart read
+  back a verdict the new session had never computed.
+
+  Put together: a *not outdated* verdict decided while the data was still
+  fresh could be saved, restored, and held through every empty read
+  afterwards. @Mex-ai11's entry (#1851) served a nine-day-old snapshot while
+  reporting itself fine, and the indicator meant to catch exactly that said
+  nothing.
+
+  The verdict is now re-decided wherever a snapshot is republished, including
+  on load. That needs no fresh poll — the capture stamp is carried forward, so
+  the age is knowable and the answer is true *now* rather than true when the
+  data was last read.
+
+  **One exemption deliberately does not apply here.** A stamp that reads old
+  while the readings underneath it keep changing is not a frozen feed, and
+  that case is excused during enrichment. On a republish nothing has changed
+  by definition, so carrying the exemption across would answer "is this stale"
+  with "it was not, last time".
+
+  Eight mutations, each breaking one part. Two of the tests were wrong first
+  and the mutation check is what said so — one accepted any mention of the
+  re-decide anywhere in the enclosing function, and that function is 934 lines
+  long with two such calls in it, so deleting the one being tested passed on
+  the other.
+
+- **A repair card could still be carrying your full VIN, and the fix that was
+  supposed to clear it never ran.** If you have ever shared a diagnostics file
+  from this integration publicly, this one is worth reading.
+
+  A Home Assistant repair's internal id goes verbatim into Home Assistant's own
+  config-entry diagnostics — a place this integration's VIN redaction never
+  sees, as the code has said in a comment since the problem was first found.
+  One card built its id from the unmasked VIN. That was fixed for **new** cards
+  in v4.12.0, and the changelog said any older card "is cleared on upgrade so
+  nothing lingers".
+
+  **It was not.** The deletion sat inside the raising and clearing of that same
+  card, so it only ran when the card was next raised or cleared — and for an
+  export that has already timed out, neither ever happens again. The card
+  raised before the upgrade simply stayed, through every version since.
+
+  This is not a theory: someone running a version two releases past that "fix"
+  attached a diagnostics file to a public issue, and it still carried the full
+  seventeen characters.
+
+  There is now a one-shot sweep at startup that deletes those ids for every car
+  the entry knows. It is deliberately limited to the one card with the gap —
+  its sibling clears itself on the next poll, so sweeping that one too would be
+  code that never does anything, and a test says so rather than a comment.
+
+  **What this does not do:** it cannot reach a file you have already uploaded
+  somewhere. If you have shared a diagnostics file publicly, replacing it is
+  still the only thing that removes what is already out there.
+
+  The v4.12.0 entry above now carries a correction, because a changelog that
+  tells people their data was cleaned when it was not is worse than one that
+  says nothing.
+  ([#1768](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1768))
+
+- **A VW outage was reported as your data request being missing — and that
+  advice made people delete working requests.** On 2026-10-22 Volkswagen let
+  the EU Data Act portal's TLS certificate expire at 23:59:59 UTC. From
+  midnight the portal could not be reached at all; it was measured still
+  expired at 07:11 UTC and valid again by 08:25 UTC. Through all of it, every
+  poll reported:
+
+  > no data-request yet — enable the continuous data request for this car
+
+  That was the opposite of the truth. The requests were alive and still
+  producing files. People deleted theirs on the strength of that sentence and
+  had to recreate them — and a new request only covers datasets from its
+  creation onwards, so the gap does not come back.
+
+  The mechanism: a read that fails in transport never gets an HTTP status, and
+  the portal connector recorded nothing else. An expired certificate and a
+  clean "404, no such request" both arrived as "no answer", so the code took
+  the single branch it had. The same hole sat one step further on, where an
+  unreachable dataset listing was filed as `empty` — "the portal answered and
+  had nothing for us", which is not what happened either.
+
+  A portal that cannot be reached is now reported as a **portal outage**, with
+  the failure class named in the log and the advice stated plainly: your data
+  request was **not** checked, so leave it alone. A portal that *answers* and
+  names no request keeps the advice that helps, and that half is tested just as
+  hard — a fix that turned a genuine "not set up yet" into a false outage would
+  be the same bug facing the other way.
+
+  From the other end of the same blind spot: when a sign-in strategy failed,
+  the log named the exception class but dropped the HTTP status, so
+  `UpstreamUnavailableError (message redacted)` was everything you had to tell
+  a VW 5xx from a fault on your own side. A status code is not a secret and is
+  now logged alongside the class; the message stays redacted, because that is
+  what can carry a token.
+
+  The notice shown when sign-in hits VW's device-attestation wall carried the
+  same false certainty, in English and all eleven translations: the portal
+  *"did not work for **this account**: check that data sharing is enabled for
+  your car"*. The code never established that — at that point it knows only
+  that the fallback returned nothing. Both reporters went through consent
+  settings that were already correct, and one filed the wording itself as the
+  bug. It now says what is known and gives the one check that tells the two
+  causes apart: open the portal in a browser. If it loads, check your consent.
+  If it does not, the portal is down and nothing on your side needs changing.
+
+  Reported by @RaAdNe and @mathiasolofsson87. The certificate timings, the
+  recovery steps and the "do not delete your data request" warning were
+  measured and written up by @nijaobscvra666 while the outage was still on, and
+  @scoma24 had asked for the missing status after having to produce a debug
+  capture by hand.
+  ([#1932](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1932),
+  [#1933](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1933),
+  [#1915](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1915))
+
+- **A refusal the integration had already explained was still logged as "cause
+  unknown", one line above the explanation.** @panther7's log had both halves
+  side by side and they disagreed:
+
+  > `command_unlock(***) classified as unknown`
+  > `command_unlock(***) failed: … the car's gateway accepted your S-PIN and
+  > then refused this integration's client identity for commands. This is not
+  > your password, your S-PIN or your subscription — all three checked out.`
+
+  The sentence was right; it comes from the code that read the gateway's
+  answer. The classification beside it was wrong. The gateway's refusal is
+  wrapped in an error type that carries no response body, and the classifier
+  gave up on anything shaped like that before looking at what the error
+  actually held — while the code that raised it had worked the cause out four
+  lines earlier and kept only the prose.
+
+  Both measured refusals now carry their cause as well as their wording, so
+  the two lines agree. **Be clear about what this buys:** the log stops
+  contradicting itself. Nothing in the integration reads these recorded
+  reasons, so by itself this changes no behaviour, and the refusal it describes
+  is still the car's answer — for @panther7 there is nothing to fix at his end.
+
+  **What it deliberately does not do, which took longer to decide than the
+  fix.** The obvious home for "the gateway refused our client identity" was the
+  existing device-attestation reason, whose description reads almost like the
+  message above. That reason is also one of three that mark a control
+  unavailable for twenty-four hours. Using it would have taken his Lock button
+  offline for a day in order to correct a log line, on a car whose controls are
+  visible today. So the measured cause gets a reason of its own that records it
+  and touches nothing, and whether a structurally refused command *should*
+  disappear from the dashboard is left as the separate question it is.
+
+  The reason list itself said the opposite of the code on this point — three
+  reasons were documented as leaving the entity alone while in fact marking it
+  unavailable, with nothing logged to say why — so it now states which ones
+  change what you see. That documentation error is what nearly produced the
+  regression above, and correcting it is probably worth more than the fix it
+  accompanies.
+  ([#584](https://github.com/its-me-prash/vwgroup-connect-ha/issues/584))
+- **A sign-in that could not possibly work was paying for itself out of an
+  hourly budget, and the retries that mattered were then refused.** If your car
+  is on the read-only EU Data Act portal fallback, the integration holds a
+  placeholder instead of a real token, because the portal is a session rather
+  than a token. Anything that still tried to read the manufacturer's own backend
+  got turned away, and every one of those refusals triggered a fresh sign-in
+  that landed straight back on the same fallback and changed nothing.
+
+  There is a deliberate cap of three sign-ins per hour, because hammering a
+  brand account gets it locked. A single poll made three of those reads, so one
+  poll spent the entire hour's allowance on sign-ins that could not succeed.
+  Fourteen minutes later the retries that would have fetched real data were
+  refused for lack of allowance, and because neither of those reads remembers a
+  failure, it repeated on every poll for as long as the fallback was live.
+
+  @georghaberkorn68-ctrl measured it: two consecutive polls, the three retries
+  in between, and the budget message that follows them. His own reading of the
+  capture was right on every point.
+
+  A fallback with nothing to refresh is now skipped instead of being charged
+  for, on both the reading and the command allowance, and it says so once per
+  episode rather than on every read. **What changes for you:** nothing about
+  your data — the portal reads were never affected — but the retry after a
+  missed reading now has the allowance it needs. One honest trade: the
+  accidental side effect of those futile sign-ins was that they re-tried the
+  manufacturer's backend a few times an hour, so if it started working again
+  you would be back on it within the hour. That retry now happens when Home
+  Assistant restarts or you reload the entry, which is the right place for it —
+  the alternative is a password sign-in every hour, forever, against an account
+  whose own backend may be closed for good.
+
+  The sister channel that reads the manufacturer's website had the identical
+  shape and is fixed with it. Two things this deliberately does **not** do: the
+  three pointless reads are still sent each poll, and the separate flaw that
+  let two simultaneous refusals both be charged is now unreachable here rather
+  than repaired. Both are written up for their own fix.
+  ([#1918](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1918))
+
+- **SEAT and CUPRA could not sign in to the EU Data Act portal from 26 October,
+  and the dialog told everyone their password was wrong.** The portal replaced
+  its sign-in page with one that asks for the e-mail address and the password
+  together instead of on two pages. The integration only knew the older layout
+  and stopped as soon as it did not recognise what it was given — so the
+  password was never even sent.
+
+  Because the other sign-in route is refused for those two brands at the same
+  moment, **both** ways in failed, and the repair dialog settled on *"e-mail
+  address or password incorrect"*. That sentence was never established by
+  anything. At least three people re-checked credentials that were correct the
+  whole time, and one reported a working portal login, a live data request and
+  files arriving every fifteen minutes while the integration insisted the
+  password was wrong. Twelve reporters in three countries over two days, on
+  Born, Tavascan, Leon ST, Raval, Formentor and Mii electric.
+
+  Both layouts are now read. A page that asks for both at once gets both in one
+  go; the older two-page sequence is unchanged, which is the half most of the
+  test effort went into — a fix for two brands that broke the sign-in for every
+  other would have been a worse outcome than the bug.
+
+  The detection keys on **recognising a shape**, not on failing to recognise
+  the old one: a page counts as the new layout only when it offers somewhere to
+  type an address *and* somewhere to type a password. A page carrying a password
+  box and nothing else is not posted credentials on the strength of it, and a
+  page that is neither layout still fails loudly and still prints the field
+  names it found — that list is what let the reporters identify the new page
+  from the outside before anyone had read a line of code.
+
+  One near-miss worth recording, because it was caught by deliberately breaking
+  the fix rather than by review: the integration lifts a pre-filled address out
+  of the page itself, so an **old** first page can carry an address field while
+  still asking only for the address. Recognising the new layout from the
+  address alone would have posted the password to a page that never asked for
+  one.
+
+  Reported by @revilo-1970, @georghaberkorn68-ctrl, @burratha, @Daftsios,
+  @wilpatat, @nijaobscvra666, @peepprr, @Ryccou, @Jerjolmic, @lichti4,
+  @tomasroud73 and @RichardPitt. @nijaobscvra666 named the function; @Ryccou
+  worked out both halves unaided, including that the misleading message was a
+  consequence rather than a cause; @peepprr established it was not CUPRA-only.
+  ([#1947](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1947),
+  [#1951](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1951),
+  [#1953](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1953))
+- **A recovery mechanism that never once ran has been removed, and the gap it
+  was supposed to cover is now written down instead of pretended away.** Some
+  sign-in paths leave a session that cannot renew itself: the credential simply
+  expires after about two hours, and the only way back is to sign in again. In
+  v2.8.0 a watchdog was added for exactly that — before each poll it checked
+  whether every car had been failing and stale for more than twice the poll
+  interval, and if so it signed in again quietly so nobody had to reload the
+  integration by hand.
+
+  Its very first check compared a session's label against a value that **no
+  sign-in has ever written**. The label is a keyword into one of the sign-in
+  flows, not something stamped on the resulting session, so the comparison
+  could only ever be false. The watchdog returned immediately, for every
+  account, on every poll, for as long as it existed. The same dead value also
+  sat in a capability check, which quietly reported one capability short for
+  those accounts.
+
+  **Nothing changes for you**, and that is the point: nothing was happening.
+  Removing it is behaviour-neutral, whereas repairing the check would have
+  switched on a never-executed mechanism in a patch release — and it called the
+  sign-in directly, outside the hourly limit that exists to stop an account
+  being locked, so switching it on safely is a larger job than the bug is worth.
+  A safety net that is believed and absent is worse than one that is known to be
+  absent: two people read this code this week and both took it for working.
+
+  The condition it was built for is real and is **not** fully covered by what
+  remains — a failed read does trigger a fresh sign-in, but an expired
+  credential does not always come back as the kind of failure that triggers it.
+  That is now tracked on its own rather than left to a mechanism that was not
+  doing it.
+
+  Removing rather than repairing it was checked against the field before it was
+  decided, not after. A read-only look at four comparable projects found **no
+  proactive staleness watchdog in any of them** — no timers at all, and every
+  sign-in reached either lazily, from a failing request, or from the setup
+  dialog. The one proactive thing anywhere in the field guards a session that
+  *can* be renewed, and its own history is the warning: it was added, then
+  needed a sign-in fallback bolted on because rolling alone did not stop the
+  session dying, and then needed a fix because a dead session kept it polling
+  and sent the owner a fresh challenge message on every tick. That is the shape
+  ours would have had.
+
+  What replaced it is what was already there, and it is now tested end to end
+  rather than assumed: a failing read drives exactly one sign-in and one retry,
+  billed to the same hourly limit as everything else, and a failure that
+  survives that does not loop. None of the four projects has such a test —
+  theirs stub either the client or the very function under test.
+
+  The reason this survived is that two reasonable halves were never checked
+  against each other: something writes these labels, something else branches on
+  them, and nothing asserted that the two sets meet. A test now pins that
+  pairing for every label rather than keeping a list of the known-good ones —
+  a list would have to be maintained by whoever forgot to pair them in the
+  first place.
+
+  Found while measuring an unrelated budget problem on the same kind of
+  session, which is where the uncapped sign-in path and the dead gate both
+  turned up.
+  ([#1918](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1918))
+
+## [5.1.1] - 2026-10-21 — Sensors that fill, names that fit / Sensoren, die sich füllen, Namen, die passen
+
+### Geändert / Changed
+
+- **Removed a constructor argument that looked like multi-brand support and
+  did nothing.** While answering @bzykcar's question in
+  [#1805](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1805) —
+  whether any sign-in path is left that would reach the manufacturer channel
+  for an Audi — the volkswagen.de connector turned out to accept a `brand`
+  argument, and the runtime passed each entry's *real* brand into it. The value
+  was stored on the instance and never read again, by anything. The connector
+  is volkswagen.de in every path it has, so an Audi routed through it would
+  have signed in to the Volkswagen site successfully, and anyone treating the
+  argument as an Audi lever would have watched that work and believed it.
+
+  A missing parameter is a question you have to answer; a dead one is an answer
+  you can believe. Both it and a second never-read copy of the session object
+  beside it are gone. Supporting another brand here needs a real
+  implementation, and it will come back with one.
+
+  No behaviour changes for any existing entry: every call site already received
+  the Volkswagen site regardless of what it passed.
+
+- **CHANGELOG.md merges resolve themselves now.** Landing seven pull requests
+  on 2026-10-20 took **thirteen** CHANGELOG conflict resolutions, every one of
+  them identical: both sides had appended one entry at the same place and "keep
+  both" was always right. There was not a single code conflict in the batch —
+  three of the seven touched the same files and their changes sat 26 to 39
+  lines apart. All the friction came from one file.
+
+  A one-line `.gitattributes` (`CHANGELOG.md merge=union`) resolves that shape
+  with no markers and no human. It is only safe because of a property the
+  repository already had: `add_changelog_entry.py` is insert-only, so the two
+  sides of such a merge are additions in the same place rather than competing
+  edits — and a test now says that out loud, so the driver cannot outlive its
+  own justification.
+
+  Reproduced both ways rather than assumed: without the driver the two appends
+  conflict; with it the merge is clean, both entries survive, and the new one
+  sits under `[Unreleased]` where it belongs. The test asserts the conflicting
+  direction too, because a fixture that does not reproduce the problem proves
+  nothing about the fix.
+
+  One hazard is documented rather than fixed, and it is **not** caused by this
+  change: while a release pull request is open it renames `[Unreleased]` to the
+  new version, a feature branch appending to `[Unreleased]` does not overlap
+  that rename, so git merges the two without stopping and the entry lands under
+  the released version. Measured with and without the union driver — identical
+  both times, because there is no conflict for a driver to resolve. It predates
+  this file; `RELEASE_PROCESS.md` now says what to check and when.
+  ([#1908](https://github.com/its-me-prash/vwgroup-connect-ha/pull/1908))
+
+- **Release notes are one line per change again, with the long form one click
+  away.** v5.1.0's release body was **44 681 characters over 654 lines**,
+  because the release workflow pasted the version's entire section of this file
+  into it verbatim. That body is what Home Assistant shows in its update
+  dialog and what HACS shows in the store listing, so the part a reader needs
+  first — what changed, and does it affect me — sat under paragraphs of
+  measurement and reasoning. Rebuilt through the new path, that same v5.1.0
+  body is **6 222 characters over 99 lines**, of which the change list itself
+  is 4 029 — the rest is the header, the diff link and the install notes the
+  body always carried. The first number published here was wrong: it was
+  measured on a different section and before the empty-bullet fix, and a
+  line-by-line audit of the generated output is what caught it.
+
+  Nothing here gets shorter and nothing is written twice. Every entry already
+  opens with a bold title, and that title *is* the short form, so the builder
+  reads the titles out rather than asking anyone to maintain a second list that
+  would drift out of step with this one. Each line carries the entry's issue
+  and pull request numbers and the people who reported or fixed it, and the
+  body links this file at the release's own tag — not at `main`, so notes
+  opened in six months still lead to what that version said.
+
+  The long form stays the long form on purpose. It is written out in full for
+  whoever is debugging the same thing later, and so that a summary of a release
+  can be made from the reasoning rather than from the headline.
+
+  Three defects were found by auditing the generated output line against line
+  against the entries it came from, which is the check that the tests did not
+  replace. A reference to a **Discussion** was emitted as a bare `#1415`, and
+  GitHub numbers Discussions separately — so the one line whose subject is a
+  discussion linked to *issue* 1415, somebody else's. Those are now explicit
+  links. A cited precedent could be listed in front of the change itself
+  (`#1313 #1679 #1843`), so the first number a reader saw belonged to a closed
+  issue from months earlier; where an entry says which reference is its own,
+  that one now comes first, and where it does not, 12 of 16 entries already
+  list theirs first and nothing is reordered on a guess. And one line counted
+  its three reporters without naming any of them.
+
+  Pinned by eighteen mutations, each breaking one part and asserting the named
+  test catches it. Two of those mutations were wrong before they were right,
+  and both failures are the kind worth recording: one replaced the fix with a
+  *different correct* implementation and so reported an unearned pass, and an
+  earlier harness run died between mutating and restoring, left the mutation in
+  the tree, and the next run hashed that file as the original — restoring the
+  tree *to* the defect while reporting success. The harness now gates on a
+  green baseline before it mutates anything and restores in a `finally`.
+  ([#1912](https://github.com/its-me-prash/vwgroup-connect-ha/pull/1912))
+
+### Behoben / Fixed
+
+- **An EV whose EU Data Act feed reports only the pack's energy content is
+  recognised as having a battery again (#1902).** @keylogicjohan's ID.7 sends
+  `REPORT_TYPE_ENERGY_CONTENTS` with the available and maximal kWh, but no SoC,
+  electric range, charging state or pack voltage. None of the drivetrain tests
+  could fire, so `has_battery` stayed false and every electric entity was
+  skipped, including the available-energy and capacity sensors whose values
+  were there. A capacity of 5 kWh or more now counts as evidence of a drive
+  battery, the same way a pack above 60 V does since #1661: it sets
+  `has_battery` only and leaves the EV-versus-hybrid verdict to SoC and range.
+  5 kWh is far above a 48 V mild-hybrid pack and below the smallest plug-in
+  hybrid pack. Thanks @keylogicjohan for the diagnostics and the analysis.
+
+- **The "vehicle data hasn't refreshed" warning now says which car, and stops
+  sending everyone to volkswagen.de.** @starwarsfan runs an Audi Q4 e-tron and a
+  Škoda on one setup and got a card titled with the masked VIN alone —
+  `***022149` — which is recognisable only to someone who has gone and looked it
+  up. The warning told him something was wrong without telling him what. It now
+  names the vehicle the way the device page names it, through the same helper so
+  the two cannot drift apart, and falls back to the masked VIN when there is no
+  label, exactly as before.
+
+  The text was worse than the title. It told him to open **volkswagen.de** — he
+  has an Audi and a Škoda, and that instruction was wrong twice over: the wrong
+  site for a non-Volkswagen owner, and the wrong place even for a Volkswagen,
+  because a lapsed EU Data Act feed is fixed in the portal rather than on
+  volkswagen.de. His own reason for writing in is why that matters more than a
+  typo would: he did not want to touch a setup that was working. A card that
+  misdirects is a card that gets someone to break something that works.
+
+  The opening sentence also named the EU Data Act as one of exactly two possible
+  causes. This warning fires for **any** car whose own capture stamp has aged
+  past the threshold, including one read over a brand channel, where that cause
+  cannot apply at all. The opener is source-neutral now, and two short paragraphs
+  say what to do in each case: check the continuous request in the portal if the
+  car is read that way — and leave a working one alone — or, on a brand channel,
+  nothing to re-add, the car simply has not reported. All twelve languages
+  ([#1896](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1896)).
+
+- **The Scout's "official spec field" column stopped being empty for 2857 of
+  the catalogue's fields.** @GiuseppeAlbano's report
+  ([#1895](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1895))
+  listed one new Audi field with a dash where the official name belongs — and
+  that field is in the shipped catalogue twice, with a description. The lookup
+  reduced a dotted path to its last segment, on the assumption that a dot only
+  ever separates the container from the field name. 3206 of the 7990 field
+  names contain dots of their own: every `viwi_*` resource carries its
+  interface version, and the charging families are spelled as nested paths. His
+  field was looked up as `0_get_notifications`, which matches nothing. Only 349
+  of those 3206 resolved.
+
+  A quieter half came with it: `01_msp_elli.msp_elli_ocpi_cdr.currency`
+  resolved to the generic `currency` field — a different field with a different
+  unit and description — so a sensor auto-created from raw discovery could be
+  named and united from the wrong entry. Specific spellings are now tried
+  before general ones, and each index is consulted with the whole key rather
+  than only the tail.
+
+  Measured across every name, every prefixed name and every UUID in the
+  catalogue (21226 keys): 5714 that resolved to nothing now resolve, 698 now
+  resolve to their own exact entry instead of a generic one, and nothing that
+  resolved before stopped resolving.
+- **The FAQ now says where the vanished last-trip sensors went.**
+  @fschulte2812 ([#1437](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1437))
+  went thirteen days unanswered on a thread whose settled conclusion — "VW
+  dropped the short-term cluster, there is nothing to fix" — was true of the EU
+  Data Act portal and too broad as a general answer. The volkswagen.de channel
+  had carried those figures since v4.11.0, and the parser for it was already
+  owed when two reporters were told to stop looking. Nothing in the README or
+  the FAQ mentioned any of it, so anyone with the same symptom found the thread,
+  read the old conclusion and stopped.
+
+  There is a FAQ entry now: which five sensors are affected, why they emptied,
+  the three steps to get them back, and — because "add the channel" is not a
+  complete restoration — a table of what it does **not** bring back
+  (recuperation average, zero-emission distance, range gained while charging).
+  It also points Audi owners at their own, different fault instead of sending
+  them through a sign-in that cannot help them.
+
+  A stale instruction is worse than none, so a test checks that what the entry
+  claims is still true of the code: the sensor keys are read out of the
+  document and matched against the real ones, the brand list against the
+  channel's gate, and the `source: vw.de website` attribute against the label
+  the code generates. If any of them moves, the entry gets corrected instead of
+  quietly misleading the next reader.
+- **An unmappable field stops asking three different people to file it, and
+  dismissing the Scout card now sticks.** `eu_data_act.jobStatus` raised the
+  user-facing Scout repair three times — on @Dirk-fs's Volkswagen
+  ([#1831](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1831)), on
+  @permyr's ID.7 Tourer GTX
+  ([#1838](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1838)) and
+  on @sssfamilientermine-wq's CUPRA Tavascan
+  ([#1861](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1861)).
+  The field is genuinely unmapped: the shipped catalogue has no entry for it at
+  all. It is now kept out of the repair while staying fully visible in
+  diagnostics — the samples (`JOBSTATUS_FLASHING`, `JOBSTATUS_DONE`) could be
+  portal export-job plumbing or a software-flash job running on the car, and
+  suppressing the data would close that question instead of answering it.
+
+  Two faults turned up while doing it. The skip list was matched
+  case-sensitively against a lower-case set, so adding the field as it is
+  spelled by anyone would have skipped nothing while the list looked like it
+  covered it. And the card was **deleted** whenever every finding was skipped,
+  which is not the same as having no findings: Home Assistant stores a
+  dismissal on the issue entry and deleting the entry discards it, so a field
+  that kept reappearing kept raising a fresh, un-ignored card at someone who
+  had already said no. Nothing-found still deletes the stale card; all-skipped
+  now leaves it alone.
+- **Plugged in and drawing nothing is no longer reported as charging.**
+  @plainmad ([#968](https://github.com/its-me-prash/vwgroup-connect-ha/issues/968))
+  runs a Golf GTE Mk8 whose energy provider smart-controls the session, and
+  captured the screen for the case nobody had: plugged in, charger supplying no
+  power. The app says *"Charging status. Battery charge level: 86 per cent.
+  Charging station shows current status"*, and we answered **charging** — as we
+  did for *"Battery 86 % • Check charging station"* and for the button
+  *"Start charging. Check charging status"*.
+
+  The rule ended in a bare-verb search: the word "Charging" (or "Lädt" /
+  "Wird geladen") anywhere in the label meant yes, with a list of explicit
+  not-charging phrasings in front of it. That list cannot be completed — app
+  4.3.2 needed one entry, 4.6.4 needs another, and "Start charging" was never
+  covered at all.
+
+  It now reads the state where the state is. Every dump we hold has one
+  grammar, *"Charging status. … N per cent. `<STATE>`"* plus a compact tile
+  whose state follows the separator, and the extracted clause decides. The bare
+  verb counts only as a complete clause — which is the whole distinction,
+  because the ID.3 on 4.3.2 writes the state as the bare word on a car that
+  really is charging. Wording we do not recognise returns unknown rather than
+  guessing, so the previous reading is left alone instead of being replaced by
+  a confident wrong one.
+
+  Measured over all seventeen battery fixtures: every label with a recorded
+  expectation now comes out right, against four wrong before, and about twenty
+  settings-screen labels ("Charging up to (50-100%)", "Reduced AC charging
+  current") stop reading as charging. His dump is committed as a fixture, with
+  his attribution.
+- **The test-cohort share prompt no longer goes to entries that cannot produce
+  a capture, and a probe that fails now says so.** @bzykcar
+  ([#1805](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1805))
+  enabled the opt-in cohort on a portal-only Audi, to help, and reported that
+  `probe_outcomes` stayed empty. He was right, and two faults made it read that
+  way.
+
+  The prompt was gated on `hasattr(client, "command_captures")` — an attribute
+  created unconditionally in the base client's `__init__`, so it was true for
+  every brand and every auth strategy. The gate tested that a Python attribute
+  existed, not that a channel was reachable. The capture it asks for is written
+  inside the command confirm-poll, so an entry with no command path can never
+  produce one; he was asked to share something that could not exist. It now
+  consults `is_structural_read_only()`, this project's own answer to whether an
+  entry can send a command. A working Audi with no volkswagen.de channel still
+  gets the prompt, which is what that gate was added for, and SEAT/CUPRA keep
+  theirs through the locale-capture flag.
+
+  Separately, the three opt-in probes (position, state of health, range
+  measurements) caught every exception, wrote one debug line and recorded
+  nothing — so a probe that ran and was refused left `probe_outcomes` exactly as
+  empty as one that never attempted anything. Each now records
+  `error:<ExceptionType>` under its own key, the exception type only and never
+  the message, which can carry a host or a path. The core read twenty lines
+  below them already did this, which made their silence an inconsistency rather
+  than a design choice.
+- **The e-mail code step no longer tells you your password is wrong.**
+  @kalwados added the volkswagen.de read channel, received the code by e-mail,
+  typed it, and was told *"Login failed; your username or password are wrong"* —
+  at a step he had only reached **because** his password was right. The code is
+  sent only after the credential check passes; the password is the one thing
+  that cannot be the problem there. He tried several times, gave up, signed in
+  on volkswagen.de in a browser, and only then could he add the channel.
+
+  A refused code now says the code was refused, in all 13 languages, and says
+  outright that the password is not the issue — on both the flow he used and
+  the setup flow a first-time install goes through, which had the same two
+  routes to the same wrong verdict and was found while tracing this one. And an HTTP error from the site
+  while the code is being checked is no longer reported as a bad code at all —
+  that is the site failing, and asking for a new code against a server that is
+  down cannot help. The sibling path at the password step was hardened for
+  exactly this in [#1313](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1313)
+  and [#1679](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1679)
+  ("only a genuine 401 keeps the credential verdict"); the code step never was.
+  ([#1843](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1843))
+
+- **The charge-timer sensors and the charging calendar are no longer off by
+  your UTC offset.** @keylogicjohan
+  ([#1903](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1903))
+  runs an ID.7 in Sweden, where the EU Data Act feed reported
+  `next_charge_timer_start_at = 2026-10-20T18:28:00Z` for a session his charger
+  logged as starting `18:28:00+02:00`. The wall-clock reading was right and the
+  `Z` was wrong, so everything downstream ran two hours late.
+
+  Fixed narrowly, and his own cross-check is why that was possible: he verified
+  that the *other* timestamps in the same feed are genuinely UTC — `last_seen_at`
+  against `instrument_cluster_time` — so this is two fields that are naive local
+  time wearing a UTC suffix, not a feed-wide offset needing the car's timezone.
+  The thirteen other timestamps in that module are untouched.
+
+  Stripping the suffix would not have been enough: every timestamp consumer here
+  reads a naive value as UTC, so the same two-hour error would have reappeared
+  one layer down. The reading is re-stamped with the local zone instead. The
+  limitation, stated rather than hidden: for a car in a different timezone from
+  the Home Assistant instance this is wrong by the difference between them, and
+  the feed carries nothing that would let us do better.
+- **The Vehicle Status sensor was blank on every portal-fed car, of every
+  brand.** @theblarney1 reported it permanently unknown on a portal-fed CUPRA
+  Tavascan
+  ([discussion #1415](https://github.com/its-me-prash/vwgroup-connect-ha/discussions/1415)),
+  and the public diagnosis at the time was wrong in all three of its
+  specifics: the sensor does not have one writer but two, the one that governs
+  his car is a channel-agnostic derivation in the coordinator rather than the
+  403-walled CUPRA call, and there is no engine-running gate in it.
+
+  The real cause is wider. That derivation stamps OFFLINE / DRIVING / CHARGING
+  / PARKED, and its PARKED branch required `is_online` to be `True` — a field
+  the EU Data Act portal writes **zero** times. So on any portal-fed car
+  `is_online` is unknown, no branch could fire, and the sensor stayed blank
+  regardless of brand: Volkswagen and Audi as much as CUPRA and SEAT.
+
+  It now reads PARKED when the feed affirmatively says the car is neither
+  driving nor charging — both of which the portal does send. The checks are
+  `is False` rather than falsy tests, so a car that reported nothing at all
+  still yields unknown instead of a fabricated state; that case has its own
+  test beside the #923 guarantee it belongs with. One pre-existing test was
+  amended rather than deleted: its subject (unknown online is not OFFLINE)
+  still holds and is still asserted.
+- **Two diagnostics that described a setup the user no longer had.**
+  @indigomejor ([#1850](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1850))
+  found both while measuring v5.1.0.
+
+  His portal-less entry logged *"3 polls with no fresh snapshot — standing down
+  from the 60s drop-retry"* while his measured cadence stayed at 621-643 s
+  against a 600 s interval, so nothing ever stood down: the counting block sat
+  *before* the gate that asks whether a portal is armed. The number was true
+  and the action it described never happened. Not purely cosmetic, which is how
+  he reported it — the streak also kept climbing while the portal was off, so
+  arming it later began with the retry budget already spent and the fast retry
+  never got its first poll. Counting and logging are now gated on the same two
+  conditions the scheduler uses; the anchor itself is still tracked
+  unconditionally, because letting it go stale would spend the budget one poll
+  after saving it.
+
+  And his diagnostics kept reporting `skoda_official: disabled by source mode
+  (mysmob_only)` after he had switched mode and the channel had been armed. The
+  cause is a missing *write*, not a missing clear: the steady-state
+  already-enrolled path runs on every poll and was the only arming path that
+  recorded no label, so whichever label was written last stood for the life of
+  the client. A clear would have been the wrong instrument — the failure labels
+  added in #1901 exist so a probe that ran and was refused can be told apart
+  from one that never ran, and a clear takes those with it.
+
+- **An EV that sends no state of charge no longer gets an empty Battery level
+  sensor.** Follow-up to
+  [#1902](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1902):
+  @keylogicjohan's ID.7 sends the pack's energy content and no state of charge,
+  so once the drivetrain fix taught the integration to recognise it as electric,
+  its electric entities appeared — and **Battery level** appeared with them,
+  permanently empty, because the field it reads is one his feed never sends.
+
+  `battery_soc` was the odd one out of its own family: `electric_range_km`,
+  `battery_available_kwh` and `battery_cap_kwh` were all already in the set of
+  keys whose entity is not created until the field is actually present, and it
+  was not. It is now.
+
+  Safe for every other EV, and the dynamic spawner is why: it re-evaluates on
+  every poll and tracks what it has already added, so a sensor gated this way
+  still appears the moment its value arrives. A normal EV gets Battery level on
+  the first poll that carries a state of charge and keeps it; a restored
+  snapshot carries the value forward, so an existing entry has it at setup.
+  @bercedev deliberately left this out of the drivetrain fix rather than
+  widening a ten-line change into a design argument, which was the right call.
+
+- **A new setup no longer freezes six characters of your VIN into an entity
+  id.** @benbrummer
+  ([#1801](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1801))
+  confirmed the volkswagen.de channel works on his Commercial Vehicles T6.1 and
+  reported, alongside it, an entity whose id embeds part of his VIN while its
+  friendly name reads correctly.
+
+  Both halves were components behaving as designed: Home Assistant derives an
+  `entity_id` once, from the device name at the moment the entity is first
+  created, and never touches it again, while the friendly name is recomputed
+  from live data on every update. So whichever entity spawns **first** fixes
+  that id forever — and the one that spawned first was the push event entity,
+  the only platform that needs no data to exist. At that moment there is no
+  model name, so the device name falls back to `{Brand} {VIN[-6:]}`.
+
+  The event entity now waits for there to have *been* a poll — not for any
+  particular field, which would change what the event stream is for — so it
+  appears one poll later with the model name known. The VIN fallback itself
+  stays: on an account with two cars and no model data yet, those six
+  characters are the only thing telling the devices apart. Existing entity ids
+  are unaffected and can be renamed in the entity settings.
+
+- **A release could publish with no change list at all, on a green run.**
+  Found while cutting this release, in the path added by the notes split
+  earlier in it. If a tag is pushed before `CHANGELOG.md`'s `[Unreleased]`
+  heading has been renamed to the version, the notes builder refuses, the
+  workflow catches the refusal and publishes the release with only a link —
+  and that is the body Home Assistant shows in its update dialog and HACS in
+  the store listing. The run stayed green and the only trace was a warning in
+  a log nobody reads, so everyone would have seen an empty-looking release
+  with nothing saying why. Tags are immutable, so it would have been found
+  late or not at all.
+
+  The release still publishes, deliberately: failing earlier would leave a
+  public tag with no release and no `vag_connect.zip`, which is worse than a
+  thin page. What changed is that the degraded path can no longer pass for a
+  normal one. The body now states that it is incomplete, in both languages,
+  and a final step turns the run red **after** the release and the asset
+  exist — so nothing is lost and nothing is silent. The step also prints how
+  to repair it without touching the tag.
+
+  The same axis as the rest of this release, turned on its own release path:
+  can the reader tell a failure from a success? Verified by extracting the
+  workflow's own code and running it on both paths rather than by asserting
+  about it — and the first version of the test that pins the red run survived
+  a mutation, because `release.yml` carries a second `exit 1` in an unrelated
+  step. That assertion is scoped to its own step now.
+  ([#1916](https://github.com/its-me-prash/vwgroup-connect-ha/pull/1916))
 ## [5.1.0] - 2026-10-20 — Saying what actually happened / Sagen, was wirklich passiert ist
 
 ### Hinzugefügt / Added
@@ -1260,6 +2113,13 @@ VW app 4.6.4 is supported (gszigethy/vwgroup-connect-ha#28, gszigethy/vwgroup-co
 - **A diagnostics download could carry more vehicle identification than it should.** Tightened, and
   any card created before this update is cleared on upgrade so nothing lingers. If you have already
   shared a diagnostics file publicly, consider replacing it (#1768, thanks @kalwados).
+  > **Correction, 2026-10-23.** The second sentence was wrong. New cards stopped
+  > carrying a raw VIN, but **an existing card was not cleared on upgrade** — the
+  > deletion only ran when that same repair was next raised or cleared, and for an
+  > export already timed out neither ever happens. A user two releases later
+  > uploaded a diagnostics file that still carried one. The sweep this promised
+  > ships in the entry under `[Unreleased]`. If you shared a diagnostics file
+  > before that version, replacing it is still worth doing.
 - **A Škoda API key you typed in yourself is no longer thrown away when another car enrols
   automatically.** Arming the official channel from the stored keys replaced it with only the
   automatic ones, so a car that depended on the key you entered quietly lost its backup

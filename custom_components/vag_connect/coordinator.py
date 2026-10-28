@@ -1822,6 +1822,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                         restored = dict(vdata)
                         restored["_restored"] = True
                         restored["_poll_failed"] = False
+                        self._redecide_stale(restored)
                         self.vehicles[vin] = restored
                         _restored_vins.append(vin)
             # #6 — seed the last-known-good time from the snapshot's own save
@@ -1834,6 +1835,26 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 "VW Group Connect portal-safety: restored %d cached vehicle(s) "
                 "for %s", len(self.vehicles), brand,
             )
+
+            # The sweep v4.12.0's changelog promised and never shipped. A
+            # repair id carrying a raw VIN survives the upgrade that stopped
+            # new ones being created, because the only deletes live inside the
+            # raise and clear of that same repair — neither of which fires for
+            # an export parked in "timed_out". Restored VINs are exactly the
+            # ones that can still hold such a card, so this is where it runs.
+            try:
+                from .repairs import (  # noqa: PLC0415
+                    sweep_legacy_raw_vin_issues,
+                )
+
+                sweep_legacy_raw_vin_issues(
+                    self.hass, self.entry.entry_id, list(self.vehicles.keys())
+                )
+            except Exception:  # noqa: BLE001
+                # Tidying old cards must never be the reason an entry fails to
+                # set up. The leak is bad; an integration that will not start
+                # is worse, and the card stays deletable by hand either way.
+                _LOGGER.debug("legacy repair-id sweep skipped", exc_info=True)
 
         # b13 — setup flags an entry when the user asked for MBB commands but
         # the command channel could not be minted (the portal entry was created
@@ -2232,6 +2253,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                     # through, so a brand-new car appears on first setup.
                     if no_data and self.vehicles.get(vin):
                         self.vehicles[vin]["_poll_failed"] = True
+                        self._redecide_stale(self.vehicles[vin])
                         if hasattr(self, "vehicle_success"):
                             self.vehicle_success[vin] = False
                         _LOGGER.debug(
@@ -2493,93 +2515,6 @@ class VagConnectCoordinator(DataUpdateCoordinator):
     # attribute so any port of the silent-recovery watchdog logic
     # carries the marker into the destination repo.
     _PROVENANCE_WATCHDOG = "watchdog_silentauth_provenance_n2vpw9c3_2026"
-
-    async def _maybe_run_stale_watchdog(self) -> None:
-        """v2.8.0 — silent re-authenticate when hybrid_full goes stale.
-
-        VW EU users on the `hybrid_full` strategy have no real
-        refresh_token (Play Integrity walls the BFF token endpoint).
-        The access_token expires after ~2 hours and the integration
-        starts returning failed polls. Before this watchdog, the
-        symptom was a silently dead integration that users had to
-        reload by hand (a common pattern in the upstream VW HA
-        community ran on template-trigger automations).
-
-        Gating logic:
-          - Active strategy must be `hybrid_full`. Other strategies
-            (`device_grant`, `classic`, `data_act_portal`) handle
-            their own refresh paths via refresh_token / re-fetch.
-          - All VINs must have failure_count >= 2 (single transient
-            hiccups do not trigger).
-          - All VINs must have last_good_at older than
-            2x scan_interval (ensures we are not racing a temporary
-            network blip).
-
-        On match, fires `self._cariad_client.authenticate()` again
-        using the same Brand-ID credentials stored in entry.data. On
-        success, the access_token is refreshed in place and the next
-        poll cycle succeeds without user interaction. On failure,
-        we fall through to standard behaviour, the existing outer
-        exception handler then triggers the HA reauth dialog.
-        """
-        if not self._started or self._cariad_client is None:
-            return
-        tokens = getattr(self._cariad_client, "_tokens", None)
-        if tokens is None or getattr(tokens, "strategy", "") != "hybrid_full":
-            return
-        if not getattr(self, "vehicle_last_good_at", None):
-            return
-        if not self.vehicle_last_good_at:
-            return
-
-        interval_s = max(
-            int(
-                self.entry.options.get(CONF_SCAN_INTERVAL)
-                or self.entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-            ) * 60,
-            _CC_MIN_INTERVAL_S,
-        )
-        stale_threshold_s = 2 * interval_s
-        now = datetime.now(tz=timezone.utc)
-
-        all_stale = True
-        for vin, last_good in self.vehicle_last_good_at.items():
-            elapsed = (now - last_good).total_seconds()
-            if elapsed < stale_threshold_s:
-                all_stale = False
-                break
-            if self.vehicle_failure_count.get(vin, 0) < 2:
-                all_stale = False
-                break
-        if not all_stale:
-            return
-
-        _LOGGER.info(
-            "VW Group Connect: hybrid_full watchdog — every VIN stale for "
-            ">%ds with >=2 consecutive failures. Triggering silent "
-            "re-authenticate before next poll attempt.",
-            stale_threshold_s,
-        )
-        try:
-            await self._cariad_client.authenticate()
-        except Exception as err:  # noqa: BLE001
-            _LOGGER.warning(
-                "VW Group Connect: watchdog silent re-auth raised %s. "
-                "Falling through to standard poll behaviour; if the "
-                "next poll also fails, the existing reauth handler "
-                "will surface to the user.",
-                type(err).__name__,
-            )
-            return
-        # Reset failure counts so the next poll iteration has a
-        # clean slate; otherwise we would re-trigger the watchdog
-        # immediately even after a successful re-auth.
-        for vin in list(self.vehicle_failure_count.keys()):
-            self.vehicle_failure_count[vin] = 0
-        _LOGGER.info(
-            "VW Group Connect: watchdog silent re-auth succeeded, "
-            "failure counts cleared. Next poll should recover."
-        )
 
     async def _ensure_data_act_custom_request_kickoff(
         self, *, force: bool = False
@@ -3624,9 +3559,28 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         # body when opted in (to sample the PPE E:CV.PA.31 rejection). Flag it too,
         # and count it toward the share prompt: a PPE reporter (Audi, no vw.de
         # channel) must still be asked to share, or the capture never reaches us.
-        has_bff = client is not None and hasattr(client, "command_captures")
-        if has_bff:
+        # #1805 (@bzykcar) — ``hasattr`` was always true here. ``command_captures``
+        # is created in the base client's ``__init__``, so every brand and every
+        # auth strategy matched it, and the share prompt went to anyone who
+        # enabled the cohort. He enabled it on a portal-only Audi, where there is
+        # no command path at all, and was asked to share a capture his entry
+        # cannot produce: the capture is written in the command confirm-poll, so
+        # no command means no capture, ever.
+        #
+        # ``is_structural_read_only()`` is this project's own answer to "can this
+        # entry send a command" (#543) — true exactly when the portal/website
+        # strategy leaves no command path and no MBB channel is armed. SEAT/CUPRA
+        # are structurally command-dead too and are counted by ``has_ola``
+        # below, so they keep their prompt; the ``or`` further down is what makes
+        # dropping them from THIS flag safe rather than silent.
+        #
+        # Still arm ``_test_cohort`` whenever the attribute exists: the flag also
+        # gates captures the client may take on paths other than a command, and
+        # narrowing the PROMPT must not narrow the opt-in itself.
+        can_capture = client is not None and hasattr(client, "command_captures")
+        if can_capture:
             client._test_cohort = cohort
+        has_bff = can_capture and not self.is_structural_read_only()
 
         # v4.4.0b3 — SEAT/CUPRA en_GB locale A/B probe. The OLA client captures a
         # localized-string sample (default vs en_GB) once per VIN when opted in;
@@ -4069,6 +4023,26 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             self._reconcile_skoda_manual_key_repair(vins)
             if stored:
                 self._arm_official_from_map(stored)
+                # #1850 (@indigomejor) — say so. This is the steady-state path:
+                # it runs on EVERY poll of an already-enrolled entry, and it was
+                # the only arming path that wrote no label, while the gate at
+                # ~4029, the no-mint path below and the mint path all write one.
+                #
+                # The consequence is not an empty diagnostic but a STALE one:
+                # whatever label was written last stands for the life of the
+                # client. He switched source mode and his diagnostics kept
+                # reporting "disabled by source mode (mysmob_only)" for a
+                # channel that had since been armed — describing the setup he
+                # used to have.
+                #
+                # A missing write, not a missing clear, and the fix is the
+                # write. Clearing the dict would have been the wrong instrument:
+                # #1901 deliberately put failure labels in there so a probe that
+                # ran and was refused can be told apart from one that never ran,
+                # and a clear at the wrong moment throws that away.
+                self._skoda_probe(
+                    "skoda_official", f"armed from {len(stored)} stored key(s)"
+                )
                 # Once per session: is ANOTHER integration/app using the same
                 # official API on this account? (shared per-car budget → faster
                 # rate-limit/ban). Only checked for already-enrolled users here —
@@ -4793,9 +4767,6 @@ class VagConnectCoordinator(DataUpdateCoordinator):
         Nightly reduction (22:00–05:00): doubles the polling interval to reduce
         API calls and avoid rate limits during low-activity hours.
 
-        v2.8.0 — pre-flight `_maybe_run_stale_watchdog()` runs before
-        each poll attempt. See that method's docstring.
-
         #968 companion startup — ``first_immediate`` skips the sleep before the
         first iteration only (companion entries, whose setup read is deferred).
         """
@@ -4843,18 +4814,42 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             # `and` short-circuited before touching the attribute.
             _prev_anchor = getattr(self, "_drop_anchor_seen", None)
             self._drop_overdue_streak = getattr(self, "_drop_overdue_streak", 0)
-            if _drop_anchor_advanced(_prev_anchor, _cap_anchor):
-                self._drop_overdue_streak = 0
-            elif _drop_overdue(interval_s, _cap_anchor, _decision_now):
-                self._drop_overdue_streak += 1
-                if self._drop_overdue_streak == _DROP_RETRY_MAX_STREAK:
-                    _LOGGER.debug(
-                        "EU Data Act portal: %d polls with no fresh snapshot — "
-                        "standing down from the %ds drop-retry to the configured "
-                        "%ds until one lands (#1850)",
-                        self._drop_overdue_streak, _DROP_RETRY_S, interval_s,
-                    )
+            # #1850 — only count, and only speak, where the drop-retry is
+            # actually in play. The same two conditions the scheduling gate
+            # below uses, because a budget spent on polls that never used the
+            # retry is not a budget, and a stand-down message about a retry
+            # that never ran is not information.
+            if not nightly and _portal is not None:
+                if _drop_anchor_advanced(_prev_anchor, _cap_anchor):
+                    self._drop_overdue_streak = 0
+                elif _drop_overdue(interval_s, _cap_anchor, _decision_now):
+                    self._drop_overdue_streak += 1
+                    if self._drop_overdue_streak == _DROP_RETRY_MAX_STREAK:
+                        _LOGGER.debug(
+                            "EU Data Act portal: %d polls with no fresh snapshot — "
+                            "standing down from the %ds drop-retry to the configured "
+                            "%ds until one lands (#1850)",
+                            self._drop_overdue_streak, _DROP_RETRY_S, interval_s,
+                        )
+            # Tracked unconditionally on purpose. The anchor is what the NEXT
+            # decision compares against, so letting it go stale while the
+            # portal is off would make the first armed poll read "no drop since
+            # forever" and spend the budget it was just spared.
             self._drop_anchor_seen = _cap_anchor
+            # #1850 (@indigomejor) — the streak block above counts and LOGS a
+            # stand-down from the drop-retry on entries where the drop-retry
+            # never ran: it sits before this gate, so a portal-less entry (and
+            # any entry at night) emitted "N polls with no fresh snapshot —
+            # standing down from the 60s drop-retry" while the gate below took
+            # the else branch and used the plain interval. His measured cadence,
+            # 621-643 s against a 600 s interval, is the proof that nothing
+            # stood down — the number in the message was true, the action it
+            # described never happened.
+            #
+            # Not only cosmetic, which is how it was reported: the streak also
+            # kept climbing while the portal was off, so arming the portal later
+            # began with the retry budget already spent and the fast retry never
+            # got its first poll.
             if not nightly and _portal is not None and _cap_anchor is not None:
                 sleep_s: float = _drop_anchored_sleep_s(
                     interval_s,
@@ -4891,25 +4886,11 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 await asyncio.sleep(sleep_s)
             if not self._started:
                 break
-            # v2.8.0 — pre-flight watchdog. If we are on the
-            # hybrid_full strategy and every VIN has been stale +
-            # failing for >2x scan_interval, silently re-authenticate
-            # before attempting the next poll. No-op for every other
-            # strategy and for healthy hybrid_full sessions.
-            try:
-                await self._maybe_run_stale_watchdog()
-            except Exception as wd_err:  # noqa: BLE001
-                # Watchdog must NEVER break the poll loop.
-                _LOGGER.debug(
-                    "VW Group Connect: stale watchdog itself raised %s, "
-                    "ignored.",
-                    type(wd_err).__name__,
-                )
             try:
                 # Lazy-initialise per-VIN tracking so tests bypassing __init__ work.
                 if not hasattr(self, "vehicle_success"):
                     self.vehicle_success = {}
-                # #1434 — this background hybrid_full loop is the actual periodic
+                # #1434 — this background loop is the actual periodic
                 # driver (update_interval is None; _async_update_data is not the
                 # periodic path here), so it needs its own _active_vins() filter.
                 # Without it, a vehicle the user disabled in HA keeps being polled
@@ -4978,6 +4959,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                         _LOGGER.debug("Poll failed for %s: %s", mask_vin(vin), type(result).__name__)
                         old = self.vehicles.get(vin, {})
                         old["_poll_failed"] = True
+                        self._redecide_stale(old)
                         fresh[vin] = old
                         self.vehicle_success[vin] = False
                         self.vehicle_failure_count[vin] = (
@@ -5081,6 +5063,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                             else:
                                 old = self.vehicles.get(vin, {})
                                 old["_poll_failed"] = True
+                                self._redecide_stale(old)
                                 fresh[vin] = old
                                 self.vehicle_success[vin] = False
                                 self.vehicle_failure_count[vin] = (
@@ -5113,6 +5096,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                             )
                             old = self.vehicles.get(vin, {})
                             old["_poll_failed"] = True
+                            self._redecide_stale(old)
                             fresh[vin] = old
                             self.vehicle_success[vin] = False
                             self.vehicle_failure_count[vin] = (
@@ -5207,7 +5191,7 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                         except Exception:  # noqa: BLE001
                             pass
                     else:
-                        fresh[vin] = self.vehicles.get(vin, {})
+                        fresh[vin] = self._redecide_stale(self.vehicles.get(vin, {}))
                         self.vehicle_success[vin] = False
                         self.vehicle_failure_count[vin] = (
                             self.vehicle_failure_count.get(vin, 0) + 1
@@ -5928,6 +5912,89 @@ class VagConnectCoordinator(DataUpdateCoordinator):
             return found
         return registry.async_get_device(identifiers={(DOMAIN, vin)})
 
+    def _car_label(self, vin: str, data: dict) -> str:
+        """What to call this car when telling the user about it.
+
+        **The name the user gave it wins.** Renaming a device in Home Assistant
+        is an explicit statement about what the car is called, and a card that
+        then calls it something else reintroduces exactly the "which car does
+        this mean" problem it was meant to solve. @starwarsfan reported the
+        card reading ``Audi (myAudi)`` on a car he had named himself (#1896),
+        after a first fix that routed the card through the device-name helper
+        without ever consulting the registry — so the rename was invisible to
+        it.
+
+        The fallback is the derived device name, and the VIN is passed in
+        explicitly rather than taken from the snapshot. ``_device_name`` reads
+        ``vehicle["vin"]`` for its last-six fallback, and on a snapshot that
+        has gone thin that key can be missing — which is the second half of
+        what he saw: with neither a model nor a VIN to work with, the helper
+        returns the bare brand label. The VIN is known here; it is what raised
+        the card.
+        """
+        from .entity_base import _device_name  # noqa: PLC0415
+
+        try:
+            registry = dr.async_get(self.hass)
+            device = self._lookup_own_device(registry, vin)
+        except Exception:  # noqa: BLE001
+            # Naming a car must never be the reason a repair card fails to
+            # appear. A registry that cannot be read costs the nicer name,
+            # not the warning.
+            device = None
+        if device is not None:
+            chosen = (device.name_by_user or "").strip()
+            if chosen:
+                return chosen
+        return _device_name({**data, "vin": vin}, self.entry.data.get("brand", "vag"))
+
+    def _stale_threshold_s(self) -> int:
+        """How old a capture may get before the feed counts as frozen.
+
+        The same figure ``_enrich`` uses, lifted out so the verdict can be
+        re-decided without re-running the enrichment.
+        """
+        from .repairs import STALE_DATA_MIN_AGE_S  # noqa: PLC0415
+
+        interval_s = max(
+            int(
+                self.entry.options.get(CONF_SCAN_INTERVAL)
+                or self.entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+            )
+            * 60,
+            _CC_MIN_INTERVAL_S,
+        )
+        return max(STALE_DATA_MIN_AGE_S, 8 * interval_s)
+
+    def _redecide_stale(self, vehicle: dict[str, Any]) -> dict[str, Any]:
+        """Re-decide ``data_stale`` on a snapshot that is being republished.
+
+        The verdict is computed in exactly one place — ``_enrich`` — and
+        ``_enrich`` only runs on a poll that parsed vehicle data. Every path
+        that republishes the previous snapshot instead used to carry the old
+        verdict with it, and ``strip_runtime`` keeps every key without a
+        leading underscore, so it was written to disk and read back on load
+        too. The result was the failure this guards against (#1920): a *not
+        stale* verdict decided while the data was still fresh, saved,
+        restored, and held through every empty read afterwards — so the one
+        indicator whose job is to report a frozen feed could read "no"
+        indefinitely. @Mex-ai11's entry served a nine-day-old snapshot while
+        reporting itself fine (#1851).
+
+        Deciding it needs no fresh poll. The capture stamp is carried forward
+        and the age is measured against it, so a republished snapshot gets a
+        verdict that is true *now* rather than true when it was last read.
+
+        There is no "values moved" exemption here, deliberately. That
+        exemption (#1688) exists because a stamp can read old while readings
+        change underneath it — but on a republish nothing has changed by
+        definition, so applying it would be a way of answering "is this
+        stale" with "it was not, last time".
+        """
+        age = _capture_age_s(vehicle)
+        vehicle["data_stale"] = None if age is None else age >= self._stale_threshold_s()
+        return vehicle
+
     def _active_vins(self, vins: list[str]) -> list[str]:
         """Drop VINs whose HA device *the user* disabled, so a deactivated
         vehicle stops being polled and stops consuming the daily request budget.
@@ -6503,11 +6570,19 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 return False
             tokens = getattr(client, "_tokens", None)
             strategy = getattr(tokens, "strategy", "") if tokens else ""
-            # Hybrid_full / data_act_portal / device_grant(_portal) all flow
-            # through the browser-based DAG/IDP path (v2.6.0+).
+            # data_act_portal / device_grant(_portal) all flow through the
+            # browser-based DAG/IDP path (v2.6.0+).
+            #
+            # ``hybrid_full`` used to be listed here as a fourth. It was never
+            # a strategy any sign-in writes: the hybrid flow takes it as a
+            # keyword and stamps nothing, so its token set carries the empty
+            # default. Comparing against it could only ever be False, and this
+            # observation reported one capability short for those entries.
+            # The same dead value also gated a recovery watchdog, which is why
+            # tests/test_strategy_labels_are_paired.py now pins every consumed
+            # label against the ones the code can actually produce.
             return strategy in (
-                "hybrid_full", "data_act_portal", "device_grant",
-                "device_grant_portal",
+                "data_act_portal", "device_grant", "device_grant_portal",
             )
 
         # Vehicle-data capabilities: scan VINs for a non-None field.
@@ -7676,9 +7751,15 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 else (False if _moved else _age >= _threshold_s)
             )
             if _age is not None and _age >= _threshold_s and not _moved:
+                # #1896 — name the car the way the device page names it, from
+                # the same helper, so the two cannot drift apart. A warning that
+                # says only "***022149" is unactionable on a two-car account:
+                # the reporter had an Audi and a Škoda and could not tell which
+                # one it meant without looking the VIN up.
                 raise_issue_stale_data(
                     self.hass, self.entry.entry_id, _vin_sd,
                     masked_vin=mask_vin(_vin_sd), age_hours=int(_age // 3600),
+                    car=self._car_label(_vin_sd, data),
                 )
             else:
                 clear_stale_data_issue(self.hass, self.entry.entry_id, _vin_sd)
@@ -7774,7 +7855,44 @@ class VagConnectCoordinator(DataUpdateCoordinator):
                 data["vehicle_state"] = "CHARGING"
             elif online is True:
                 data["vehicle_state"] = "PARKED"
-            # else: is_online unknown + no driving/charging → leave unset (unknown)
+            elif (
+                data.get("is_driving") is False
+                and data.get("is_charging") is False
+            ):
+                # Discussion #1415 (@theblarney1) — a portal-fed car never gets
+                # here otherwise, and the sensor sat permanently unknown.
+                #
+                # Reaching this branch already means ``online`` is None: False
+                # is taken by the OFFLINE branch at the top and True by the
+                # PARKED branch directly above. An explicit ``online is None``
+                # here read well and was removed after the mutation check
+                # could not make its absence fail — a condition no test can
+                # pin is documentation pretending to be logic, so the
+                # reasoning is written here instead.
+                #
+                # The EU Data Act portal sends ``is_online`` ZERO times
+                # (measured: no writer for it anywhere in _eu_data_act.py), so
+                # ``online`` is always None on such a car, and none of the four
+                # branches above could fire. It does send the other two
+                # affirmatively — ``is_driving`` True/False from the standstill
+                # signal, ``is_charging`` from the charging state — so "not
+                # driving and not charging" is a statement the feed actually
+                # makes, not an absence being read as a negative.
+                #
+                # That distinction is why this is ``is False`` and not ``not
+                # data.get(...)``. A falsy test would also match None and
+                # stamp PARKED on a car that told us nothing, which is exactly
+                # the fabrication Hard Rule #8 forbids. With identity checks
+                # the last row of the truth table — nothing known at all —
+                # still yields unknown.
+                #
+                # Worth being clear about the scope, because the public
+                # diagnosis of this was narrower and wrong: it is not a
+                # CUPRA/SEAT problem and not the 403 wall. ``vehicle_state`` is
+                # derived here, channel-agnostically, for every brand, so the
+                # sensor was unknown on EVERY portal-fed car of every brand.
+                data["vehicle_state"] = "PARKED"
+            # else: nothing affirmative either way → leave unset (unknown)
 
         # Derive is_driving from vehicle_state if client didn't set it
         if not data.get("is_driving") and data.get("vehicle_state") == "DRIVING":

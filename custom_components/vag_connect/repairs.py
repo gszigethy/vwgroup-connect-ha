@@ -22,6 +22,7 @@ v2.0.0 (Big-Bang):
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 import logging
@@ -688,13 +689,22 @@ def raise_issue_stale_data(
     *,
     masked_vin: str,
     age_hours: int,
+    car: str | None = None,
 ) -> None:
     """Surface a car whose data has not refreshed in a long time (per-VIN).
 
     WARNING, not error: last-known values still show, it is not a hard failure —
-    the car may simply be parked and asleep, or its EU Data Act feed may have
-    lapsed. Dismissible; auto-clears the moment a fresher capture arrives. Keyed
-    per VIN so a multi-car account isolates the stale one.
+    the car may simply be parked and asleep, or its data source may have lapsed.
+    Dismissible; auto-clears the moment a fresher capture arrives. Keyed per VIN
+    so a multi-car account isolates the stale one.
+
+    #1896 (@starwarsfan) — ``car`` is how the card names the vehicle, and it is
+    the same label the device page uses ("Audi Q4 e-tron"). The title used to
+    carry the masked VIN alone, which on his two-car setup meant the warning
+    told him something was wrong without telling him *what*: ``***022149`` is
+    only recognisable to someone who has gone and looked it up. Falls back to
+    the masked VIN when no label is available, which is strictly what it did
+    before.
     """
     # #1626 — the issue id must NOT embed the raw VIN: it is dumped verbatim in
     # config-entry diagnostics (bypassing the VIN redaction) and has leaked a full
@@ -709,7 +719,11 @@ def raise_issue_stale_data(
         is_persistent=False,
         severity=ir.IssueSeverity.WARNING,
         translation_key="stale_data",
-        translation_placeholders={"vin": masked_vin, "age": str(age_hours)},
+        translation_placeholders={
+            "car": car or masked_vin,
+            "vin": masked_vin,
+            "age": str(age_hours),
+        },
         # learn_more_url belongs on the issue, NOT in the translations schema
         # (Hassfest rejects it there).
         learn_more_url="https://github.com/its-me-prash/vwgroup-connect-ha/issues/465",
@@ -764,6 +778,44 @@ def clear_issue_historical_timeout(hass: HomeAssistant, entry_id: str, vin: str)
         hass, DOMAIN, f"{entry_id}_historical_timeout_{mask_vin(vin)}"
     )
     ir.async_delete_issue(hass, DOMAIN, f"{entry_id}_historical_timeout_{vin}")
+
+
+def sweep_legacy_raw_vin_issues(
+    hass: HomeAssistant, entry_id: str, vins: Iterable[str]
+) -> None:
+    """Delete repair cards whose id still carries a raw VIN.
+
+    A repair's ``issue_id`` lands verbatim in Home Assistant's own
+    config-entry diagnostics, which this integration's VIN redaction never
+    sees. #1768 stopped new ``historical_timeout`` cards being created with a
+    raw VIN, and the changelog for v4.12.0 said "any card created before this
+    update is cleared on upgrade so nothing lingers".
+
+    **It did not.** The legacy delete lives inside
+    ``raise_issue_historical_timeout`` and ``clear_issue_historical_timeout``,
+    so it only runs when that same repair is next raised or cleared — and for
+    an export sitting in ``timed_out`` neither ever happens. The raise path
+    builds its work list from ``state == "pending"`` only, and the clear path
+    has one caller: a manual user off-switch. So a card raised before the
+    upgrade survives it, indefinitely.
+
+    Measured rather than assumed: a user running v5.1.1 — two releases past
+    the "fix" — uploaded a diagnostics file to a public issue that still
+    carried the full VIN in that id.
+
+    This is the sweep the changelog promised. One shot at setup, per known
+    VIN; ``async_delete_issue`` is idempotent, so an id that was never there
+    costs nothing.
+
+    Scoped to ``historical_timeout`` deliberately. The ``stale_data`` sibling
+    (#1626) has the same id shape but not the same gap: its clear runs inside
+    ``_enrich`` on every poll, so its legacy id is swept on the first poll
+    after an upgrade. A sweep for it would be dead code.
+    """
+    for vin in vins:
+        if not isinstance(vin, str) or not vin:
+            continue
+        ir.async_delete_issue(hass, DOMAIN, f"{entry_id}_historical_timeout_{vin}")
 
 
 # ─── v2.0.0 Repair-Flow Handler ──────────────────────────────────────────

@@ -25,6 +25,7 @@ from .._util import (
 from ..exceptions import (
     APIError,
     AuthenticationError,
+    CommandFailureReason,
     PortalSessionExpiredError,
     SpinError,
     VehicleCommandError,
@@ -375,6 +376,15 @@ def raise_if_leg3_refusal(err: Exception, command_name: str) -> None:
             "three checked out. Some cars only accept commands from the "
             "manufacturer's own app, which authenticates in a way an "
             "open-source client cannot reproduce. Reads are unaffected.",
+            # #584 (@panther7) \u2014 the kind was measured four lines up and then
+            # thrown away, so the coordinator logged "classified as unknown"
+            # directly above this sentence. Passing it keeps the markers in
+            # ``leg3_refusal_kind`` as their single home while the verdict
+            # travels with the error. NOT ``ATTESTATION_LOCKED``, which marks
+            # the control unavailable for 24 h: this is a grant gap, not a
+            # device-attestation challenge, and hiding his Lock button is a
+            # change nobody asked for.
+            failure_reason=CommandFailureReason.CLIENT_IDENTITY_REFUSED,
         ) from err
     if kind == "schema":
         # Observed on a 2017 car for setSettings carrying
@@ -389,6 +399,14 @@ def raise_if_leg3_refusal(err: Exception, command_name: str) -> None:
             "forbidden \u2014 this model's service version most likely does "
             "not accept this setting at all, even though your account "
             "is allowed to send it. Other commands are unaffected.",
+            # The comment above says it: the account IS allowed to send this,
+            # the car's older schema is what rejects it. That is what
+            # ``WRONG_API_PROFILE`` means ("newer model uses a different
+            # endpoint version"), and it is one of the members that records the
+            # cause without touching availability \u2014 which is why the line above
+            # can say "we do not hide the control" and now be true of the stat
+            # as well as of the prose.
+            failure_reason=CommandFailureReason.WRONG_API_PROFILE,
         ) from err
 
 
@@ -5177,7 +5195,20 @@ class VWEUClient(CariadBaseClient):
             d.auxiliary_heating_remaining_min = int(aux_rem)
 
         # ── Readiness / online ─────────────────────────────────────────────────
-        d.is_online = v(raw, "readiness", "readinessStatus", "value", "connectionState", "isOnline") is True
+        # Tri-state on purpose. ``v()`` returns None when the path is absent,
+        # and ``None is True`` collapsed that to a definite False — so a
+        # readiness reading that never arrived was reported as the car being
+        # offline, which is exactly what models.py forbids in writing: "Parser
+        # miss must NOT default to 'vehicle parked + offline'." vw_na, skoda
+        # and seat_cupra all check the type first; this connector did not, and
+        # it serves Audi as well as Volkswagen EU. On a feed that has stopped,
+        # the field stops arriving too, so the entry confidently reported the
+        # car offline while the official app showed it online (#1851, #1921).
+        # Downstream is already tri-state aware: coordinator.py reads only an
+        # explicit False as OFFLINE and leaves None unknown (#923).
+        _ready = v(raw, "readiness", "readinessStatus", "value", "connectionState", "isOnline")
+        if isinstance(_ready, bool):
+            d.is_online = _ready
         # v2.2.0 Phase 7 PR #2 — telematics modem daily power budget.
         # When False the modem is rationing wake-ups to preserve 12V —
         # long poll intervals are the user-visible symptom. Surfaced

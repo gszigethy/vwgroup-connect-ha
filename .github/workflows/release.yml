@@ -48,21 +48,10 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           python3 << 'PYTHON'
-          import re, os
+          import re, os, sys
 
           version = os.environ["VERSION"]
           changelog = open("CHANGELOG.md").read()
-
-          # Extract this version's section verbatim — keep all subheadings
-          # as written in CHANGELOG.md.
-          pattern = rf"## \[{re.escape(version)}\][^\n]*\n(.*?)(?=\n## \[|\Z)"
-          match = re.search(pattern, changelog, re.DOTALL)
-          changelog_section = match.group(1).strip() if match else ""
-          # Release notes are English only: drop the " / German" half of the
-          # changelog's bilingual subheadings ("### Added / Hinzugefügt").
-          changelog_section = re.sub(
-              r"^(#{3,4} [^\n]*?) / [^\n]*$", r"\1", changelog_section, flags=re.M
-          )
 
           # All previous versions (semver, PEP 440 pre-releases and fork
           # releases like 4.11.0-5), newest first. Date is captured
@@ -74,7 +63,7 @@ jobs:
           # Last 3 prior versions for the "Recent releases" pointer
           recent_prior = [(v, d) for v, d in all_entries if v != version][:3]
 
-          repo = os.environ["GITHUB_REPOSITORY"]
+          repo = os.environ.get("GITHUB_REPOSITORY", "its-me-prash/vwgroup-connect-ha")
 
           lines: list[str] = []
 
@@ -84,14 +73,64 @@ jobs:
           lines.append("Home Assistant integration for Audi · VW · Škoda · SEAT · CUPRA · Porsche · VW US/CA.")
           lines.append("")
 
-          # ── What changed in this release ─────────────────────────────────
-          lines.append("## What's new in this release")
-          lines.append("")
-          if changelog_section:
-              lines.append(changelog_section)
-          else:
-              lines.append("_See the [CHANGELOG.md](" +
-                           f"https://github.com/{repo}/blob/v{version}/CHANGELOG.md) for details._")
+          # -- What changed in this release -----------------------------------
+          # The SHORT form, one line per change. This step used to paste the
+          # version's entire CHANGELOG section verbatim, which for v5.1.0 came
+          # to 44 681 characters over 653 lines -- and this body is what Home
+          # Assistant shows in its update dialog and HACS in the store
+          # listing, so the part a reader needs first was buried under the
+          # measurement and reasoning behind each fix.
+          #
+          # Nothing is maintained twice: build_release_notes derives each line
+          # from the entry's own bold title and links CHANGELOG.md for the long
+          # form. Its docstring carries the reasoning.
+          sys.path.insert(0, "scripts")
+          from build_release_notes import build as build_short_notes
+
+          degraded = ""
+
+          try:
+              lines.append(build_short_notes(changelog, version))
+          except SystemExit as exc:
+              # No section for this version, or one with no entries — which
+              # happens if a tag is pushed before [Unreleased] is renamed.
+              #
+              # The release is still published: failing here would leave a
+              # pushed, immutable tag with no GitHub Release and no
+              # vag_connect.zip, which is worse than a thin body. What changed
+              # is that it no longer passes for a normal release. Before, this
+              # path printed a ::warning:: nobody reads and a body that looked
+              # deliberate — so the tag succeeded, the run stayed green, and
+              # every user saw an empty-looking release with nothing saying
+              # anything had gone wrong. The body now says so itself, and the
+              # "Release-Notes vollständig?" step below turns the run red
+              # once the release and the zip exist.
+              print(f"::error::release body has no change list: {exc}")
+              degraded = "true"
+              lines.append("## The change list could not be generated")
+              lines.append("")
+              lines.append(
+                  "**This release page is incomplete.** No `## "
+                  f"[{version}]` section with entries was found in "
+                  "CHANGELOG.md when these notes were built, so the usual "
+                  "one line per change is missing from this page."
+              )
+              lines.append("")
+              lines.append(
+                  "The release itself is unaffected — the integration and "
+                  "`vag_connect.zip` are exactly as tagged. Everything that "
+                  "changed is in the changelog:"
+              )
+              lines.append("")
+              lines.append(
+                  f"➜ [CHANGELOG.md → v{version}]"
+                  f"(https://github.com/{repo}/blob/v{version}/CHANGELOG.md)"
+              )
+              lines.append("")
+              lines.append(
+                  "**Diese Release-Seite ist unvollständig** — die "
+                  "Änderungsliste steht im verlinkten Changelog."
+              )
           lines.append("")
 
           # ── Recent releases pointer ──────────────────────────────────────
@@ -142,6 +181,14 @@ jobs:
           with open("/tmp/release_notes.md", "w") as f:
               f.write(notes)
           print(notes)
+
+          # The flag the verification step reads. Written last, so it reflects
+          # a body that was actually assembled and written out rather than a
+          # run that died halfway.
+          gh_output = os.environ.get("GITHUB_OUTPUT")
+          if degraded and gh_output:
+              with open(gh_output, "a") as fh:
+                  fh.write("degraded=true\n")
           PYTHON
 
       - name: Build integration ZIP
@@ -151,7 +198,7 @@ jobs:
             -x "**/__pycache__/*" "**/*.pyc" "**/.mypy_cache/*"
           echo "ZIP size: $(du -sh ../vag_connect.zip | cut -f1)"
 
-      - name: Create GitHub Release
+      - name: GitHub Release erstellen
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64  # v3
         with:
           files: vag_connect.zip
@@ -171,3 +218,34 @@ jobs:
           prerelease: ${{ vars.FORK_PRERELEASE == 'true' || contains(github.ref_name, 'a') || contains(github.ref_name, 'b') || contains(github.ref_name, 'rc') || contains(github.ref_name, 'pre') || contains(github.ref_name, '-dev') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Deliberately the LAST step, and deliberately not a guard on the ones
+      # above it. If the notes step could not build a change list it still
+      # publishes the release, because a pushed tag is immutable and a tag
+      # with no Release and no vag_connect.zip is worse than a thin body — so
+      # by the time this runs, the release and the asset exist and nothing is
+      # lost. What this step adds is that the run cannot end green over it.
+      #
+      # The failure it catches is pushing a tag before [Unreleased] has been
+      # renamed to the version (RELEASE_PROCESS.md, step 2). That used to
+      # publish a release body with no change list at all, on a green run,
+      # with a ::warning:: in the log as the only trace — and the release body
+      # is what Home Assistant shows in its update dialog and HACS in the
+      # store listing, so everybody saw an empty-looking release and nothing
+      # said why.
+      - name: Release-Notes vollständig?
+        if: always()
+        run: |
+          if [ "${{ steps.notes.outputs.degraded }}" = "true" ]; then
+            echo "::error::Release v${{ steps.version.outputs.version }} was published WITHOUT a change list."
+            echo ""
+            echo "The release and vag_connect.zip exist and are correct; only this"
+            echo "page's summary is missing. The usual cause is tagging before"
+            echo "CHANGELOG.md's [Unreleased] heading was renamed to the version."
+            echo ""
+            echo "To repair it without touching the tag (tags are immutable):"
+            echo "  1. rename the [Unreleased] heading to [${{ steps.version.outputs.version }}] on main"
+            echo "  2. re-run this workflow, which rewrites the release body in place"
+            exit 1
+          fi
+          echo "Release notes carried their change list."
