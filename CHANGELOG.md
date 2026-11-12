@@ -46,6 +46,20 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
+## [5.3.0-dev1] - 2026-11-12
+
+### Changed
+
+- **Fork rebased onto upstream v5.3.0.** This includes all upstream changes since this fork's `5.1.2-dev1` (upstream v5.2.0 to v5.3.0). The fork keeps only its own CI, release tooling and the Volkswagen Android app version watcher on top. ([gszigethy/vwgroup-connect-ha#121](https://github.com/gszigethy/vwgroup-connect-ha/pull/121))
+- **Fork CI keeps branch validation, coverage and SonarCloud analysis.** It follows upstream's current CI. Upstream-only automation and HACS validation stay disabled. ([gszigethy/vwgroup-connect-ha#121](https://github.com/gszigethy/vwgroup-connect-ha/pull/121))
+- **Development releases use `X.Y.Z-devN` versions and GitHub pre-releases.** Release links point at the fork. The release notes builder reads upstream's current changelog format and also accepts `-devN` sections. ([gszigethy/vwgroup-connect-ha#121](https://github.com/gszigethy/vwgroup-connect-ha/pull/121))
+- **The Volkswagen Android app version watcher is retained.** ([gszigethy/vwgroup-connect-ha#121](https://github.com/gszigethy/vwgroup-connect-ha/pull/121))
+- **Fork guidance and the Companion compatibility policy are retained.** ([gszigethy/vwgroup-connect-ha#121](https://github.com/gszigethy/vwgroup-connect-ha/pull/121))
+
+### Notes
+
+- This fork is used for development only. The next release on this base will be `5.3.0-dev2`.
+
 ## [5.3.0] - 2026-11-11 — "Through the front door / Durch die Vordertür"
 
 ### Hinzugefügt / Added
