@@ -50,6 +50,7 @@ from .._util import (
     drop_charge_sentinel,
     drop_odometer_sentinel,
     is_https_on_domains,
+    retry_after_seconds,
 )
 from ..exceptions import (
     AuthenticationError,
@@ -194,6 +195,103 @@ _PORTAL_CALLBACK_PATH = "/services/callbacklogin"
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _MAX_LOGIN_REDIRECTS = 10
 
+# ── Login-redirect allowlist, ported from the operator's own reference ────────
+# The portal operator (@VWGroupDatahub) implemented this login flow in two
+# community projects himself and asked the remaining maintainers, in the service
+# notice of 2026-10-06, to "review and adopt the relevant login-flow changes
+# already implemented for EVCC and ioBroker.vw-connect". Those two carry one
+# guard this module did not: every login redirect must target the identity
+# provider or the portal, and nothing else.
+#
+# Why it matters here more than in their Go version: Go's http.Client applies the
+# RFC rules for us — body dropped on 301/302/303, kept on 307/308 — and the
+# reference rejects a foreign hop in CheckRedirect BEFORE the request is made, so
+# the question of what travels never arises. This module walks the chain itself
+# with allow_redirects=False, and measured before this guard existed:
+#
+#   * a 307/308 across a host boundary kept method AND body, and the body of the
+#     first hop is the username and password. The drop below only covers
+#     301/302/303, which is correct HTTP and was never the whole problem;
+#   * the Referer was set on every hop including a cross-host one, so the
+#     previous URL — which on an OIDC chain carries ``code`` and ``state`` —
+#     reached a foreign host even though Authorization and Cookie were stripped;
+#   * the foreign response's HTML was handed to the landing classifier, which
+#     lets whoever controls that host steer the login verdict.
+#
+# There is no PKCE on this path (none in the reference either — it is a property
+# of the portal's flow, not of this client), so a leaked ``code`` would be
+# redeemable. The allowlist closes all three at once by never making the request.
+#
+# Hosts are derived from the two base constants rather than written out again, so
+# a move of either leaves one place to change. Compared as ``netloc`` and
+# case-folded, which is what Go's ``strings.EqualFold(u.Host, …)`` does: a URL
+# carrying an explicit ``:443`` is a different Host there too, and matching the
+# reference matters more than being clever about it.
+_LOGIN_HOSTS: frozenset[str] = frozenset({
+    (urlparse(_IDENTITY_BASE).netloc or "").lower(),
+    (urlparse(_PORTAL_BASE).netloc or "").lower(),
+})
+
+# The portal's authenticated landing page. The reference pins this shape in a
+# table (``TestIsUserPage``) and the lookalikes it rejects are the point:
+# ``/content/euda-other/…`` is not this prefix, ``notuser.html`` is not this
+# filename, and ``…/user.html/`` with a trailing slash is not this page either.
+_USER_PAGE_PREFIX = "/content/euda/"
+_USER_PAGE_SUFFIX = "/user.html"
+
+# The two callbacks that complete the optional marketing-consent step without
+# granting anything. The reference validates scheme, host AND the exact path,
+# because "contains a callback parameter" is not the same as "is the callback".
+_MARKETING_CALLBACK_PATHS = (
+    "/oidc/v1/oauth/client/callback",
+    "/oidc/v1/oauth/client/callback/success",
+)
+
+
+def _is_login_host(netloc: str) -> bool:
+    """True when *netloc* is the identity provider or the portal.
+
+    ``isLoginHost`` in the reference. Everything else is refused rather than
+    contacted — see the note above ``_LOGIN_HOSTS``.
+    """
+    return (netloc or "").lower() in _LOGIN_HOSTS
+
+
+def _is_user_page(url: str) -> bool:
+    """True when *url* is the portal's authenticated landing page.
+
+    ``isUserPage`` in the reference, including the cases its table pins: query
+    and fragment are irrelevant, a trailing slash or an extra segment is not
+    this page, and a lookalike prefix, filename or host is not either.
+
+    Parsed components only, never substring tests on the raw URL: the reference
+    table contains ``<portal>.example.org`` precisely because a
+    ``startswith("https://portal")`` check would accept it.
+    """
+    parts = urlparse(url)
+    if parts.scheme != "https":
+        return False
+    if (parts.netloc or "").lower() != (urlparse(_PORTAL_BASE).netloc or "").lower():
+        return False
+    path = parts.path or ""
+    return path.startswith(_USER_PAGE_PREFIX) and path.endswith(_USER_PAGE_SUFFIX)
+
+
+def _valid_marketing_callback(url: str) -> bool:
+    """True when *url* is one of the two real marketing-consent callbacks.
+
+    ``validMarketingCallback`` in the reference: https, the identity provider's
+    host, and one of two exact paths. A callback parameter that points anywhere
+    else is refused — that is how a consent page would otherwise become a
+    redirect primitive.
+    """
+    parts = urlparse(url)
+    if parts.scheme != "https":
+        return False
+    if (parts.netloc or "").lower() != (urlparse(_IDENTITY_BASE).netloc or "").lower():
+        return False
+    return (parts.path or "") in _MARKETING_CALLBACK_PATHS
+
 # Junk sentinels the portal uses for state STRINGS (no active session / single-
 # port car / infra not up / no reading). Any of these means "no value" → the
 # field stays None instead of surfacing the literal token as a phantom reading.
@@ -232,6 +330,17 @@ _PORTAL_OUTAGE_STATUSES = frozenset(_RETRIABLE_STATUSES | {429})
 # (→ "delivery_not_ready"). Splitting them keeps a normal wait from reading as a fault.
 _PORTAL_OUTAGE_STATUSES = frozenset({429, 500, 502, 503, 504})
 _PORTAL_RETRY_DELAYS = (3.0, 6.0)  # backoff (s) before giving up on a soft call
+# #1969 — the portal answers a burst with 429 and a SHORT, explicit
+# ``Retry-After`` ("try again in 4 seconds"), and we honoured none of it. 429 is
+# kept out of _RETRIABLE_STATUSES deliberately ("one quiet skip, no
+# backoff-retry"), which is right as a refusal to hammer and wrong as an answer
+# to a server that has just said exactly how long to wait. Waiting out a
+# cooldown the server itself named is the opposite of hammering.
+#
+# Capped, and taken at most ONCE per call: a server that keeps answering 429
+# must not be able to hold a poll open. A cooldown far beyond this cap is not a
+# cooldown but an outage, and the existing path already reports that as one.
+_PORTAL_RETRY_AFTER_MAX_S = 30
 # On a transient download error we fall back to the next-older listed dataset
 # (TommiG1 loops the listing newest→oldest). Capped so a full-portal outage where
 # every file 5xxs cannot turn one poll into many hammering requests.
@@ -1621,7 +1730,8 @@ def _overflow_flag(raw: str | None, current: bool | None) -> bool | None:
 def _parse_pers_location(value: Any) -> tuple[float | None, float | None]:
     """#1378/#923 — parse the MEB portal ``persLocation`` leaf into a validated
     ``(lat, lon)``. Škoda Elroq (and other MEB cars) DO ship the vehicle position
-    in the continuous feed under ``persLocation`` = ``"[50.799918, 4.408567]"`` —
+    in the continuous feed under ``persLocation`` = ``"[<lat>, <lon>]"`` (a bracketed decimal pair as a
+    *string*, six decimals) —
     the sample #923 was waiting for (the position module's docstring assumed the
     continuous feed carried none). Returns ``(None, None)`` unless the value is a
     two-element numeric pair inside real-world bounds and not the null-island
@@ -2127,7 +2237,10 @@ def map_dataset_to_vehicle_data(
         candidate lists, no drift if the alias order changes. ``field_ts`` holds
         ONLY genuine per-point timestamps (the dataset floor is filtered out in
         _walk_fields), so a recorded entry always means the sensor's freshness is
-        a real "point", never the ~15-min dataset floor. Ambiguity reuses the same
+        a real "point", never the floor that stampless fields inherit from
+        ``_dataset_captured_ts`` — which is the newest CAR-CAPTURED stamp in
+        the export, not a 15-minute age: #1688 had that field frozen five days
+        behind every data point in the same file. Ambiguity reuses the same
         ``contested`` map the freshness resolver already built: a genuine, non-mode
         -resolvable tie on the chosen leaf (or one of the call's aliases) is noted
         so the reading's uncertainty is visible per entity. Opt-in per call site
@@ -3610,9 +3723,36 @@ def map_dataset_to_vehicle_data(
         if d.oil_service_at is None:
             d.oil_service_at = _svc(oil_days)
 
-    lock = first("lock_state", "central_lock_state")
-    if lock is not None and d.doors_locked is None:
-        d.doors_locked = str(lock).lower() in ("locked", "safe")
+    # ``lock_state`` is a CHARGING field and never decided the doors. Read and
+    # discarded, not mapped.
+    #
+    # The official data dictionary puts it in cluster "All Data, **Charging**",
+    # next to ``plug_lock_state`` (44534a85), ``charging_plug1_lock_state`` and
+    # ``charging_plug2_lock_state``. Every field that genuinely describes a door
+    # or a closure sits in "All Data, **Vehicle Access**" — all six
+    # ``locked_state_*``, all ``safe_state_*``, all ``open_state_*``, and
+    # ``flap_lock_state``. Cluster membership is the same argument the plug/flap
+    # targets in models.py already turn on, so it decides this too.
+    #
+    # The data agrees. In the two portal payloads on record that carry BOTH
+    # spellings, the string and the per-door enums disagree in OPPOSITE
+    # directions — which is what two different subjects look like, not a
+    # contradiction:
+    #   locked_state_* = 2 (locked) with lock_state = "unlocked"
+    #   locked_state_* = 3 (unlocked) with lock_state = "locked"   (#709)
+    # And the observed value set is ``locked`` / ``unlocked`` / **``new``** —
+    # "new" is not a state a door reports.
+    #
+    # What it actually names is NOT established: the dictionary says only
+    # "Describes the lock state", and ``plug_lock_state`` exists separately, so
+    # folding it into the plug would be a guess. We publish nothing rather than
+    # guess, and keep consuming it so the Scout does not re-file a KNOWN
+    # (catalogued) field on every poll — the #958/#969/#970 failure mode.
+    #
+    # ``central_lock_state`` is deliberately NOT consumed here any more: it
+    # appears nowhere in the dictionary, so if a car ever sends it that is a
+    # genuinely new field and the Scout should surface it for discovery.
+    first("lock_state")
 
     whf = first("window_heating_state_front")
     if whf is not None and d.window_heating_front is None:
@@ -3631,18 +3771,54 @@ def map_dataset_to_vehicle_data(
     # doors_locked from the PER-DOOR lock states. This is the authoritative
     # signal on the portal's payload (the bare `locked` field is absent/stale —
     # it was wrongly reporting an unlocked car), so it OVERRIDES the block above.
-    _locks = [
-        _to_int(first("locked_state_front_left_door")),
-        _to_int(first("locked_state_front_right_door")),
-        _to_int(first("locked_state__rear_left_door")),   # double underscore in spec
-        _to_int(first("locked_state_rear_right_door")),
-    ]
+    # Door order is load-bearing below: the aggregate's capture stamp breaks a
+    # tie by this order, so front-left wins a tie rather than an alphabetical
+    # accident.
+    _lock_names = (
+        "locked_state_front_left_door",
+        "locked_state_front_right_door",
+        "locked_state__rear_left_door",   # double underscore in spec
+        "locked_state_rear_right_door",
+    )
+    _locks = [_to_int(first(n)) for n in _lock_names]
     _tail_lock = _to_int(first("locked_state_tailgate"))
-    _lock_vals = [v for v in (*_locks, _tail_lock) if v in (2, 3)]
+    # #1950 (@Adcad1970, Audi A6 e-tron) — the tailgate is NOT a door. It used to
+    # be folded into the aggregation below, which broke both ways on a delivery
+    # that carried only ``locked_state_tailgate``: doors_locked became an exact
+    # mirror of trunk_locked, and a locked tailgate asserted "doors locked" on no
+    # door evidence at all. Same hazard the dotted-spelling note at the bare
+    # ``locked`` read above already guards against, in the other dialect — and the
+    # historical ``door_info.*`` path below already aggregates doors only. So the
+    # door verdict comes from door fields, and the tailgate goes to trunk_locked
+    # alone; a tailgate-only payload now leaves doors_locked unset (unknown)
+    # rather than stating something no field reported.
+    _lock_vals = [v for v in _locks if v in (2, 3)]
     if _lock_vals:
         d.doors_locked = all(v == 2 for v in _lock_vals)  # any unlocked → False
+        # #1950 (@Adcad1970) — stamp the verdict with the OLDEST reporting
+        # door's capture time. An aggregate is only as trustworthy as its
+        # stalest member: if one leaf was captured two days ago, "all doors
+        # locked" is two days old however fresh the other three are, and the
+        # freshest member would advertise a confidence the verdict does not
+        # have. Only when EVERY reporting door carries a stamp — a leaf that
+        # reported without one would make the oldest-of-the-rest too new, and
+        # borrowing a sibling's time is the mistake this whole area is being
+        # corrected for. Recorded here, inside the assigning branch, so the
+        # stamp can never attach to a doors_locked that came from the bare
+        # ``locked`` read above or from another channel.
+        _reporting = [n for n, v in zip(_lock_names, _locks) if v in (2, 3)]
+        _stamps = [
+            (ts, n)
+            for n in _reporting
+            if (ts := (field_ts or {}).get(n)) is not None
+        ]
+        if len(_stamps) == len(_reporting):
+            _record("doors_locked", min(_stamps, key=lambda s: s[0])[1], tuple(_reporting))
     if _tail_lock in (2, 3) and d.trunk_locked is None:
         d.trunk_locked = _tail_lock == 2
+        # Single field, so no policy question: the tailgate's own stamp IS the
+        # verdict's stamp.
+        _record("trunk_locked", "locked_state_tailgate", ("locked_state_tailgate",))
     # v2.17.5 — the boolean ``trunk.locked`` dialect (dotted spelling so it never
     # collides with the door's bare ``locked``). "true" = trunk locked.
     # Consumed whatever the companion says (see _STATE_COMPANION_CONTAINERS);
@@ -3983,7 +4159,14 @@ def map_dataset_to_vehicle_data(
     # start scaling values nobody has evidence about — but it does mean a new
     # distance mapping added BELOW this point silently opts out. Add it above,
     # or record its source leaf.
-    if _is_miles(first("mileage.unit", "range.unit", "distance_unit", "distanceUnit")):
+    # #1960 — the per-point cruising-range ``.unit`` companions are a second
+    # miles signal. Reading them here consumes them (so the Scout stops re-filing
+    # ``estimatedcruisingrange*.unit`` as unmapped) and lets a car that ships only
+    # this companion — not ``mileage.unit`` — still be detected as miles. A car
+    # reports one display unit, so OR-ing the two sources cannot mix km and miles.
+    if _is_miles(first("mileage.unit", "range.unit", "distance_unit", "distanceUnit")) or \
+            _is_miles(first("estimatedcruisingrangeprimary.unit",
+                            "estimatedcruisingrangesecondary.unit")):
         for _attr in ("odometer_km", "range_km", "electric_range_km",
                       "combustion_range_km", "secondary_engine_range_km",
                       "total_range_km", "service_km", "oil_service_km",
@@ -4359,10 +4542,16 @@ def map_dataset_to_vehicle_data(
     # #1780 — the one-time export spells these per side under its own container
     # and sends ON / OFF, which ``_truthy_light`` below already reads correctly.
     _pll = first(
-        "parking_light_left", "parking_lights_info.left_status.value"
+        "parking_light_left", "parking_lights_info.left_status.value",
+        # #1949/#2064/#2066 — the dialect that nests the per-side lights under a
+        # ``parkinglightstate`` container (VW / CUPRA / VW-commercial). Reads onto
+        # the existing parking_light_left/_right binary sensors and stops the
+        # Scout re-filing the nested spelling as new.
+        "parkinglightstate.parking_light_left",
     )
     _plr = first(
-        "parking_light_right", "parking_lights_info.right_status.value"
+        "parking_light_right", "parking_lights_info.right_status.value",
+        "parkinglightstate.parking_light_right",
     )
 
     def _truthy_light(raw: str | None) -> bool | None:
@@ -4548,18 +4737,40 @@ def map_dataset_to_vehicle_data(
         d.charging_scenario = _shorten_enum(_cscn)
         # #632 (@gr6803, CUPRA) — this portal firmware ships charging_scenario but
         # NOT current_charge_state, so the cs-derived is_charging above stayed OFF
-        # while an *_ACTIVE scenario proved the car was charging (plug_connected
-        # read null too). The three in-progress scenarios all end _ACTIVE
-        # (IMMEDIATELY_CHARGING_ACTIVE / CHARGING_TO_DEPARTURE_TIME_ACTIVE /
-        # OPTIMISED_CHARGING_ACTIVE); OFF / INVALID / *_FINISHED are idle. Lift
-        # ONLY (never clear) so a correctly-read car is untouched; an _ACTIVE
-        # scenario also proves the cable is in, so infer plug_connected only when
-        # the granular plug field was absent (read null).
-        if isinstance(d.charging_scenario, str) and \
-                d.charging_scenario.upper().endswith("_ACTIVE"):
-            d.is_charging = True
-            if d.plug_connected is None:
-                d.plug_connected = True
+        # while the car really was charging. The in-progress scenarios all end
+        # _ACTIVE (IMMEDIATELY_CHARGING_ACTIVE / CHARGING_TO_DEPARTURE_TIME_ACTIVE
+        # / OPTIMISED_CHARGING_ACTIVE).
+        #
+        # #1739 — but a *_ACTIVE scenario is the charging PLAN being active, which
+        # is ALSO true on an UNPLUGGED, idle car (scheduled/optimised charging)
+        # and on a plugged-in car still waiting for its departure time. So the
+        # scenario ALONE must not claim the car is charging or that the cable is
+        # in — that made an idle, unplugged Audi (@…, #1739) report its charging
+        # port as connected. The honest signal is live power: charging_power_kw
+        # > 0 means current is actually flowing, which proves BOTH that the car is
+        # charging and that the plug is connected. Gating on it keeps the #632
+        # CUPRA lift (a charging car reports power even when it ships no
+        # current_charge_state) without the Audi false-positive, and leaves the
+        # "plugged in, waiting for departure, 0 kW" state correctly not-charging.
+        # Lift ONLY (never clear); plug_connected otherwise comes from the real
+        # plug field, never from the plan.
+        _scn_up = d.charging_scenario.upper() if isinstance(d.charging_scenario, str) else ""
+        if _scn_up.endswith("_ACTIVE"):
+            # "IMMEDIATELY_CHARGING_ACTIVE" means the car is charging NOW — it
+            # cannot immediately-charge while unplugged — so it lifts on its own
+            # (the #632 CUPRA, which ships no current_charge_state). The SCHEDULED
+            # plans ("CHARGING_TO_DEPARTURE_TIME_ACTIVE" / "OPTIMISED_CHARGING_
+            # ACTIVE") are "active" as a PLAN even on an unplugged car or one still
+            # waiting for its departure time (#1739 Audi), so they lift ONLY when
+            # live power confirms current is actually flowing. Lift only (never
+            # clear); plug_connected otherwise comes from the real plug field.
+            _charging_now = _scn_up.endswith("IMMEDIATELY_CHARGING_ACTIVE") or (
+                d.charging_power_kw is not None and d.charging_power_kw > 0
+            )
+            if _charging_now:
+                d.is_charging = True
+                if d.plug_connected is None:
+                    d.plug_connected = True
 
     _icas = first("charging_state_report.immediate_action_state",
                   "immediate_charge_action_state", "immediate_action_state")
@@ -4781,6 +4992,13 @@ def map_dataset_to_vehicle_data(
     _bonnet_lock = _to_int(first("locked_state_front_engine_bonnet"))
     if _bonnet_lock in (2, 3):
         d.bonnet_locked = _bonnet_lock == 2
+        # #1950 — single field, same as the tailgate: its own stamp is the
+        # verdict's stamp. Inside the branch so an invalid 0/1 records nothing.
+        _record(
+            "bonnet_locked",
+            "locked_state_front_engine_bonnet",
+            ("locked_state_front_engine_bonnet",),
+        )
     # v4.7.11 (grounded on a competing EU-Data-Act reader's issue #53, 2026-09-12): a live
     # SEAT/CUPRA delivery showed safe_state_front_engine_bonnet=3 while the bonnet
     # was CLOSED (open_state_front_engine_bonnet=3=closed in that same dataset).
@@ -4798,8 +5016,72 @@ def map_dataset_to_vehicle_data(
         )
     ]
     _safe_present = [v for v in _safe_vals if v in (2, 3)]
-    if _safe_present:
-        d.closures_secured = all(v == 2 for v in _safe_present)
+    # An all-"3" door reading is not a verdict, so it must not produce one.
+    #
+    # Measured 2026-11-03 over every portal payload on this machine (4442 files:
+    # the attachment archive, our own tracker, and the competing readers' repos).
+    # Four deliveries carry safe_state at all, and in those four:
+    #
+    #   safe_state_front_right_door   3, 3, 3, 3   — a 2 has NEVER been seen
+    #   safe_state_rear_left_door     3, 3, 3, 3
+    #   safe_state_rear_right_door    3, 3, 3, 3
+    #
+    # and in THREE of the four the doors are demonstrably locked
+    # (``locked_state_* = 2``) with every ``open_state_* = 3`` (closed) and every
+    # window at 0. So the documented safe(2) is unobserved on the doors, and the
+    # old ``all(v == 2 …)`` could not be satisfied by any real car: the entity
+    # published "not secured" permanently, on locked and shut cars.
+    #
+    # This is the same rule v4.7.11 already applied to the bonnet and the
+    # tailgate, now reached by measurement instead of by the dictionary: a field
+    # that only ever reports its negative value carries no information. The
+    # difference is only HOW we know — for those two the dictionary documents no
+    # safe(2) at all; for the doors it documents one that no car sends.
+    #
+    # So require one observed 2 before claiming anything. A 2 proves the car
+    # implements the field, and from then on a 3 beside it is a real "unsafe"
+    # (that pairing keeps working, which is why the mixed 2/3 case still reads
+    # False). With no 2 anywhere the verdict stays None and the binary sensor
+    # simply does not appear — it is in the no-phantom list in binary_sensor.py.
+    #
+    # The trade-off, stated rather than hidden: a car that genuinely implements
+    # safe_state and reports every door unsafe would now say nothing instead of
+    # False. Nothing in the corpus looks like that, while "sends a constant 3"
+    # is 4 of 4 — and an actually open closure still surfaces on its own
+    # ``doors_open`` / ``trunk_open`` / ``hood_open`` entity.
+    # #1950 — record the two ingredients before the gate decides, because the
+    # gate can only see this delivery. The capability is what survives (carried
+    # in STATIC_MASTER_FIELDS); the all-unsafe observation is per delivery.
+    if 2 in _safe_present:
+        d.safe_state_implemented = True
+    elif _safe_present:
+        d.safe_state_all_unsafe = True
+    if 2 in _safe_present:
+        # Prash decision, 2026-10-28: this entity is published as "All closures
+        # secured", and it was deciding that from three doors. Measured before
+        # the change: three safe doors plus ``open_state_tailgate=2`` gave
+        # ``closures_secured=True`` while ``trunk_open=True`` sat on the same
+        # object. The name promised more than the arithmetic delivered, so the
+        # arithmetic was widened rather than the name narrowed.
+        #
+        # Widened with the OPEN state of the boot and the bonnet, and
+        # deliberately NOT with their ``safe_state_*`` fields. That is the whole
+        # reason those two were dropped in v4.7.11: a live SEAT/CUPRA delivery
+        # carried ``safe_state_front_engine_bonnet=3`` on a CLOSED bonnet, and
+        # the dictionary documents no safe(2) for either of them, so a "3" there
+        # is not a usable unsafe signal. ``d.trunk_open`` and ``d.hood_open`` are
+        # already parsed further up from the open_state enums plus their dotted
+        # and boolean dialects, so this inherits every spelling they handle.
+        #
+        # ``is not True`` and not ``is False``: a closure we cannot see must
+        # neither force a False nor block a True. So the claim is "every closure
+        # this delivery reported is secured" — which is as strong as the data
+        # allows, and it now goes False exactly where it used to lie.
+        d.closures_secured = (
+            all(v == 2 for v in _safe_present)
+            and d.trunk_open is not True
+            and d.hood_open is not True
+        )
     # Still CONSUME the two dropped leaves (their only consumer was the aggregate)
     # so the Scout does not re-report them as unmapped every poll; their unreliable
     # polarity means we read-and-discard rather than surface a value.
@@ -5756,6 +6038,37 @@ class EUDataActConnector:
         # returned None, so get_vehicle_data can tell a 404 "not provisioned yet"
         # (→ delivery_not_ready) apart from a 5xx/429 portal outage (→ portal_error).
         self._last_soft_status: int | None = None
+        # #1969 — throttling observability, and the reason it is PUBLIC like
+        # ``last_no_data_reason``: the diagnostics download reads attributes off
+        # this object by name, so a leading underscore would have made it a
+        # field nobody can see. (``_last_soft_status`` above claims in its own
+        # comment to be "surfaced as diagnostic sensors" and is in fact read
+        # nowhere outside this module — measured, 31.10.2026. Not fixed here,
+        # but not repeated either.)
+        #
+        # The open question these answer is whether this portal ever sends US a
+        # short ``Retry-After``. It was measured from the outside by a reader of
+        # the same portal, never on our own traffic, and a guess about a rate
+        # limit is how a poll loop gets paced wrongly. One user's diagnostics
+        # file now settles it: a count above zero with no seconds recorded means
+        # we are throttled and told nothing; a count of zero means this has
+        # never happened to us at all.
+        self.throttle_count = 0
+        self.last_retry_after_s: int | None = None
+        self.last_throttle_honoured: bool | None = None
+        # #1740 — the login-redirect allowlist is fail-closed, which is the right
+        # direction for a step carrying a password and the wrong one to ship
+        # blind: if the host list is ever wrong about a real flow, nobody gets
+        # through. A silent fallback to the old permissive behaviour is NOT the
+        # answer — whoever can trigger a foreign redirect would simply trigger
+        # the fallback, and a gate with a bypass is not a gate. What makes
+        # fail-closed safe to ship is that a wrong list becomes VISIBLE within
+        # one poll instead of arriving as a bug report weeks later.
+        #
+        # Hosts only, never the URL. A refused login URL can carry ``code`` and
+        # ``state``; the same rule the transport-error field below follows.
+        self.refused_login_hosts: set[str] = set()
+        self.refused_login_host_count = 0
         # #1932/#1933 — a soft miss that never got a response AT ALL. The
         # handler for (TimeoutError, ClientConnectionError) returned None
         # without touching _last_soft_status, so a portal we could not reach
@@ -5913,6 +6226,44 @@ class EUDataActConnector:
                     "EU Data Act portal: refusing a non-https login redirect"
                 )
                 return response_url, response_html, status
+
+            if not _is_login_host(next_parsed.netloc):
+                # The operator's own guard, adopted from his reference
+                # implementation (see the note on ``_LOGIN_HOSTS``). A hop out of
+                # {identity provider, portal} is refused rather than followed,
+                # and refused LOUDLY rather than returned softly: handing a
+                # foreign landing to the classifier below is itself one of the
+                # three ways this leaked, alongside the 307/308 body and the
+                # Referer. The request is never made, so none of the three can
+                # happen.
+                #
+                # Fail-closed on purpose. If the operator moves the identity
+                # provider or the portal to a new host, every login stops here
+                # with the refused host in the message — which is the right
+                # failure for a step that carries a password, and the reason the
+                # host is named: it turns "login broken" into one grep.
+                _refused = (next_parsed.netloc or "?").lower()
+                self.refused_login_hosts.add(_refused)
+                self.refused_login_host_count += 1
+                # WARNING, not debug. A user locked out by a wrong host list must
+                # find the reason and the remedy in their own log rather than
+                # filing "login broken" — the host is the one thing needed to fix
+                # the list, and it is safe to print where the URL is not.
+                _LOGGER.warning(
+                    "EU Data Act portal: refused a login redirect to %s. The"
+                    " login chain may only reach the identity provider or the"
+                    " portal, so this hop was not followed and no credentials"
+                    " were sent to it. If this host is legitimate — the operator"
+                    " moving a login endpoint would look exactly like this —"
+                    " please report it with this host name; it is the only"
+                    " missing piece.",
+                    _refused,
+                )
+                raise AuthenticationError(
+                    "EU Data Act portal: refusing a login redirect to an"
+                    f" unexpected host ({_refused}) — the chain"
+                    " may only reach the identity provider or the portal"
+                )
 
             if next_parsed.netloc != parsed.netloc:
                 # Cross-host hop: drop anything credential-bearing we were
@@ -6710,8 +7061,25 @@ class EUDataActConnector:
         *,
         headers: dict[str, str] | None = None,
         soft: bool = False,
+        outage_statuses: tuple[int, ...] = (),
     ) -> Any:
         """GET + parse JSON. Raises AuthenticationError on HTTP >= 400.
+
+        ``outage_statuses`` — #1964 (@Hollywoodchaos). The meaning of a 404 on
+        this portal is ENDPOINT-DEPENDENT, and until now one rule was applied
+        to all of them. On the metadata endpoint a 404 means "there is no such
+        data request", which #1932 decided deliberately and pinned with a test.
+        On vehicle ENUMERATION it means the portal cannot list the account's
+        cars — he verified that in a browser, where the portal's own page fails
+        with "Não foi possível carregar os seus veículos" — and we turned it
+        into a session-expired repair card blaming his login.
+
+        A call site that knows a status means "upstream problem, not your
+        session" declares it here, and it is then treated exactly like the
+        5xx/429 family: ``UpstreamUnavailableError``, which the coordinator
+        already handles as a transient no-data poll and does NOT escalate.
+        Nothing is implied for any other call site, so the #1932 decision on
+        the metadata path stands untouched.
 
         v2.12.1 — ``soft=True`` returns None instead of raising for the
         transient "not provisioned yet" / portal-outage statuses
@@ -6759,6 +7127,9 @@ class EUDataActConnector:
         # the user "server-side issue at VW … do NOT reconfigure", and this is
         # our own session going away locally. A false explanation is worse than
         # a plain one.
+        # #1969 — one Retry-After wait per call, independent of the attempt
+        # counter, so a 429 cooldown cannot multiply with the 5xx backoff.
+        waited_retry_after = False
         for attempt in range(len(_PORTAL_RETRY_DELAYS) + 1):
             # Checked on EVERY attempt, not once before the loop. The first
             # version of this guard sat above the loop, on the reasoning that
@@ -6812,6 +7183,38 @@ class EUDataActConnector:
                         # gives up as "no data", hard still raises — which
                         # matters, because an empty VIN list is read as "this
                         # account has no cars" and fails setup outright.
+                        # #1969 — a 429 with a short, explicit cooldown is the
+                        # one case where the server has told us what to do.
+                        # Before this, a throttled poll was simply lost: soft
+                        # returned "no data", hard reported an outage, and the
+                        # newest dataset was never reached. One wait, capped,
+                        # and only when the header is present and parseable —
+                        # a missing or absurd value leaves the old behaviour
+                        # exactly as it was.
+                        if resp.status == 429:
+                            # Recorded for EVERY 429, before deciding whether
+                            # to wait: the second one in a call and the
+                            # over-cap case are exactly the observations that
+                            # would otherwise be lost, and they are the ones
+                            # that say whether our pacing is wrong.
+                            _cooldown = retry_after_seconds(resp.headers)
+                            self.throttle_count += 1
+                            self.last_retry_after_s = _cooldown
+                            self.last_throttle_honoured = False
+                        if resp.status == 429 and not waited_retry_after:
+                            if (
+                                _cooldown is not None
+                                and 0 < _cooldown <= _PORTAL_RETRY_AFTER_MAX_S
+                            ):
+                                self.last_throttle_honoured = True
+                                waited_retry_after = True
+                                _LOGGER.debug(
+                                    "EU Data Act portal: throttled, waiting the "
+                                    "%d s the portal asked for and retrying once",
+                                    _cooldown,
+                                )
+                                await asyncio.sleep(_cooldown)
+                                continue
                         if (
                             resp.status in _RETRIABLE_STATUSES
                             and attempt < len(_PORTAL_RETRY_DELAYS)
@@ -6839,7 +7242,10 @@ class EUDataActConnector:
                         # coordinator already treats it as self-healing.
                         # 401/403 (real session problem) and 404/410 (not
                         # provisioned) are deliberately untouched.
-                        if not soft and resp.status in _PORTAL_OUTAGE_STATUSES:
+                        if not soft and (
+                            resp.status in _PORTAL_OUTAGE_STATUSES
+                            or resp.status in outage_statuses
+                        ):
                             raise UpstreamUnavailableError(
                                 resp.status, brand=self._state
                             )
@@ -6872,9 +7278,27 @@ class EUDataActConnector:
         return None
 
     async def list_vehicle_vins(self) -> list[str]:
-        """Return the VINs consented on the portal."""
+        """Return the VINs consented on the portal.
+
+        #1964 (@Hollywoodchaos) — ``outage_statuses`` declares that a 404 or
+        410 HERE is the portal failing to list the account's cars, not a dead
+        session and not "no such data request". He proved the distinction from
+        the outside: logged into the portal in a browser with the same account,
+        its own "Veículos associados" section fails with a technical error, so
+        the 404 we received was the truth about the portal and not about his
+        login. Before this, every status from 400 upwards on this call became
+        an ``AuthenticationError``, and the caller turned that into the
+        session-expired repair card — which told him to fix the one thing that
+        was working.
+
+        Deliberately NOT changed for the metadata endpoint, where #1932
+        decided that a 404 means "no such data request" and pinned it with a
+        test. Same status, two endpoints, two meanings; the rule now lives at
+        the call site that knows which one it is.
+        """
         payload = await self._get_json(
-            f"{_PORTAL_BASE}{_VEHICLES_PATH}?viewPosition=FRONT_LEFT"
+            f"{_PORTAL_BASE}{_VEHICLES_PATH}?viewPosition=FRONT_LEFT",
+            outage_statuses=(404, 410),
         )
         vins: list[str] = []
 
@@ -6958,6 +7382,13 @@ class EUDataActConnector:
         # VehicleData so the vehicle still appears and the data fills in
         # once the portal request goes active, instead of erroring every
         # poll (#393, #424).
+        # #1850 (@indigomejor) — reset before the read, not after it. The flag
+        # is only written in the soft+transient branch of _get_json, so a 200
+        # leaves whatever an earlier poll put there; the message below now
+        # reports this status, and reporting a stale one would be worse than
+        # reporting none. Mirrors the reset before the listing read further
+        # down. Nothing reads it between here and there.
+        self._last_soft_status = None
         meta = await self._get_json(
             f"{_PORTAL_BASE}{meta_path.format(vin=vin)}", soft=True,
         )
@@ -7009,12 +7440,51 @@ class EUDataActConnector:
                 )
                 return d
             self._note_no_data("no_request")
+            # #1850 (@indigomejor) — this line used to be the same sentence
+            # whatever had happened, and it told a user whose data request was
+            # demonstrably active to go and create one. The split in #1932/#1933
+            # covers a portal that could not be REACHED; a portal that ANSWERS
+            # with an error status lands here too. He had a 404 on this read at
+            # 12:03, four `dataset listing unavailable (HTTP 404)` lines after
+            # it, and a live request the whole time.
+            #
+            # The first attempt at this split was wrong, and #1932's own tests
+            # caught it: they decide deliberately that a 404 IS the portal
+            # saying "no such request", and that the advice must survive for it,
+            # "the one case where the user does have something to do". Replacing
+            # the advice for a 404 would have overridden that decision on the
+            # strength of one report.
+            #
+            # So the defect is not that a 404 lands here. It is that the line
+            # stated the advice as a certainty while his request was live. One
+            # message, then: the advice stays verbatim, the status is named when
+            # the read recorded one, and the caveat says what his case proves —
+            # that this answer does not always mean the request is missing.
+            # The reason string stays ``no_request`` either way: it feeds the
+            # portal-health sensor's enum and its translations, and a new value
+            # would have to be added in several places for a wording change.
+            # The one-time historical export reaches this same branch through
+            # _ALL_METADATA_PATH, where "continuous data request" is the wrong
+            # noun: there is nothing continuous to enable, and telling someone
+            # to go and create one sends them to the wrong control. Named as an
+            # open loose end when the rest of this message was fixed, so it is
+            # closed here rather than left as a known-wrong sentence.
+            _one_time = request_type == "all"
             _LOGGER.info(
-                "EU Data Act portal: no data-request yet for %s — enable the "
-                "continuous data request for this car on the VW data portal "
-                "(it can take a while to propagate). Vehicle will show with no "
+                "EU Data Act portal: no active %s found for %s%s. If you have "
+                "not set one up, %s for this car on the VW data portal (it can "
+                "take a while to propagate). If you already have one, leave it "
+                "alone — the portal sometimes answers this way while a request "
+                "is live, and it clears on its own. Vehicle will show with no "
                 "data until then.",
+                "historical data export" if _one_time else "data-request",
                 vin[-6:],
+                f" (the portal answered HTTP {self._last_soft_status})"
+                if self._last_soft_status is not None
+                else "",
+                "request the historical data export"
+                if _one_time
+                else "enable the continuous data request",
             )
             return d
         # #465 observability — record WHEN this data request was created (its
@@ -7224,7 +7694,28 @@ def _unzip_json(raw: bytes, name: str) -> dict[str, Any]:
                 return {}
             with zf.open(members[0]) as fh:
                 parsed = json.loads(fh.read().decode("utf-8"))
-            return parsed if isinstance(parsed, dict) else {}
+            if not isinstance(parsed, dict):
+                # A non-dict root was read as "no data this poll", which in a
+                # log is indistinguishable from a genuinely empty delivery —
+                # the one failure mode this project treats as worse than an
+                # error. No real export has ever had one: every tracked fixture
+                # is a dict root, and @Adcad1970's "flat list of 67 objects"
+                # (#1950) is the Data array INSIDE one. So this deliberately
+                # does not start handling the shape — inventing handling for a
+                # payload nobody has seen is how untested branches are born.
+                # It makes the case visible if VW ever ships it. Shape only:
+                # no file name, no values.
+                _LOGGER.warning(
+                    "EU Data Act portal: the dataset JSON has a %s at its root "
+                    "instead of an object (%d top-level item(s)) — this poll is "
+                    "treated as empty. Nothing is wrong with your account; "
+                    "please report this, it is a delivery shape we have not "
+                    "seen.",
+                    type(parsed).__name__,
+                    len(parsed) if isinstance(parsed, (list, str)) else 0,
+                )
+                return {}
+            return parsed
     except (zipfile.BadZipFile, ValueError, KeyError, OSError):
         return {}
 

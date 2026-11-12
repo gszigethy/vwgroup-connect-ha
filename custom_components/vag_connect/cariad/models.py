@@ -615,6 +615,13 @@ class VehicleData:
     # CARIAD-BFF: HV battery cell temperature (Celsius). Useful for
     # users with home battery-thermal management (e.g. wallbox curtail).
     battery_temp_c: float | None = None
+    # #2068 — CABIN / interior temperature (Celsius), the value the climate
+    # entity reports as ``current_temperature``. Kept SEPARATE from
+    # ``outside_temp`` on purpose: the climate entity must never pass the
+    # outside temperature off as the cabin reading. None until a feed actually
+    # supplies an interior temperature (the ``Innentemperatur`` EU-Data-Act
+    # leaves are the mapping source when a car carries them).
+    cabin_temp_c: float | None = None
     # CARIAD-BFF climatisation: per-zone enable + battery-only mode.
     climate_without_external_power: bool | None = None
     climate_zone_front_left: bool | None = None
@@ -988,9 +995,9 @@ class VehicleData:
     service_due_at: Any | None = None
     oil_service_km: int | None = None
     oil_service_at: Any | None = None
-    # acpp plug&play — main inspection (HU / TÜV) + first-registration dates from
-    # the dongle's carport record; surfaced as service-calendar events.
-    main_inspection_due_at: Any | None = None
+    # acpp plug&play — first-registration date from the dongle's carport record;
+    # surfaced as a service-calendar event. (#1925 — the main inspection /
+    # HU-TÜV field was removed: nothing ever wrote it.)
     registration_date: Any | None = None
     # v1.11.0 (#91 closure) — explicit "raw int days" sensors complementing
     # the existing DATE sensors. The DATE conversion (sensor.py) loses the
@@ -1984,9 +1991,13 @@ class VehicleData:
     # v4.7.11 (#465/#529/#1218 parity ADOPT) — per-VALUE freshness surfaced to
     # entities. Maps a VehicleData ATTRIBUTE name to the ISO-8601 UTC capture
     # time of the exact EU-DA source leaf the mapper resolved onto it (a GENUINE
-    # per-point timestamp, never the ~15-min dataset floor), so an EU-DA sensor
-    # can answer "when was THIS number actually measured" instead of only "when
-    # did we last poll". Only populated for EU-DA-sourced fields; the channel
+    # per-point timestamp, never the inherited dataset-level floor — that floor
+    # is the newest CAR-CAPTURED stamp in the export, which #1688 showed can be
+    # five days older than every data point beside it, so it is no age at all;
+    # 15 minutes is the portal's publish cadence and a different quantity), so
+    # an EU-DA sensor can answer "when was THIS number actually measured"
+    # instead of only "when did we last poll". Only populated for EU-DA-sourced
+    # fields; the channel
     # merge carries it from the owning source and drops it when a live channel
     # supersedes the EU-DA value. Never merged generically (see _channel_merge
     # ``_SKIP_FIELDS``).
@@ -2108,8 +2119,32 @@ class VehicleData:
     # B. Door / closure SAFE-state (2=safe / 3=unsafe — INVERSE polarity).
     # Front bonnet lock (locked_state_front_engine_bonnet 2=locked). binary_sensor.
     bonnet_locked: bool | None = None
-    # All present closures secured (safe_state_* rollup, all==2). binary_sensor.
+    # All present closures secured (door safe_state_* rollup, all==2, plus the
+    # boot and bonnet OPEN states). Stays None unless at least one door reports
+    # safe(2): measured, no car has ever sent that value, so an all-"3" reading
+    # is not a verdict. binary_sensor.
     closures_secured: bool | None = None
+    # #1950 (@Adcad1970) — the two ingredients the verdict above needs but a
+    # single delivery cannot supply. NEITHER is a sensor: no description exists
+    # for them in binary_sensor.py, so no entity appears.
+    #
+    # ``safe_state_implemented`` is a CAPABILITY, not a reading: once a car has
+    # sent safe(2) it implements the field, and that cannot become untrue. It
+    # therefore rides in STATIC_MASTER_FIELDS (carried forward indefinitely,
+    # truthy wins) rather than in CARRY_FORWARD_FIELDS, where a *value* carried
+    # forward can go stale — the trap that latched a 12V SoC at 100 % for good.
+    #
+    # Why they are needed: the comment above promises "a 3 beside a 2 is a real
+    # unsafe from then on", but the implementation scoped "from then on" to the
+    # same delivery. @Adcad1970's car does send the 2 (his sensor reached `on`),
+    # so every delivery with the doors unlocked lost the proof and read unknown
+    # where off was the honest answer. ``reconcile`` finalises the verdict once
+    # the carried capability is in hand, because that is the one function every
+    # path runs after the mapper.
+    safe_state_implemented: bool | None = None
+    #: This delivery carried door safe_state readings and NONE of them was a 2.
+    #: Per-delivery, deliberately not carried forward.
+    safe_state_all_unsafe: bool | None = None
     # Service hatch open (state_service_hatch 2=open) — LOW. binary_sensor.
     service_hatch_open: bool | None = None
     # Rear spoiler deployed (state_spoiler 2=open) — LOW. binary_sensor.

@@ -117,12 +117,14 @@
         "data": {
           "brand": "Kjøretøymerke",
           "spin": "S-PIN",
-          "scan_interval": "Oppdateringsintervall"
+          "scan_interval": "Oppdateringsintervall",
+          "use_browser_auth0": "Eksperimentelt: nettleserpålogging (Auth0)"
         },
         "data_description": {
-          "brand": "Kun merker med støtte for nettleserpålogging vises. Bruk «E-post + passord» for Volkswagen EU og Porsche.",
+          "brand": "Kun merker med støtte for nettleserpålogging vises. Bruk «E-post + passord» for Porsche.",
           "scan_interval": "Minutter mellom hver henting av kjøretøydata.",
-          "spin": "Valgfri 4-sifret sikkerhets-PIN for fjernhandlinger (låsing, opplåsing, klima)."
+          "spin": "Valgfri 4-sifret sikkerhets-PIN for fjernhandlinger (låsing, opplåsing, klima).",
+          "use_browser_auth0": "Kun SEAT og CUPRA: bruk nettleserpålogging (Auth0) i stedet for enhetskodepålogging. Denne ruten er ikke verifisert for dem ennå — testere, meld fra om resultatet. Audi bruker den alltid."
         }
       },
       "browser_login_pending": {
@@ -181,6 +183,34 @@
           "mbb_vins": "La dette stå tomt med mindre oppsettet ber om det.",
           "spin": "Audi-S-PIN-en din — koden du bruker til å låse/låse opp på avstand."
         }
+      },
+      "auth0": {
+        "title": "Logg inn med {brand} i nettleseren",
+        "description": "{note}Denne integrasjonen kan ikke lenger logge inn på {brand} med bare e-post og passord — det siste trinnet krever nå en enhetssjekk som bare den offisielle appen består. Merkets egen innloggingsside fungerer fortsatt:\n\n1. Åpne denne lenken, helst i et privat nettleservindu: [{authorization_url}]({authorization_url})\n2. Logg inn med {brand}-kontoen din.\n3. Nettleseren sendes deretter til en callback-adresse som ikke kan lastes. **Den tilkoblingsfeilen er forventet.**\n4. Kopier hele adressen fra nettleserens adressefelt — eller, hvis nettleseren ikke viser noen, code-verdien fra den — og lim den inn nedenfor.\n\nLenken gjelder bare dette forsøket; mislykkes det, vises en ny.",
+        "data": {
+          "callback_url": "Adresse fra nettleseren, eller code-verdien"
+        },
+        "data_description": {
+          "callback_url": "Inneholder code= og state=."
+        }
+      },
+      "reauth_auth0": {
+        "title": "Logg inn på nytt med {brand} i nettleseren",
+        "description": "{note}Denne integrasjonen kan ikke lenger logge inn på {brand} med bare e-post og passord — det siste trinnet krever nå en enhetssjekk som bare den offisielle appen består. Merkets egen innloggingsside fungerer fortsatt:\n\n1. Åpne denne lenken, helst i et privat nettleservindu: [{authorization_url}]({authorization_url})\n2. Logg inn med {brand}-kontoen din.\n3. Nettleseren sendes deretter til en callback-adresse som ikke kan lastes. **Den tilkoblingsfeilen er forventet.**\n4. Kopier hele adressen fra nettleserens adressefelt — eller, hvis nettleseren ikke viser noen, code-verdien fra den — og lim den inn nedenfor.\n\nLenken gjelder bare dette forsøket; mislykkes det, vises en ny.",
+        "data": {
+          "callback_url": "Adresse fra nettleseren, eller code-verdien"
+        },
+        "data_description": {
+          "callback_url": "Inneholder code= og state=."
+        }
+      },
+      "reauth_auth0_menu": {
+        "title": "Logg inn på nytt",
+        "description": "Innlogging med e-post + passord fungerer ikke lenger for dette merket (enhetssjekk). Innlogging via merkets egen innloggingsside i en nettleser fungerer fortsatt. Hvordan vil du logge inn på nytt?",
+        "menu_options": {
+          "reauth_auth0": "Logg inn via nettleseren (anbefalt)",
+          "reauth_credentials": "Skriv inn e-post + passord (kun EU Data Act-portal)"
+        }
       }
     },
     "error": {
@@ -195,6 +225,7 @@
       "invalid_otp": "Den e-postkoden ble ikke godtatt. Det er ikke passordet ditt — det er allerede sjekket, og derfor kom det en kode i det hele tatt. Be om en ny kode og prøv igjen; fortsetter det å feile, logg inn én gang på volkswagen.de i en nettleser og legg til kanalen etterpå.",
       "website_login_failed": "E-postadressen og passordet ditt er ikke problemet — innloggingen på volkswagen.de kom forbi dem og feilet i et senere steg (for eksempel en utløpt sesjon, en omdirigeringsløkke eller en side den ikke gjenkjente). Årsaken står i Home Assistant-loggen. Nytt passord hjelper ikke; hvis det fortsetter, opprett et issue med den logglinjen.",
       "upstream_unavailable": "VW-baksystemet er midlertidig utilgjengelig. Dette er et problem på VWs side, IKKE et problem med påloggingsinformasjonen. Vent 5–15 minutter og prøv igjen. IKKE konfigurer integrasjonen på nytt.",
+      "authproxy_refused": "volkswagen.de refused the e-mail-code step. This is not your code and not your password — the code is only sent after the password has been accepted, and unlike a server outage this will not necessarily clear on its own. Try this first: sign in at volkswagen.de in a browser from the same machine and clear whatever the site puts in front of you — a consent or advertising prompt counts, and declining it is enough. A reporter found that this lets the integration sign in again, and the site does not tell us when it is waiting for that. If it still fails afterwards, the useful report is the status from the log line next to this message and whether the browser sign-in worked.",
       "na_signin_attestation": "E-postadressen og passordet ditt er i orden — Volkswagen North America blokkerer nå denne påloggingen bak en enhetsattestering fra Google (Play Integrity) som bare den offisielle appen på en ekte telefon kan bestå. Å skrive inn passordet på nytt hjelper ikke; dette er en sperre på VWs side, ikke et problem med påloggingsinformasjonen. (Følges i issue #1165.)",
       "porsche_login_wall": "E-posten og passordet ditt er i orden — innloggingen kom forbi passordtrinnet, men havnet deretter på en Porsche captcha-/samtykkeskjerm (sett på noen kontoer på my.porsche.com) som en headless innlogging ikke kan komme forbi. Å skrive inn passordet på nytt hjelper ikke; dette er en sperre på Porsches side, ikke et problem med påloggingsdetaljene. Prøv høyst én gang — gjentatte forsøk har låst Porsche-kontoer. (Spores: #1337.)",
       "brand_not_dag_eligible": "Det valgte merket støtter ikke nettleserpålogging. Bruk e-post + passord-flyten i stedet.",
@@ -212,7 +243,10 @@
       "captcha_retry": "Løs captchaen som vises over for å fortsette.",
       "companion_addon_token_required": "An add-on token is required for new connections. Set api_token in the ADB Bridge add-on and enter the same token here.",
       "companion_agent_token_weak": "The agent token is too predictable. Use the generated random token or a random token with at least 32 characters and 16 distinct characters, with no character making up more than half.",
-      "eu_signin_attestation": "E-posten og passordet ditt er i orden — selve påloggingen virket, og autorisasjonskoden kom tilbake. Volkswagen nekter nå det siste trinnet, å bytte den koden mot et token, fordi de krever en Google-signert enhetsattestering (Play Integrity) som bare den offisielle appen på en ekte telefon kan lage. Å skrive passordet på nytt hjelper ikke, og det gjør heller ikke et nytt forsøk. Den skrivebeskyttede EU Data Act-portalen, som vanligvis tar over i dette tilfellet, leverte heller ikke noe — og denne meldingen kan ikke si hvorfor. Åpne portalen i en nettleser: hvis den laster, sjekk at datadeling er slått på for bilen din. Hvis den ikke laster, er portalen selv nede, og ingenting trenger å endres hos deg. (Spores: #1712.)"
+      "eu_signin_attestation": "E-posten og passordet ditt er i orden — selve påloggingen virket, og autorisasjonskoden kom tilbake. Volkswagen nekter nå det siste trinnet, å bytte den koden mot et token, fordi de krever en Google-signert enhetsattestering (Play Integrity) som bare den offisielle appen på en ekte telefon kan lage. Å skrive passordet på nytt hjelper ikke, og det gjør heller ikke et nytt forsøk. Den skrivebeskyttede EU Data Act-portalen, som vanligvis tar over i dette tilfellet, leverte heller ikke noe — og denne meldingen kan ikke si hvorfor. Åpne portalen i en nettleser: hvis den laster, sjekk at datadeling er slått på for bilen din. Hvis den ikke laster, er portalen selv nede, og ingenting trenger å endres hos deg. (Spores: #1712.) Audi: velg Reparer og velg nettleserinnlogging med myAudi — den kommer forbi denne sperren.",
+      "invalid_auth0_callback": "Det er ikke adressen fra dette innloggingsforsøket. Lim inn hele localhost:8080/myaudi-callback-adressen fra adressefeltet etter at du har logget inn via lenken over.",
+      "auth0_denied": "Innloggingen ble avbrutt eller avvist på Audis side. Åpne lenken på nytt og logg inn.",
+      "auth0_auth_failed": "Audi avviste innloggingskoden — en kode kan bare brukes én gang. Åpne den nye lenken over og logg inn på nytt."
     },
     "abort": {
       "already_configured": "Denne kontoen er allerede konfigurert.",
@@ -291,7 +325,7 @@
           "abrp_user_token": "«Generic»-tokenet fra ABRP-appen: Innstillinger -> bilen din -> Live Data. Logges aldri.",
           "keep_raw_datasets": "Bare nyttig på EU Data Act-portalkanalen. Når det er på, lagres de siste rå datasett-ZIP-filene portalen leverer på disk (under .storage, per kjøretøy og med en størrelsesgrense), slik at en feil eller manglende verdi kan gjenskapes fra nøyaktig de bytene bilen din sendte. Disse filene inneholder GPS-posisjon, VIN og telemetri, så det er av som standard – slå det på bare under feilsøking.",
           "auto_utility_meters": "Av som standard. Når den er på, oppretter integrasjonen Home Assistant utility_meter-hjelpere som summerer ladet energi og kilometerstand per kalendermåned, én per kjøretøy. Bryteren vises bare når en matchende kildesensor allerede finnes. Dette er permanente hjelpere: å slå det av igjen stopper at nye opprettes, men sletter ikke de som allerede er laget – fjern dem under Innstillinger → Enheter og tjenester → Hjelpere.",
-          "test_cohort": "Avslått som standard. Slå den på for å la integrasjonen prøve eksperimentelle avlesninger fra bilen din — for eksempel det pågående forsøket på å hente GPS-posisjon for Volkswagen-biler i EU — og av og til vise et varsel du kan lukke, der du blir bedt om å dele en diagnostikkfil så en ny funksjon kan bekreftes for modellen din. Alt som deles blir automatisk sladdet før det forlater systemet ditt: verken VIN, GPS, tokens eller e-post er noen gang med. Det er slik nye funksjoner låses opp for bilen din og for alle andre som kjører samme modell, og du kan slå det av igjen når som helst.",
+          "test_cohort": "Avslått som standard. Slå den på for å la integrasjonen prøve eksperimentelle avlesninger fra bilen din — for eksempel det pågående forsøket på å hente GPS-posisjon for Volkswagen-biler i EU — og av og til vise et varsel du kan lukke, der du blir bedt om å dele en diagnostikkfil så en ny funksjon kan bekreftes for modellen din. 5.2.1+: verken VIN, GPS, tokens eller e-post er noen gang med. Det er slik nye funksjoner låses opp for bilen din og for alle andre som kjører samme modell, og du kan slå det av igjen når som helst.",
           "vwde_cred_relogin": "Av som standard. Påvirker bare Volkswagen.de-lesekanalen. Når den stille gjenopptakingen av økten mislykkes, logger integrasjonen inn på nytt med passordet du allerede har lagret i stedet for å be deg om å legge til kanalen på nytt. Dette kan få Volkswagen til å sende høyst én e-postkode hvert 15. minutt; hvis en kode kreves, kan den ikke oppgis automatisk, og du blir bedt om å legge til kanalen på nytt.",
           "vweu_device_grant": "Kun Volkswagen, BETA. Legger til toveisstyring (lås/lås opp, klima, lading) og sanntidsavlesninger fra CARIAD ved at du logger inn med Volkswagen ID-en din. Volkswagen utsteder bare et token som er gyldig i én time her, så passordet ditt lagres for å fornye det automatisk — det sendes kun til Volkswagens egen påloggingsserver og skrives aldri til logger eller diagnostikk. Vil du helst ikke lagre et passord, kan du bruke de skrivebeskyttede kanalene i stedet. Krysser du av her, åpnes påloggingssteget."
         }
@@ -2551,7 +2585,7 @@
     },
     "vehicle_data_scout_findings": {
       "title": "Kjøretøydata-speider — {count} nye felt på {brand}",
-      "description": "Kjøretøydata-speideren fant **{count}** nye felt i {brand}-API-responsen som VW Group Connect ikke leser ennå.\n\nDet betyr som regel at bilen din har en funksjon eller fastvare vi ikke har kartlagt ennå — og **å sende inn denne rapporten er akkurat det som lar oss bygge støtte for den**, for bilen din og alle andre med samme modell.\n\n**1-klikks rapport:** klikk **Les mer** nedenfor for å åpne en forhåndsutfylt GitHub-sak.\n\n**Enda mer nyttig:** legg ved diagnostikken din — Innstillinger → Enheter og tjenester → VW Group Connect → ⋮ → **Last ned diagnostikk**. Den inkluderer nå hele API-responsen med de nye feltene i kontekst, som er nøyaktig det vi trenger for å gjøre dem om til entiteter.\n\n_Alt sladdes automatisk: VIN-er maskeres, GPS fjernes, og tokener, bruker-ID-er, e-poster og registreringsnumre strippes bort. Ingenting deles noen gang med mindre du legger det ved selv._"
+      "description": "Kjøretøydata-speideren fant **{count}** nye felt i {brand}-API-responsen som VW Group Connect ikke leser ennå.\n\nDet betyr som regel at bilen din har en funksjon eller fastvare vi ikke har kartlagt ennå — og **å sende inn denne rapporten er akkurat det som lar oss bygge støtte for den**, for bilen din og alle andre med samme modell.\n\n**1-klikks rapport:** klikk **Les mer** nedenfor for å åpne en forhåndsutfylt GitHub-sak.\n\n**Enda mer nyttig:** legg ved diagnostikken din — Innstillinger → Enheter og tjenester → VW Group Connect → ⋮ → **Last ned diagnostikk**. Den inkluderer nå hele API-responsen med de nye feltene i kontekst, som er nøyaktig det vi trenger for å gjøre dem om til entiteter.\n\n_5.2.1+: VIN-er maskeres, GPS fjernes, og tokener, bruker-ID-er, e-poster og registreringsnumre strippes bort. Ingenting deles noen gang med mindre du legger det ved selv._"
     },
     "error_reporter_findings": {
       "title": "Feilrapportør — {count} nylige feil på {brand}",
@@ -2685,7 +2719,7 @@
     },
     "eu_signin_attestation": {
       "title": "Volkswagen blokkerer innloggingen for {brand}",
-      "description": "E-posten og passordet ditt er i orden — selve påloggingen virket, og autorisasjonskoden kom tilbake. Volkswagen nekter nå det siste trinnet, å bytte den koden mot et token, fordi de krever en Google-signert enhetsattestering (Play Integrity) som bare den offisielle appen på en ekte telefon kan lage. Å skrive passordet på nytt hjelper ikke, og det gjør heller ikke et nytt forsøk. Den skrivebeskyttede EU Data Act-portalen, som vanligvis tar over i dette tilfellet, leverte heller ikke noe — og denne meldingen kan ikke si hvorfor. Åpne portalen i en nettleser: hvis den laster, sjekk at datadeling er slått på for bilen din. Hvis den ikke laster, er portalen selv nede, og ingenting trenger å endres hos deg. (Spores: #1712.)"
+      "description": "E-posten og passordet ditt er i orden — selve påloggingen virket, og autorisasjonskoden kom tilbake. Volkswagen nekter nå det siste trinnet, å bytte den koden mot et token, fordi de krever en Google-signert enhetsattestering (Play Integrity) som bare den offisielle appen på en ekte telefon kan lage. Å skrive passordet på nytt hjelper ikke, og det gjør heller ikke et nytt forsøk. Den skrivebeskyttede EU Data Act-portalen, som vanligvis tar over i dette tilfellet, leverte heller ikke noe — og denne meldingen kan ikke si hvorfor. Åpne portalen i en nettleser: hvis den laster, sjekk at datadeling er slått på for bilen din. Hvis den ikke laster, er portalen selv nede, og ingenting trenger å endres hos deg. (Spores: #1712.) Audi: velg Reparer og velg nettleserinnlogging med myAudi — den kommer forbi denne sperren."
     }
   },
   "services": {

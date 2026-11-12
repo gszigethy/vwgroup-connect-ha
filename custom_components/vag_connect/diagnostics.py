@@ -32,7 +32,12 @@ from .cariad._error_reporter import serialise_for_diagnostics
 # / UUID) for the new parser-health ``last_error`` redactor. Email is
 # handled by the partial-mask helper already defined below so we don't
 # import that pattern here.
-from .cariad._unexpected_keys import _JWT_RE, _UUID_RE, _VIN_RE
+from .cariad._unexpected_keys import (
+    _JWT_RE,
+    _UUID_RE,
+    _VIN_RE,
+    mask_coordinate_pairs,
+)
 from .cariad._util import mask_vin
 from .const import (
     CONF_ABRP_API_KEY,
@@ -44,13 +49,16 @@ from .const import (
     CONF_DATA_ACT_IDENTIFIERS,
     CONF_DATA_ACT_KICKOFF_TS,
     CONF_ENABLE_REVERSE_GEOCODING,
+    CONF_MBB_COMMAND_TOKENS,
     CONF_PASSWORD,
     CONF_SPIN,
     CONF_SPIN_BY_VIN,
     CONF_SUPPLEMENTARY_AUTHPROXY_COOKIES,
     CONF_SUPPLEMENTARY_EU_PORTAL_PASSWORD,
     CONF_SUPPLEMENTARY_EU_PORTAL_USERNAME,
+    CONF_SUPPLEMENTARY_TIBBER_TOKENS,
     CONF_USERNAME,
+    CONF_WEBSITE_COOKIES,
     CONF_VWEU_TWOWAY_COOKIES,
     CONF_VWEU_TWOWAY_EMAIL,
     CONF_VWEU_TWOWAY_PASSWORD,
@@ -131,6 +139,14 @@ _REDACT_KEYS = frozenset({
     "charging_location_4_name",
     "charging_location_5_name",
     "charging_location_current",
+    # #923 follow-up — the Skoda / SEAT / CUPRA charging PROFILE carries the
+    # same class of label under a different name, and the comment above was
+    # already the argument for registering it: it is the owner's own word for
+    # where the car habitually charges. The per-profile twin lives inside the
+    # ``charging_profiles`` list and is handled by _redact_charging_profiles,
+    # because a bare ``name`` key cannot be registered here without redacting
+    # every brand, device and entity name in the file.
+    "active_charging_profile_name",
     # v1.13.0 (#62) — explicit token field names. Defensive registration:
     # today these only live in coordinator's in-memory cache, but if a
     # future change adds them to entry.data they'll automatically
@@ -170,6 +186,34 @@ _REDACT_KEYS = frozenset({
     # ``{VIN: {key, id, validUntil}}`` dict and is routed through
     # _redact_identifier_map below (keeps the enrolment count, masks each record).
     "skoda_official_api_key",
+    # #923 — three credential keys that were never registered here, found by
+    # deriving the list from const.py instead of reading this one. The b11 note
+    # above says in so many words that "the vw.de cookie list carries the
+    # auth0 / auth0-mf SSO session tokens" — and then registers the
+    # SUPPLEMENTARY slot's jar while leaving the PRIMARY one out. Both sibling
+    # jars were covered, so the gap read as closed. Same shape for the tokens:
+    # the Companion, VW-EU two-way and Škoda token maps were registered and
+    # these two were not.
+    #
+    #   CONF_WEBSITE_COOKIES          — the live vw.de session jar, written back
+    #                                   to the entry on every refresh.
+    #   CONF_MBB_COMMAND_TOKENS       — per-VIN MBB command tokens.
+    #   CONF_SUPPLEMENTARY_TIBBER_TOKENS — the Tibber account's tokens.
+    #
+    # All three land in ``entry.data``, which this module dumps as ``config``,
+    # and a cookie or token value is opaque, so no generic branch below masks
+    # it. ``test_diagnostics_redaction_completeness`` now derives the expected
+    # set from const.py so the next one cannot be forgotten in the same way.
+    CONF_WEBSITE_COOKIES,
+    CONF_MBB_COMMAND_TOKENS,
+    CONF_SUPPLEMENTARY_TIBBER_TOKENS,
+    # #923 — defensive identifier redaction (same security posture as #1968):
+    # the registered MBB X-Client-Id and the EU-Data-Act ZIP-envelope dataset
+    # key are opaque UUIDs that add no triage value in a shared diagnostics
+    # file. Neither is credential-NAMED, so the completeness guard does not
+    # catch them; they are redacted here by hand.
+    "mbb_command_client_id",
+    "dataset_key",
 })
 
 
@@ -317,6 +361,66 @@ def _redact_identifier_map(value: Any) -> Any:
     return "**REDACTED**"
 
 
+# Every key name under which this integration writes a coordinate into its OWN
+# output. Not the wire names - those go through _scrub_raw / _RAW_REDACT_KEYS,
+# which already covers lat / lon / latitude / longitude.
+#
+# #923 follow-up, measured 31.10.2026. The cookie-jar defect was a SHAPE
+# problem: a list of objects whose inner key names are in no set. Generalising
+# from it turned up a second one of exactly that shape, and this one had been
+# emitting in the clear: ``coordinator.py`` flattens each Skoda / SEAT / CUPRA
+# charging profile into ``{"name": ..., "location_lat": ..., "location_lon":
+# ...}`` (:1346-1370), and the GPS branch below only ever matched the two
+# spellings ``latitude`` / ``longitude``. So the coordinates of the place the
+# car habitually charges - home, for most people - went into the download at
+# two decimals, about a kilometre, in BOTH the default and the opt-in mode,
+# while this module's own contract promises privacy-by-default removal.
+#
+# Verified by measurement, not by reading: a profile in the production shape
+# through the real _scrub returned both coordinates and the owner's label
+# unchanged, with a positive control confirming that bare ``latitude`` does get
+# removed, so the branch itself was working and the names were the gap.
+_GPS_KEYS = frozenset({
+    "latitude",
+    "longitude",
+    "location_lat",
+    "location_lon",
+})
+
+
+def _redact_charging_profiles(value: Any, *, gps_round: bool = False) -> Any:
+    """Mask the owner's label on each charging profile, keep the rest.
+
+    Same reasoning as the ``charging_location_N_name`` registrations: the label
+    is the owner's own word for a place ("Home", an employer). It cannot be
+    registered by key, because inside a profile it is spelled ``name`` and a
+    global ``name`` rule would redact every brand, device and entity name in
+    the file.
+
+    Everything else in a profile is useful for triage and stays: the target
+    SoC, the current limit, the counts. The coordinates are handled by the
+    _GPS_KEYS branch once the recursion reaches them.
+    """
+    if not isinstance(value, list):
+        return _scrub(value, gps_round=gps_round)
+    out = []
+    for item in value:
+        if not isinstance(item, dict):
+            out.append(_scrub(item, gps_round=gps_round))
+            continue
+        scrubbed = _scrub(item, gps_round=gps_round)
+        if isinstance(scrubbed, dict) and "name" in scrubbed:
+            # An empty label stays visibly empty, never a fake redaction -
+            # same rule as the _REDACT_KEYS branch.
+            scrubbed["name"] = (
+                "**REDACTED**"
+                if not _is_empty_value(item.get("name"))
+                else item.get("name")
+            )
+        out.append(scrubbed)
+    return out
+
+
 def _scrub(value: Any, *, gps_round: bool = False) -> Any:
     """Recursively redact sensitive fields from diagnostics output.
 
@@ -333,11 +437,31 @@ def _scrub(value: Any, *, gps_round: bool = False) -> Any:
                 continue
             # v3.0.1 — mask PII in the KEY too (a VIN can be a container key).
             sk = _mask_key(k)
-            if k in _HASH_KEYS and isinstance(v, str):
+            # #923 follow-up, measured 31.10.2026 — every rule below that keys
+            # off a NAME was defeated by a dotted name, because the test is
+            # exact equality on the whole key. That matters here specifically:
+            # EU Data Act field names ARE dotted (the dictionary's own count is
+            # 3206 of 7990), and an UNMAPPED portal field lands verbatim in
+            # ``raw_unmapped_fields``, which this module emits. Measured, with
+            # one marker per key: ``latitude``, ``access_token`` and ``user_id``
+            # were handled, while ``parking_position.latitude``,
+            # ``vehicle.parking.longitude``, ``settings.access_token``,
+            # ``auth.tokens.refresh_token`` and ``vehicle.user_id`` all came
+            # through in the clear. The value-PATTERN rules (e-mail, VIN, JWT)
+            # were never affected — ``profile.email`` masked correctly — which
+            # is exactly why this went unnoticed: the file looked redacted.
+            #
+            # So match the last segment as well. A dotted name whose leaf is a
+            # registered one carries the same KIND of data as the bare name, so
+            # treating them alike is the conservative direction; the opposite
+            # choice is what shipped. ``sk`` keeps the full dotted spelling, so
+            # a reader can still see which field was redacted.
+            kl = k.rsplit(".", 1)[-1] if isinstance(k, str) and "." in k else k
+            if kl in _HASH_KEYS and isinstance(v, str):
                 # v1.15.0 — stable hash so repeat reporters cross-link
                 # without leaking the real ID. Pattern from myskoda.
                 scrubbed[sk] = f"sha256:{_stable_hash(v)}" if v else "**REDACTED**"
-            elif k in _REDACT_KEYS:
+            elif kl in _REDACT_KEYS:
                 # #923 (@naked-head) — only mask when there is actually a value
                 # to hide. Masking an empty field as "**REDACTED**" makes it
                 # indistinguishable from a redacted *real* value, which misleads
@@ -345,10 +469,10 @@ def _scrub(value: Any, *, gps_round: bool = False) -> Any:
                 # from "present but hidden". Preserve empties so the diagnostic
                 # stays truthful; ``field_sources`` then remains the honest signal.
                 scrubbed[sk] = "**REDACTED**" if not _is_empty_value(v) else v
-            elif k == "email" and isinstance(v, str):
+            elif kl == "email" and isinstance(v, str):
                 # Partial mask preserves debug context.
                 scrubbed[sk] = _mask_email(v)
-            elif k in ("latitude", "longitude"):
+            elif kl in _GPS_KEYS:
                 # Privacy-by-default: full removal. Opt-in 1-decimal
                 # rounding when user already opted into reverse-geocoding
                 # (signals comfort with GPS processing).
@@ -371,6 +495,10 @@ def _scrub(value: Any, *, gps_round: bool = False) -> Any:
                 # ({VIN: {key, id, validUntil}}): mask each record (the ``key`` is a
                 # live credential) while keeping the masked-VIN count for triage.
                 scrubbed[sk] = _redact_identifier_map(v)
+            elif k == "charging_profiles":
+                # #923 follow-up — the per-profile label; the coordinates in the
+                # same objects are caught by the _GPS_KEYS branch above.
+                scrubbed[sk] = _redact_charging_profiles(v, gps_round=gps_round)
             else:
                 scrubbed[sk] = _scrub(v, gps_round=gps_round)
         return scrubbed
@@ -396,6 +524,22 @@ def _scrub(value: Any, *, gps_round: bool = False) -> Any:
         # as the fallback for a URL under a key neither set lists, which is what
         # tests/test_1310_indigomejor_fixes.py measures.
         masked = _VIN_RE.sub(lambda m: mask_vin(m.group(0)), masked)
+        # #1378 — a coordinate pair inside a string VALUE, under any key name.
+        # ``_GPS_KEYS`` above is keyed on the field NAME, and the portal sends
+        # the vehicle position under a name in neither set: ``persLocation``,
+        # whose value is the string ``"[<lat>, <lon>]"``. Measured on the
+        # unfixed scrubber, both ``persLocation`` and
+        # ``eu_data_act.persLocation`` came through at six decimals in BOTH
+        # modes, while ``latitude`` and ``parking_position.latitude`` were
+        # handled correctly and the e-mail was masked — which is exactly why it
+        # would go unnoticed: the file looks scrubbed. Same shape as the
+        # dotted-name finding noted above, one step further: a name-keyed rule
+        # only guards the names it already knows, and an UNMAPPED portal field
+        # lands verbatim in ``raw_unmapped_fields``, which this module emits.
+        # Keying on the VALUE holds for a field name nobody has seen yet.
+        masked = mask_coordinate_pairs(
+            masked, mode="round" if gps_round else "redact"
+        )
         return _mask_location_qs(masked, gps_round=gps_round)
     return value
 
@@ -527,9 +671,33 @@ def _scrub_raw(value: Any) -> Any:
             kl = k.lower() if isinstance(k, str) else ""
             # v3.0.1 — mask PII in the KEY too (a VIN can be a container key).
             sk = _mask_key(k)
-            if k in _REDACT_KEYS or kl in _RAW_REDACT_KEYS:
+            # #923 follow-up — the same dotted-name gap as in _scrub, and it
+            # had to be fixed in BOTH: after _scrub was corrected, this path
+            # still returned parking_position.latitude, settings.access_token,
+            # auth.tokens.refresh_token and vehicle.user_id in the clear.
+            # Checking only the one function that happened to be measured
+            # first would have left the raw sections leaking while the tests
+            # for the other half went green — the schranke-nur-in-einem-skript
+            # shape. ``kl`` is already taken for the lowercased whole key here,
+            # hence the separate names.
+            _leaf = k.rsplit(".", 1)[-1] if isinstance(k, str) and "." in k else k
+            _leafl = _leaf.lower() if isinstance(_leaf, str) else ""
+            # _GPS_KEYS is consulted here too. It was not, and the sweep that
+            # runs the dotted guard over BOTH scrubbers caught it immediately:
+            # location_lat / location_lon live only in _GPS_KEYS, which this
+            # function never looked at, so they kept leaking through the raw
+            # sections after _scrub was fixed. There is no gps_round here by
+            # design — a raw payload is removed, never rounded.
+            if (
+                k in _REDACT_KEYS
+                or _leaf in _REDACT_KEYS
+                or k in _GPS_KEYS
+                or _leaf in _GPS_KEYS
+                or kl in _RAW_REDACT_KEYS
+                or _leafl in _RAW_REDACT_KEYS
+            ):
                 out[sk] = "**REDACTED**"
-            elif k in _HASH_KEYS and isinstance(v, str):
+            elif (k in _HASH_KEYS or _leaf in _HASH_KEYS) and isinstance(v, str):
                 out[sk] = f"sha256:{_stable_hash(v)}" if v else "**REDACTED**"
             elif k in (CONF_DATA_ACT_IDENTIFIERS, CONF_DATA_ACT_KICKOFF_TS):
                 out[sk] = _redact_identifier_map(v)
@@ -567,6 +735,83 @@ def _portal_no_data_reason(client: Any) -> str | None:
     )
     reason = getattr(portal, "last_no_data_reason", None) if portal is not None else None
     return reason or None
+
+
+def _refused_login_hosts(client: Any) -> dict[str, Any] | None:
+    """Login redirects the allowlist refused, if any — the fail-closed canary.
+
+    #1740 — the login chain may only reach the identity provider or the portal,
+    adopted from the portal operator's own reference implementation. That guard
+    is fail-closed, which is correct for a step that carries a password and
+    risky to ship blind: if the host list is ever wrong about a real flow, no
+    user gets through.
+
+    A silent fallback to the old permissive behaviour would not fix that, it
+    would void the guard — whoever can trigger a foreign redirect would simply
+    trigger the fallback. What makes fail-closed safe to ship instead is this
+    field: a wrong list shows up here within one poll, with the host that was
+    refused, instead of arriving as "login broken" weeks later.
+
+    So:
+
+    * absent or ``count`` 0 — the guard has never fired, which is the expected
+      state and says nothing needs widening;
+    * ``count`` above 0 — either someone tried to steer this login somewhere it
+      does not belong, or the operator moved an endpoint and the list is now
+      wrong. ``hosts`` says which, and that is the whole fix.
+
+    Host names only. A refused login URL can carry ``code`` and ``state``, so
+    the URL is never recorded — the same rule the transport-error field follows.
+    """
+    count = getattr(client, "refused_login_host_count", None)
+    if not isinstance(count, int):
+        return None
+    hosts = getattr(client, "refused_login_hosts", None)
+    return {
+        "count": count,
+        "hosts": sorted(hosts) if isinstance(hosts, (set, frozenset, list)) else None,
+    }
+
+
+def _portal_throttle(client: Any) -> dict[str, Any] | None:
+    """Whether this portal has ever throttled US, and whether it said for how long.
+
+    #1969 — the portal's rate limits are known only from someone else's
+    measurement of their own traffic: per-endpoint ceilings, a refill of about
+    one request every two seconds, and a short explicit ``Retry-After``. We now
+    honour such a cooldown, but whether this portal ever sends one to THIS
+    integration had never been observed, and a rate limit taken on faith is how
+    a poll loop gets paced against a number that does not apply.
+
+    Three values make one report settle it:
+
+    * ``count`` 0 — it has never happened to us, and any pacing work would be
+      for a problem we do not have;
+    * ``count`` above 0 with ``retry_after_s`` null — we are throttled and told
+      nothing, so there is nothing to honour and a cap has to be guessed;
+    * ``count`` above 0 with a number — the mechanism applies to us, and the
+      number says whether the 30 s cap is the right one.
+
+    Counts and one integer; no PII. Resolves the portal exactly like
+    ``_portal_no_data_reason``, with the same ``getattr`` guards so an older or
+    partial client stays export-safe.
+    """
+    if client is None:
+        return None
+    portal = (
+        getattr(client, "_eu_portal", None)
+        or getattr(client, "_supplementary_eu_portal", None)
+    )
+    if portal is None:
+        return None
+    count = getattr(portal, "throttle_count", None)
+    if count is None:
+        return None  # a client from before this existed
+    return {
+        "count": int(count),
+        "retry_after_s": getattr(portal, "last_retry_after_s", None),
+        "honoured": getattr(portal, "last_throttle_honoured", None),
+    }
 
 
 def _portal_field_delivery(client: Any) -> dict[str, Any] | None:
@@ -825,6 +1070,14 @@ async def async_get_config_entry_diagnostics(
         "last_update_success": coordinator.last_update_success,
         "portal_no_data_reason": _portal_no_data_reason(client),
         "portal_field_delivery": _portal_field_delivery(client),
+        # #1969 — see _portal_throttle: this is the field that turns "the
+        # portal's rate limits were measured by someone else, on their own
+        # traffic" into something one report of ours can confirm or refute.
+        "portal_throttle": _portal_throttle(client),
+        # #1740 — see _refused_login_hosts: the field that makes a fail-closed
+        # login guard safe to ship, because a wrong host list becomes visible
+        # here instead of silent.
+        "refused_login_hosts": _refused_login_hosts(client),
         "cloud_push_active": coordinator.cloud_push_active,
         "push_states": coordinator.push_states,
         "push_last_errors": coordinator.push_last_errors,

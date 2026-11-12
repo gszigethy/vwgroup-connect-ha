@@ -1,7 +1,7 @@
 # App Atlas — Audi (myAudi)
 
 > **Auto-generated** by `.github/workflows/app-atlas-builder.yml` ·
-> Last refreshed: 2026-10-22
+> Last refreshed: 2026-11-04
 
 ## Identity
 
@@ -21,9 +21,9 @@
 
 | | |
 |---|---|
-| Latest version-name | `5.8.1` |
+| Latest version-name | `5.9.0` |
 | Source that responded | `google_play` |
-| Previously cached version | `5.8.1` |
+| Previously cached version | `5.9.0` |
 | Changed since last run? | No |
 
 

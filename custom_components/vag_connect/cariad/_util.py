@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -389,6 +390,26 @@ def mask_vin(vin: str | None) -> str:
     return f"***{vin[-6:]}"
 
 
+def hash_vin(vin: str | None) -> str:
+    """Stable, non-reversible name for a VIN, for use in a path or a URL.
+
+    ``mask_vin`` above is for text a human reads. This is for a filename a
+    machine builds, and that is a different job: the render-image cache
+    directory is web-served and the file's URL is published as an entity
+    attribute, so a filename is not a private place.
+
+    Not a secret, and worth stating rather than implying: a VIN is structured,
+    so a short digest of one could be brute-forced by somebody who already
+    suspects a particular vehicle. What this defeats is reading the value
+    straight off a path.
+
+    ``cariad/dataset_archive.py`` made exactly this trade for its directory
+    names, with the same reasoning, and the rule was never carried across to
+    the image cache. This function is that rule in one place instead of two.
+    """
+    return hashlib.sha256((vin or "").encode("utf-8")).hexdigest()[:16]
+
+
 def mask_email(value: str | None) -> str:
     """Return a privacy-safe account/email representation for logs.
 
@@ -431,6 +452,29 @@ _OAUTH_ERR_RE = re.compile(r"^[A-Za-z0-9_.\- ]{1,40}$")
 # No real error word is this long; a JWT segment, a hex blob or a base64 run
 # always is. This is what stops a free-text field carrying a secret out.
 _OAUTH_ERR_MAX_TOKEN = 24
+
+
+def retry_after_seconds(headers: Any) -> int | None:
+    """``Retry-After`` from ONE response, in seconds, or None.
+
+    Lives here because two channels need it and only one had it: the app
+    backend parsed it (#1850) while the EU Data Act portal path ignored it
+    entirely, so a portal 429 cost a whole poll instead of a short wait. One
+    implementation, two callers; ``CariadBaseClient._retry_after_seconds``
+    stays a staticmethod delegating to this, because a test pins that shape on
+    purpose — it must not be able to read remembered state.
+
+    Only the delta-seconds form is honoured. RFC 9110 also allows an HTTP-date,
+    and a half-parsed date is worse than no value: an unparsed header leaves
+    whatever backoff the caller already has in charge.
+    """
+    raw = headers.get("Retry-After") if headers is not None else None
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text.isdigit():
+        return None
+    return int(text)
 
 
 def safe_error_token(value: object) -> str:

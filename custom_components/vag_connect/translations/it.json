@@ -117,12 +117,14 @@
         "data": {
           "brand": "Marca del veicolo",
           "spin": "S-PIN",
-          "scan_interval": "Intervallo di aggiornamento"
+          "scan_interval": "Intervallo di aggiornamento",
+          "use_browser_auth0": "Sperimentale: accesso via browser (Auth0)"
         },
         "data_description": {
-          "brand": "Sono elencate solo le marche che supportano il login via browser. Usa 'Email + password' per Volkswagen EU e Porsche.",
+          "brand": "Sono elencate solo le marche che supportano il login via browser. Usa 'Email + password' per Porsche.",
           "scan_interval": "Minuti tra un'interrogazione dei dati del veicolo e l'altra.",
-          "spin": "PIN di sicurezza opzionale a 4 cifre per le azioni remote (chiusura, apertura, clima)."
+          "spin": "PIN di sicurezza opzionale a 4 cifre per le azioni remote (chiusura, apertura, clima).",
+          "use_browser_auth0": "Solo SEAT e CUPRA: usa l'accesso via browser (Auth0) invece del login con codice dispositivo. Questo percorso non è ancora verificato per queste marche — tester, segnalate il vostro risultato. Audi lo usa sempre."
         }
       },
       "browser_login_pending": {
@@ -181,6 +183,34 @@
           "mbb_vins": "Lascialo vuoto, a meno che la configurazione non lo richieda.",
           "spin": "La S-PIN del tuo Audi — il codice che usi per bloccare e sbloccare a distanza."
         }
+      },
+      "auth0": {
+        "title": "Accedi con {brand} nel browser",
+        "description": "{note}Questa integrazione non può più accedere a {brand} solo con e-mail e password: l'ultimo passaggio richiede ora un controllo del dispositivo che solo l'app ufficiale supera. La pagina di accesso del marchio funziona ancora:\n\n1. Apri questo link, preferibilmente in una finestra di navigazione privata: [{authorization_url}]({authorization_url})\n2. Accedi con il tuo account {brand}.\n3. Il browser viene poi reindirizzato a un indirizzo di callback che non può essere caricato. **Quell'errore di connessione è previsto.**\n4. Copia l'indirizzo completo dalla barra degli indirizzi del browser — oppure, se il browser non ne mostra nessuno, il valore di code — e incollalo qui sotto.\n\nIl link vale solo per questo tentativo; se fallisce, ne viene mostrato uno nuovo.",
+        "data": {
+          "callback_url": "Indirizzo dal browser, oppure il valore di code"
+        },
+        "data_description": {
+          "callback_url": "Contiene code= e state=."
+        }
+      },
+      "reauth_auth0": {
+        "title": "Accedi di nuovo con {brand} nel browser",
+        "description": "{note}Questa integrazione non può più accedere a {brand} solo con e-mail e password: l'ultimo passaggio richiede ora un controllo del dispositivo che solo l'app ufficiale supera. La pagina di accesso del marchio funziona ancora:\n\n1. Apri questo link, preferibilmente in una finestra di navigazione privata: [{authorization_url}]({authorization_url})\n2. Accedi con il tuo account {brand}.\n3. Il browser viene poi reindirizzato a un indirizzo di callback che non può essere caricato. **Quell'errore di connessione è previsto.**\n4. Copia l'indirizzo completo dalla barra degli indirizzi del browser — oppure, se il browser non ne mostra nessuno, il valore di code — e incollalo qui sotto.\n\nIl link vale solo per questo tentativo; se fallisce, ne viene mostrato uno nuovo.",
+        "data": {
+          "callback_url": "Indirizzo dal browser, oppure il valore di code"
+        },
+        "data_description": {
+          "callback_url": "Contiene code= e state=."
+        }
+      },
+      "reauth_auth0_menu": {
+        "title": "Accedi di nuovo",
+        "description": "L'accesso con e-mail + password non funziona più per questa marca (controllo del dispositivo). L'accesso tramite la pagina di login della marca in un browser funziona ancora. Come vuoi accedere di nuovo?",
+        "menu_options": {
+          "reauth_auth0": "Accedi tramite il browser (consigliato)",
+          "reauth_credentials": "Inserisci e-mail + password (solo portale EU Data Act)"
+        }
       }
     },
     "error": {
@@ -195,6 +225,7 @@
       "invalid_otp": "Il codice ricevuto via e-mail non è stato accettato. Non è la password: era già stata verificata, ed è il motivo per cui hai ricevuto un codice. Richiedi un nuovo codice e riprova; se continua a fallire, accedi una volta su volkswagen.de da browser e poi riaggiungi il canale.",
       "website_login_failed": "La tua email e la password non sono il problema — l'accesso a volkswagen.de le ha superate e si è interrotto in un passaggio successivo (per esempio sessione scaduta, ciclo di reindirizzamenti o una pagina non riconosciuta). Il motivo è nel log di Home Assistant. Cambiare password non serve; se continua, apri una segnalazione allegando quella riga di log.",
       "upstream_unavailable": "Backend VW temporaneamente non disponibile. Si tratta di un problema lato server di VW, NON di un problema di credenziali. Attendi 5–15 minuti e riprova. NON riconfigurare l'integrazione.",
+      "authproxy_refused": "volkswagen.de refused the e-mail-code step. This is not your code and not your password — the code is only sent after the password has been accepted, and unlike a server outage this will not necessarily clear on its own. Try this first: sign in at volkswagen.de in a browser from the same machine and clear whatever the site puts in front of you — a consent or advertising prompt counts, and declining it is enough. A reporter found that this lets the integration sign in again, and the site does not tell us when it is waiting for that. If it still fails afterwards, the useful report is the status from the log line next to this message and whether the browser sign-in worked.",
       "na_signin_attestation": "La tua email e la tua password sono corrette — Volkswagen North America ora blocca questo accesso dietro un controllo di attestazione del dispositivo di Google (Play Integrity) che solo l'app ufficiale su un telefono autentico può superare. Reinserire la password non serve a nulla; si tratta di un blocco lato server di VW, non di un problema di credenziali. (Vedi la issue #1165.)",
       "porsche_login_wall": "La tua e-mail e la tua password sono corrette — l'accesso ha superato il passaggio della password, ma è poi arrivato a una schermata captcha/consenso di Porsche (vista su alcuni account su my.porsche.com) che un accesso automatico non può superare. Reinserire la password non aiuterà; è un blocco lato Porsche, non un problema di credenziali. Prova al massimo una volta — tentativi ripetuti hanno causato il blocco di account Porsche. (Tracciato: #1337.)",
       "brand_not_dag_eligible": "La marca selezionata non supporta il login via browser. Usa invece la procedura con email + password.",
@@ -212,7 +243,10 @@
       "captcha_retry": "Risolvi il captcha mostrato qui sopra per continuare.",
       "companion_addon_token_required": "An add-on token is required for new connections. Set api_token in the ADB Bridge add-on and enter the same token here.",
       "companion_agent_token_weak": "The agent token is too predictable. Use the generated random token or a random token with at least 32 characters and 16 distinct characters, with no character making up more than half.",
-      "eu_signin_attestation": "La tua e-mail e la tua password sono corrette: l'accesso ha funzionato e il codice di autorizzazione è tornato. Volkswagen ora rifiuta l'ultimo passaggio, lo scambio di quel codice con un token, perché richiede un'attestazione del dispositivo firmata da Google (Play Integrity) che solo l'app ufficiale su un telefono autentico può produrre. Reinserire la password non aiuta, e nemmeno riprovare. Il portale EU Data Act in sola lettura, che di solito subentra in questo caso, non ha restituito nulla, e questo avviso non può dirti perché. Apri il portale in un browser: se si carica, verifica che la condivisione dei dati sia attiva per la tua auto. Se non si carica, è il portale stesso a essere fuori servizio e dalla tua parte non c'è nulla da cambiare. (Tracciato: #1712.)"
+      "eu_signin_attestation": "La tua e-mail e la tua password sono corrette: l'accesso ha funzionato e il codice di autorizzazione è tornato. Volkswagen ora rifiuta l'ultimo passaggio, lo scambio di quel codice con un token, perché richiede un'attestazione del dispositivo firmata da Google (Play Integrity) che solo l'app ufficiale su un telefono autentico può produrre. Reinserire la password non aiuta, e nemmeno riprovare. Il portale EU Data Act in sola lettura, che di solito subentra in questo caso, non ha restituito nulla, e questo avviso non può dirti perché. Apri il portale in un browser: se si carica, verifica che la condivisione dei dati sia attiva per la tua auto. Se non si carica, è il portale stesso a essere fuori servizio e dalla tua parte non c'è nulla da cambiare. (Tracciato: #1712.) Audi: scegli Ripara e poi l'accesso nel browser con myAudi — supera questo blocco.",
+      "invalid_auth0_callback": "Questo non è l'indirizzo di questo tentativo di accesso. Incolla l'indirizzo completo localhost:8080/myaudi-callback dalla barra degli indirizzi, dopo aver effettuato l'accesso dal link qui sopra.",
+      "auth0_denied": "L'accesso è stato annullato o rifiutato sulla pagina di Audi. Riapri il link ed esegui l'accesso.",
+      "auth0_auth_failed": "Audi ha rifiutato il codice di accesso: un codice si può usare una sola volta. Apri il nuovo link qui sopra e accedi di nuovo."
     },
     "abort": {
       "already_configured": "Questo account è già configurato.",
@@ -291,7 +325,7 @@
           "abrp_user_token": "Il token 'Generic' dell'app ABRP: Impostazioni -> la tua auto -> Live Data. Mai registrato nei log.",
           "keep_raw_datasets": "Utile solo sul canale del portale EU Data Act. Se attivo, gli ultimi file ZIP di dati grezzi forniti dal portale vengono conservati su disco (in .storage, per veicolo e con un limite di dimensione) così un valore errato o mancante può essere riprodotto dai byte esatti inviati dalla tua auto. Questi file contengono la posizione GPS, il VIN e la telemetria, quindi è disattivato per impostazione predefinita: attivalo solo durante la risoluzione dei problemi.",
           "auto_utility_meters": "Disattivato per impostazione predefinita. Quando è attivo, l'integrazione crea gli helper utility_meter di Home Assistant che sommano l'energia caricata e il chilometraggio per mese solare, uno per veicolo. L'interruttore compare solo quando esiste già un sensore di origine compatibile. Sono helper permanenti: disattivandolo di nuovo si smette di crearne di nuovi ma non si eliminano quelli già creati — rimuovili in Impostazioni → Dispositivi e servizi → Helper.",
-          "test_cohort": "Disattivato per impostazione predefinita. Attivalo per permettere all'integrazione di provare letture sperimentali sulla tua auto — come il tentativo, tuttora in corso, di recuperare la posizione GPS per le auto Volkswagen europee — e di mostrarti ogni tanto una notifica (che puoi chiudere) in cui ti chiede di condividere un file di diagnostica, così da confermare una nuova funzionalità per il tuo modello. Tutto ciò che condividi viene oscurato automaticamente prima di lasciare il tuo sistema: non vengono mai inclusi VIN, GPS, token o indirizzo email. È così che si sbloccano nuove funzioni per la tua auto e per tutti quelli che guidano lo stesso modello, e puoi disattivarlo di nuovo in qualsiasi momento.",
+          "test_cohort": "Disattivato per impostazione predefinita. Attivalo per permettere all'integrazione di provare letture sperimentali sulla tua auto — come il tentativo, tuttora in corso, di recuperare la posizione GPS per le auto Volkswagen europee — e di mostrarti ogni tanto una notifica (che puoi chiudere) in cui ti chiede di condividere un file di diagnostica, così da confermare una nuova funzionalità per il tuo modello. 5.2.1+: non vengono mai inclusi VIN, GPS, token o indirizzo email. È così che si sbloccano nuove funzioni per la tua auto e per tutti quelli che guidano lo stesso modello, e puoi disattivarlo di nuovo in qualsiasi momento.",
           "vwde_cred_relogin": "Disattivato per impostazione predefinita. Riguarda solo il canale di lettura Volkswagen.de. Quando il ripristino silenzioso della sessione fallisce, l'integrazione accede di nuovo con la password che hai già salvato invece di chiederti di aggiungere di nuovo il canale. Questo può far sì che Volkswagen invii al massimo un codice via e-mail ogni 15 minuti; se è richiesto un codice, non può essere inserito automaticamente e ti verrà chiesto di aggiungere di nuovo il canale.",
           "vweu_device_grant": "Solo Volkswagen, BETA. Aggiunge il controllo bidirezionale (blocca/sblocca, clima, ricarica) e le letture CARIAD in tempo reale accedendo con il tuo Volkswagen ID. Qui Volkswagen rilascia solo un token di 1 ora, quindi la tua password viene memorizzata per rinnovarlo automaticamente — è inviata solo al server di login di Volkswagen e non viene mai scritta nei log o nella diagnostica. Se preferisci non memorizzare una password, usa invece i canali in sola lettura. Selezionando questa opzione si apre il passaggio di accesso."
         }
@@ -2551,7 +2585,7 @@
     },
     "vehicle_data_scout_findings": {
       "title": "Vehicle Data Scout — {count} nuovo/i campo/i su {brand}",
-      "description": "Il Vehicle Data Scout ha rilevato **{count}** nuovo/i campo/i nella risposta dell'API {brand} che VW Group Connect non legge ancora.\n\nDi solito significa che la tua auto ha una funzione o un firmware che non abbiamo ancora mappato — e **inoltrarci questa segnalazione è esattamente ciò che ci permette di aggiungerne il supporto**, per la tua auto e per tutti quelli che hanno lo stesso modello.\n\n**Segnalazione con 1 clic:** clicca su **Scopri di più** qui sotto per aprire un issue GitHub precompilato.\n\n**Ancora più utile:** allega la tua diagnostica — Impostazioni → Dispositivi e servizi → VW Group Connect → ⋮ → **Scarica diagnostica**. Ora include la risposta completa dell'API con i nuovi campi nel loro contesto, che è proprio ciò che ci serve per trasformarli in entità.\n\n_Tutto viene oscurato automaticamente: VIN mascherati, GPS rimosso, token, user-ID, e-mail e targhe eliminati. Nulla viene mai condiviso, a meno che tu non lo alleghi di persona._"
+      "description": "Il Vehicle Data Scout ha rilevato **{count}** nuovo/i campo/i nella risposta dell'API {brand} che VW Group Connect non legge ancora.\n\nDi solito significa che la tua auto ha una funzione o un firmware che non abbiamo ancora mappato — e **inoltrarci questa segnalazione è esattamente ciò che ci permette di aggiungerne il supporto**, per la tua auto e per tutti quelli che hanno lo stesso modello.\n\n**Segnalazione con 1 clic:** clicca su **Scopri di più** qui sotto per aprire un issue GitHub precompilato.\n\n**Ancora più utile:** allega la tua diagnostica — Impostazioni → Dispositivi e servizi → VW Group Connect → ⋮ → **Scarica diagnostica**. Ora include la risposta completa dell'API con i nuovi campi nel loro contesto, che è proprio ciò che ci serve per trasformarli in entità.\n\n_5.2.1+: VIN mascherati, GPS rimosso, token, user-ID, e-mail e targhe eliminati. Nulla viene mai condiviso, a meno che tu non lo alleghi di persona._"
     },
     "error_reporter_findings": {
       "title": "Segnalatore errori — {count} errore/i recente/i su {brand}",
@@ -2685,7 +2719,7 @@
     },
     "eu_signin_attestation": {
       "title": "Volkswagen blocca l'accesso per {brand}",
-      "description": "La tua e-mail e la tua password sono corrette: l'accesso ha funzionato e il codice di autorizzazione è tornato. Volkswagen ora rifiuta l'ultimo passaggio, lo scambio di quel codice con un token, perché richiede un'attestazione del dispositivo firmata da Google (Play Integrity) che solo l'app ufficiale su un telefono autentico può produrre. Reinserire la password non aiuta, e nemmeno riprovare. Il portale EU Data Act in sola lettura, che di solito subentra in questo caso, non ha restituito nulla, e questo avviso non può dirti perché. Apri il portale in un browser: se si carica, verifica che la condivisione dei dati sia attiva per la tua auto. Se non si carica, è il portale stesso a essere fuori servizio e dalla tua parte non c'è nulla da cambiare. (Tracciato: #1712.)"
+      "description": "La tua e-mail e la tua password sono corrette: l'accesso ha funzionato e il codice di autorizzazione è tornato. Volkswagen ora rifiuta l'ultimo passaggio, lo scambio di quel codice con un token, perché richiede un'attestazione del dispositivo firmata da Google (Play Integrity) che solo l'app ufficiale su un telefono autentico può produrre. Reinserire la password non aiuta, e nemmeno riprovare. Il portale EU Data Act in sola lettura, che di solito subentra in questo caso, non ha restituito nulla, e questo avviso non può dirti perché. Apri il portale in un browser: se si carica, verifica che la condivisione dei dati sia attiva per la tua auto. Se non si carica, è il portale stesso a essere fuori servizio e dalla tua parte non c'è nulla da cambiare. (Tracciato: #1712.) Audi: scegli Ripara e poi l'accesso nel browser con myAudi — supera questo blocco."
     }
   },
   "services": {

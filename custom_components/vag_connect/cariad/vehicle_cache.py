@@ -12,6 +12,7 @@ This module is the pure reconcile/serialise logic; the coordinator owns the
 """
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 from typing import Any
 
@@ -23,6 +24,100 @@ VEHICLE_CACHE_VERSION = 1
 def vehicle_cache_key(entry_id: str) -> str:
     """`.storage` key for an entry's last-known-good vehicle snapshot."""
     return f"vag_connect_vehicles_{entry_id}"
+
+
+def account_identity_hash(identity: str | None) -> str | None:
+    """A stable, privacy-safe fingerprint of the account a cached snapshot
+    belongs to, used to discard that snapshot when an entry is re-authenticated
+    onto a DIFFERENT account while keeping the same entry id (#1878).
+
+    ``identity`` is the entry's account handle — its username / e-mail for a
+    credential or token strategy, the BrandID ``sub`` UUID for a device login, or
+    the VIN for a companion (ADB) entry, whichever the caller has. It is
+    normalised ``strip().lower()`` (the same compare the config flow uses on
+    usernames) so a cosmetic re-type of the same e-mail never triggers a false
+    discard; lower-casing a UUID / VIN is harmless. Only a fingerprint is stored,
+    never the handle itself.
+
+    Returns ``None`` when there is no identity to hash. The load-side rule is to
+    discard ONLY when a STORED hash is present and differs from the current one;
+    an absent stored hash (a pre-#1878 snapshot) is kept and backfilled on the
+    next save, so this never wipes every existing user's cache once on upgrade.
+    """
+    if not identity:
+        return None
+    norm = str(identity).strip().lower()
+    if not norm:
+        return None
+    return hashlib.sha256(norm.encode("utf-8")).hexdigest()[:16]
+
+
+def drop_state_to_cache(
+    high_water: datetime | None, overdue_streak: int,
+) -> dict[str, Any]:
+    """Serialise the drop-retry budget for the per-entry cache (#1850).
+
+    Two scalars and no vehicle data: the newest capture anchor ever seen, and
+    how many consecutive polls have found the next drop overdue without one
+    landing. They live in the vehicle cache because that store is already
+    per-entry and already survives a restart — which is the whole point.
+    """
+    return {
+        "anchor": high_water.isoformat() if high_water is not None else None,
+        "streak": int(overdue_streak),
+    }
+
+
+def drop_state_from_cache(
+    raw: Any, now: datetime, max_streak: int,
+) -> tuple[datetime | None, int]:
+    """Restore the drop-retry budget, defensively (#1850).
+
+    Returns ``(high_water, overdue_streak)``. Anything unreadable restores as a
+    fresh entry — the behaviour before this change, never an exception: this
+    runs during setup, where raising would cost the user their entry over a
+    scheduling optimisation.
+
+    Three choices that are deliberate, not incidental:
+
+    * **A future anchor is clamped to ``now``.** This is the one way the fix
+      could be worse than the bug: a stamp written while the host clock was
+      wrong, or an edited store, would keep the mark ahead of every real
+      capture and the budget would never arm again — alignment dead until
+      someone deletes the file. Clamped, the worst case is one skipped refill.
+    * **A naive stamp is read as UTC** rather than dropped. Dropping it would
+      restore ``None``, and ``None`` is exactly the state that refills the
+      budget — the bug this function exists to stop.
+    * **An unreadable anchor does not hand back the streak.** They are
+      independent; forgetting where we were is not a reason to also forget how
+      much of the budget was already spent.
+
+    ``max_streak`` is passed in rather than imported so this module stays free
+    of the coordinator (and of a circular import).
+    """
+    if not isinstance(raw, dict):
+        return None, 0
+
+    streak_raw = raw.get("streak")
+    # ``bool`` is an ``int`` in Python; ``True`` is not a streak of one.
+    streak = (
+        max(0, min(int(streak_raw), int(max_streak)))
+        if isinstance(streak_raw, int) and not isinstance(streak_raw, bool)
+        else 0
+    )
+
+    anchor: datetime | None = None
+    anchor_raw = raw.get("anchor")
+    if isinstance(anchor_raw, str) and anchor_raw:
+        try:
+            parsed: datetime | None = datetime.fromisoformat(anchor_raw)
+        except ValueError:
+            parsed = None
+        if parsed is not None:
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            anchor = min(parsed, now)
+    return anchor, streak
 
 
 # Cumulative / slow telemetry: when a fresh poll omits the field (None) but we
@@ -97,6 +192,21 @@ CARRY_FORWARD_FIELDS: frozenset[str] = frozenset({
 STATIC_MASTER_FIELDS: frozenset[str] = frozenset({
     "model", "model_year", "exterior_color", "engine_power",
     "license_plate", "vehicle_nickname", "image_urls",
+})
+
+# #1950 — facts a car has PROVED about itself, as opposed to master data a
+# channel supplies. Same carry semantics as STATIC_MASTER_FIELDS (immutable
+# per car, truthy wins, a poll that omits it must not blank it) and a
+# separate set because the meaning is different: these are not vw.de master
+# data, and the #465 test enumerates that set against a vw.de fixture. A
+# capability shoehorned in there fails that test for the right reason — the
+# set names a source, not just a behaviour.
+#
+# Deliberately NOT in CARRY_FORWARD_FIELDS, which is staleness-bounded: a
+# capability cannot go stale, while a carried VALUE can — that is the trap
+# that latched a suppressed 12V SoC at 100 % for good.
+CAPABILITY_FIELDS: frozenset[str] = frozenset({
+    "safe_state_implemented",
 })
 
 # #923 — the parked position belongs in the "old but visible" class too: a
@@ -179,6 +289,24 @@ MONOTONIC_INCREASING_FIELDS: tuple[str, ...] = (
     "odometer_km",
     "total_charged_energy_kwh",
 )
+
+# #2054 (@zintheweb, T-Cross 1.0 TSI) — odometer jump guard thresholds.
+# odometer_km is monotonic-protected, so a spuriously HIGH reading that reaches
+# the cache latches forever (every correct lower value is then rejected as "went
+# backwards"). The reported car jumped 26374 -> 100663 km inside one 15-min poll
+# and stayed there; no channel had any plausibility ceiling. Thresholds favour
+# ACCEPTING real data (a false reject only delays one poll and self-corrects; a
+# false accept latches permanently) while still catching a sentinel-scale glitch:
+#   * BURST — max plausible distance in a single poll. A real single-poll jump is
+#     < ~200 km; over a 15-min poll even 50 km reads as ~4800 km/day, so a flat
+#     km/day ceiling would false-positive. BURST absorbs that short-window spike.
+#   * RATE  — max plausible sustained accumulation per day, to clear a long
+#     offline-then-resume gap (a seasonal car offline for months).
+#   * ABS   — absolute catastrophic ceiling, used only when the elapsed time
+#     cannot be established; no real poll ever adds this many km.
+_ODOMETER_BURST_KM = 800.0
+_ODOMETER_RATE_KM_PER_DAY = 1500.0
+_ODOMETER_ABS_JUMP_KM = 50_000.0
 
 # Raw portal field name -> the entity attribute it fills, for the contested
 # reading resolver below. Deliberately explicit and NUMERIC-only: comparing a
@@ -360,9 +488,32 @@ def reconcile(
     # poll's value is FALSY (None / "" / {} / []) but a truthy one was recorded. A
     # fresh truthy value always wins. Truthiness (not ``is None``) is deliberate so
     # a blanked image_urls == {} is held, not published as "no renders".
-    for field in STATIC_MASTER_FIELDS:
+    for field in STATIC_MASTER_FIELDS | CAPABILITY_FIELDS:
         if not merged.get(field) and previous.get(field):
             merged[field] = previous[field]
+    # #1950 (@Adcad1970) — finalise "all closures secured" now that the carried
+    # capability is in hand. The mapper cannot do this: it is handed a fresh
+    # VehicleData and sees one delivery, so it only knows whether a safe(2)
+    # arrived in THIS one.
+    #
+    # The rule the mapper's own comment states is "a 2 proves the car implements
+    # the field, and from then on a 3 beside it is a real unsafe". The
+    # implementation scoped "from then on" to the same delivery. The reporter's
+    # car does send the 2 — his sensor reached ``on`` — so every delivery with the
+    # doors unlocked or open lost the proof and published unknown where off was
+    # the honest answer, for hours at a time on a security-facing entity.
+    #
+    # Only the NEGATIVE verdict is reached here, and only from a positive
+    # observation: this delivery carried door safe_state readings and none was a
+    # 2. Absence still says nothing — a car that has never sent a 2 keeps its
+    # None and no entity appears, which is the measured behaviour that #1739 and
+    # the 4442-payload survey established and this does not touch.
+    if (
+        merged.get("closures_secured") is None
+        and merged.get("safe_state_implemented")
+        and merged.get("safe_state_all_unsafe")
+    ):
+        merged["closures_secured"] = False
     # #1195 partial-dataset SoC guard. The reliable live SoC is the single-
     # occurrence VALID ``battery_level_HV`` pair; a poll that OMITS it carries
     # only the ``battery_state_report.soc`` leaf, which VW stamps with a fresh-
@@ -535,6 +686,39 @@ def reconcile(
                 f"energy-derived {round(_sr)}"
             )
             merged["battery_soc"] = round(_sr)
+
+    # #2054 — reject an implausible odometer UP-jump BEFORE the monotonic guard
+    # below can freeze it forever. INGEST-only: this prevents a new car from
+    # latching; it does not heal a cache already stuck high (those users reload
+    # the integration once). Thresholds + rationale at _ODOMETER_BURST_KM.
+    _odo_new = merged.get("odometer_km")
+    _odo_old = previous.get("odometer_km")
+    if (
+        isinstance(_odo_new, (int, float))
+        and not isinstance(_odo_new, bool)
+        and isinstance(_odo_old, (int, float))
+        and not isinstance(_odo_old, bool)
+        and _odo_new > _odo_old
+    ):
+        _jump = _odo_new - _odo_old
+        _t_old = _as_aware_dt(previous.get("last_seen_at"))
+        _t_new = _as_aware_dt(fresh.get("last_seen_at"))
+        if _t_old is not None and _t_new is not None and _t_new > _t_old:
+            _elapsed_days = (_t_new - _t_old).total_seconds() / 86400.0
+            _ceiling = _ODOMETER_BURST_KM + _ODOMETER_RATE_KM_PER_DAY * _elapsed_days
+            if _jump > _ceiling:
+                notes.append(
+                    f"odometer_km jumped {_odo_old}->{_odo_new} (+{_jump:.0f} km in "
+                    f"{_elapsed_days:.3f} d, ceiling {_ceiling:.0f}); kept {_odo_old} (#2054)"
+                )
+                merged["odometer_km"] = _odo_old
+        elif _jump > _ODOMETER_ABS_JUMP_KM:
+            notes.append(
+                f"odometer_km jumped {_odo_old}->{_odo_new} (+{_jump:.0f} km, no usable "
+                f"capture-time delta; absolute ceiling {_ODOMETER_ABS_JUMP_KM:.0f}); "
+                f"kept {_odo_old} (#2054)"
+            )
+            merged["odometer_km"] = _odo_old
 
     for field in MONOTONIC_INCREASING_FIELDS:
         new = merged.get(field)

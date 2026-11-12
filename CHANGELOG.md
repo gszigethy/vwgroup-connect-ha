@@ -46,20 +46,2081 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
 
 ## [Unreleased]
 
-## [5.1.2-dev1] - 2026-10-28
+## [5.3.0-dev1] - 2026-11-12
 
 ### Changed
 
-- **Fork rebased onto upstream v5.1.2.** Released [v5.1.2](https://github.com/its-me-prash/vwgroup-connect-ha/releases/tag/v5.1.2), including all upstream changes since this fork's v5.1.0-dev1. No unreleased upstream commits are included. Integration code matches v5.1.2 except for this development version in the manifest. ([#1957](https://github.com/its-me-prash/vwgroup-connect-ha/pull/1957))
-- **Fork CI keeps branch validation, coverage and SonarCloud analysis.** Upstream-only automation and HACS validation stay disabled. ([gszigethy/vwgroup-connect-ha#118](https://github.com/gszigethy/vwgroup-connect-ha/pull/118))
-- **Development releases use `X.Y.Z-devN` versions and GitHub pre-releases.** Release links point at the fork; the short release body built from this changelog is kept. ([gszigethy/vwgroup-connect-ha#118](https://github.com/gszigethy/vwgroup-connect-ha/pull/118))
-- **The Volkswagen Android app version watcher is retained.** It keeps its corrected scraper arguments. ([gszigethy/vwgroup-connect-ha#119](https://github.com/gszigethy/vwgroup-connect-ha/pull/119))
-- **Fork guidance and the Companion compatibility policy are retained.** Fork differences are consolidated into four subject commits on the released upstream base. ([gszigethy/vwgroup-connect-ha#118](https://github.com/gszigethy/vwgroup-connect-ha/pull/118))
+- **Fork rebased onto upstream v5.3.0.** This includes all upstream changes since this fork's `5.1.2-dev1` (upstream v5.2.0 to v5.3.0). The fork keeps only its own CI, release tooling and the Volkswagen Android app version watcher on top. ([gszigethy/vwgroup-connect-ha#121](https://github.com/gszigethy/vwgroup-connect-ha/pull/121))
+- **Fork CI keeps branch validation, coverage and SonarCloud analysis.** It follows upstream's current CI. Upstream-only automation and HACS validation stay disabled. ([gszigethy/vwgroup-connect-ha#121](https://github.com/gszigethy/vwgroup-connect-ha/pull/121))
+- **Development releases use `X.Y.Z-devN` versions and GitHub pre-releases.** Release links point at the fork. The release notes builder reads upstream's current changelog format and also accepts `-devN` sections. ([gszigethy/vwgroup-connect-ha#121](https://github.com/gszigethy/vwgroup-connect-ha/pull/121))
+- **The Volkswagen Android app version watcher is retained.** ([gszigethy/vwgroup-connect-ha#121](https://github.com/gszigethy/vwgroup-connect-ha/pull/121))
+- **Fork guidance and the Companion compatibility policy are retained.** ([gszigethy/vwgroup-connect-ha#121](https://github.com/gszigethy/vwgroup-connect-ha/pull/121))
 
 ### Notes
 
-- This fork is used for development only. The next release on this base will be `5.1.2-dev2`.
-- Companion compatibility and command safeguards are inherited unchanged from upstream v5.1.2. This release adds no new app-version or vehicle-command validation. ([gszigethy/vwgroup-connect-ha#118](https://github.com/gszigethy/vwgroup-connect-ha/pull/118))
+- This fork is used for development only. The next release on this base will be `5.3.0-dev2`.
+
+## [5.3.0] - 2026-11-11 — "Through the front door / Durch die Vordertür"
+
+### Hinzugefügt / Added
+
+- **EU browser sign-in that gets past the attestation wall — multi-brand
+  (#1712, #2051, #1964).** Since October the CARIAD token exchange refuses this
+  integration's sign-in with `invalid assertion headers`, and the QR /
+  device-code grant was withdrawn for Audi before that (#1364). What the vendor
+  left open is the login the brand apps use: the Auth0 tenant at
+  `group.identity.vwgroup.io`, with a brand's public client, PKCE, and a
+  callback registered on that client — and that token endpoint asks for no
+  attestation. The access token it issues is accepted by the CARIAD vehicle API
+  directly (no AZS / MBB exchange in between).
+
+  **The solution is @majd's**, worked out and shipped in
+  [audiconnect/audi_connect_ha#905](https://github.com/audiconnect/audi_connect_ha/pull/905)
+  (MIT): the Auth0 tenant, audience and scope, the registered `localhost`
+  callback, the paste-the-callback-URL flow, and the Auth0 refresh. **@woopstar
+  ported it to this integration's auth/strategy model and verified it on a live
+  Audi** (sign-in, an hour of polling, and the first Auth0 token refresh), in
+  [#2060](https://github.com/its-me-prash/vwgroup-connect-ha/pull/2060). This
+  entry generalises that port from Audi-only to every EU brand the tenant holds
+  — Volkswagen, SEAT and CUPRA alongside Audi — through one
+  `cariad/auth/_auth0.py` module and one `strategy="auth0"` session tag.
+
+  **How it looks.** *Add integration → Browser login* now lists every brand with
+  an offered browser sign-in. For **Audi** (device grant retired) it is the
+  browser login: a sign-in link, you sign in in any browser, the redirect to a
+  `localhost` address cannot load — that error is expected — and you paste the
+  full address back into the form. The flow checks the OAuth `state` it issued,
+  trades the one-time code for tokens, and refreshes at the same Auth0 endpoint;
+  a dead refresh token raises a reauth instead of re-running the walled password
+  login.
+
+  **SEAT and CUPRA keep their working device-code grant by default** — their
+  app login still works, so nothing changes for them unless a tester ticks the
+  new *Experimental: browser (Auth0) sign-in* box. Both reach the Auth0 login
+  page (measured), but their code exchange is **not verified yet**: the step
+  marks them experimental and asks the tester to report. **Volkswagen is not
+  offered**: its sign-in page loads, but the code exchange returns
+  `401 access_denied` and the `localhost` callback is refused *Callback URL
+  mismatch* (live-measured 2026-11-09/10), and the We Connect build carries no
+  Auth0 login provider at all — so offering it would only ever fail. The route
+  stays in the module, documented, but is gated out of the picker (`AUTH0_DENIED`).
+  A companion probe, `scripts/auth0_signin_probe.py`, drives the same builders
+  from a terminal and produces a share-safe log (no token, VINs masked) for
+  exactly that.
+
+  **Migration, in both directions.** A fresh browser sign-in for an account
+  that already has an email + password entry for the same brand attaches its
+  tokens to that entry (matched on the e-mail claim, `sub` as fallback) instead
+  of creating a second one, and keeps the stored password: the EU Data Act
+  portal channel still signs in with it. The reauth flow for an Auth0-capable
+  brand now offers a choice — the browser sign-in, or the old credentials form
+  — and the *sign-in blocked* repair notice gained a **Repair** button that
+  opens it. The `device_grant_retired` dead end for Audi (#2051) is gone.
+
+  **What it cannot do, measured rather than assumed.** Live on an EU account
+  (Audi e-tron, DK): the Auth0 token reads the CARIAD vehicle API and lists the
+  garage, but the vehicle **render images** are out of reach — the AZS proxy
+  refuses the token with `client does not have access to the IDP for token
+  exchange`, and the vgql endpoint answers the same message as a 401 for every
+  `vehicle { … }` sub-field. So an Auth0 session skips the image fetch, says so
+  once in the log, and leaves vehicle data untouched. A second live EU account
+  (three Audis, incl. a current diesel 48 V mild-hybrid) confirms the token
+  reads `selectivestatus` (multi-status), `capabilities`, parking position and
+  battery-health; `tripstatistics` returns 404 and is handled best-effort; no
+  endpoint returns 401 or 403, so there is no refresh storm and no extra read
+  gating is needed, and the drive-train data reads correctly (the mild-hybrid
+  diesel reports diesel range only, no spurious electric range). Legacy
+  pre-CARIAD cars return 400/502 on the modern surface, as expected.
+
+  **Two-way works for Audi, measured.** On the same three-Audi account, the
+  Auth0 token reaches the CARIAD **command** plane directly: `GET
+  …/pendingrequests` answered **204** on every car (the token is accepted on the
+  command namespace, not 401/403), and commands route through `_post_command` on
+  that same session — no MBB/AZS exchange in between. So an **Audi** Auth0 entry
+  is **not** read-only: lock, climate and charge command entities appear, and a
+  server-side command refusal (if any — the actuating write was deliberately not
+  force-tested on the owner's car) is surfaced honestly by the command-failure
+  classifier rather than hidden. **SEAT and CUPRA stay read-only**: their single
+  OLA command backend is attestation-walled (403 off-device), so command entities
+  there could only ever fail; reads keep flowing from `selectivestatus`. The
+  attach-to-an-existing-entry case — an Auth0 entry that also holds an armed MBB
+  command channel — keeps commands via that channel as before. Reports this
+  answers: @starwarsfan (#2051), the #1964 and #1712 threads.
+
+### Behoben / Fixed
+
+- **Climate showed the OUTSIDE temperature as the cabin reading (#2068).**
+  `current_temperature` literally returned `outside_temp`, so a Škoda Elroq's
+  climate entity tracked the outside-temperature sensor to the second even while
+  heating. It now reads a dedicated cabin field and, when the feed carries no
+  interior temperature, omits the attribute rather than implying the cabin is as
+  cold as the street.
+
+- **The HU/TÜV service-calendar event could never fire (#1925).**
+  `main_inspection_due_at` was declared and read by the calendar, but no
+  connector or parser ever wrote it, so the "Main inspection (HU / TÜV)" entry
+  was permanently absent — worse than missing, because the category still showed
+  and read as "no inspection due". The dead field is removed, and a new guard
+  test fails if any service-calendar field ever again lacks a writer.
+
+- **The raw-dataset archive stopped after a restart (#2071).** With
+  `keep_raw_datasets` on, the archive hook was attached only on the
+  manual-refresh path, not the periodic poll loop — which is the real driver
+  (`update_interval` is None) — so after a restart the on-disk ring buffer
+  silently stopped growing while the portal feed kept delivering. The hook is now
+  (re)attached on the poll loop too.
+
+- **Two opaque identifiers reached the diagnostics download unredacted (#923).**
+  The registered MBB X-Client-Id and the EU-Data-Act ZIP-envelope dataset key are
+  UUIDs with no triage value in a shared file; both are now redacted, matching
+  the security posture behind #1968.
+
+- **Charging Port read "connected" on an unplugged car (#1739).** A scheduled
+  charging PLAN (optimised / to-departure-time) reports its scenario as *active*
+  even when the car is unplugged or merely waiting for its departure time, and
+  that alone was taken as plugged-in-and-charging. Now only "immediately
+  charging" (impossible while unplugged) counts on its own; a scheduled plan
+  counts only when live power confirms current is flowing — so an idle, unplugged
+  Audi no longer shows its port connected, while a genuinely charging car (incl.
+  the #632 CUPRA that ships no `current_charge_state`) is unaffected. *Caveat: a
+  car on a scheduled plan that charges without ever reporting power would now read
+  not-charging until power appears — re-verify with the #632 reporter.*
+
+- **The per-point cruising-range unit companion was ignored (#1960).** A car
+  that reports its distance unit only via `estimatedcruisingrange*.unit` (not the
+  global `mileage.unit`) had its ranges left unconverted, and the `.unit` leaf
+  kept re-surfacing to the Scout. That companion is now a second miles signal, so
+  a miles car is detected and converted even when it ships only this field.
+
+- **The nested `parkinglightstate` dialect never reached the per-side sensors
+  (#1949, #2064, #2066).** VW / CUPRA / VW-commercial ship the left/right parking
+  lights nested under a `parkinglightstate` container, which no parser key
+  covered — so the `parking_light_left` / `_right` sensors stayed empty on those
+  cars and the Scout re-filed the fields on every poll. The nested spelling now
+  maps onto the existing sensors.
+
+- **The Vehicle Data Scout kept re-filing already-mapped Skoda plug fields
+  (#2059, #2061, #2062, #2063, #2065, #2070).** Skoda moved
+  `plugConnectionState` / `plugLockState` / `chargingErrorReason` onto the
+  charging endpoint; the parser has read them (→ `plug_state` / `plug_lock_state`
+  / `charging_error_code`, with sensors) since v5.2.5, but the Scout's
+  expected-keys table lagged the parser and re-opened the same six issues across
+  cars. The keys are now registered, so the data stays surfaced and the noise
+  stops.
+
+- **The parked-car step never matched on a German phone (#1963, #1981,
+  @Snaker86).** The map element the step looks for is found by its
+  accessibility label, and that label is translated: the English screen dump
+  reads `Google Map`, the German one `Google Maps`. The pattern was anchored on
+  the singular, so on a German phone the step found nothing and the walk
+  stopped — correct by its own rule, and on a screen where the marker was
+  plainly visible. He had already ruled out everything else: phone connected,
+  app in the foreground, marker tappable by hand, and the parking details
+  opening normally when he tapped it himself.
+
+  **A measurement changed the diagnosis.** The first suspect was the app
+  version. That was wrong. His dump and this repository's own test fixture are
+  both app **4.8.1**, and the fixture is the English one — same version, two
+  languages, two labels. So the difference tracks the UI language alone, and
+  nothing about his app build was unusual. The plural is now optional. Both
+  anchors stay, so the labels sitting beside it on that same screen
+  (`Map settings`, `Karteneinstellungen`, `Karte Tab`) still cannot match, and
+  a test pins exactly which two labels the widening added rather than leaving
+  the blast radius to inspection. Both real label sets are now in the suite:
+  his ten German ones and the fixture's English nine.
+
+- **A third spelling of the same map label, and the previous fix did not cover
+  it (#968, @Odatas).** The entry above accepted `Google Map` and
+  `Google Maps`. His German phone, on the same app version 4.8.1, says
+  **`Google-Karte`** — with a hyphen, which `\s*` does not match. So the
+  parking walk still stopped for him.
+
+  **Nine of his ten accessibility labels are identical to the other German
+  phone's, character for character.** The only one that differs is the Google
+  attribution. Two German phones, one app version, one differing label: that
+  rules out the app version *and* the UI language as the whole explanation and
+  points at whatever draws that attribution. The pattern now allows a hyphen
+  wherever it allowed a space, for every alternative it already had.
+
+  Both anchors stay, and the tests pin the two steps separately: what the
+  previous entry added, and what this one adds. Neither step may widen further
+  without a test saying so.
+
+  **How this was found is the part worth writing down.** He attached a full
+  dump set to his report on 23 October — fifteen days before the same dump was
+  asked for on another thread, and it was never opened. The evidence was in the
+  tracker the whole time. Before asking anyone for a measurement, search the
+  tracker for one that has already been delivered.
+
+- **Image cache hardening after a privacy review (#2057).** The local render-image cache now
+  derives its filenames from a non-reversible digest instead of from an
+  identifier that does not belong in a path, and files written by earlier
+  versions under the old naming are removed once at startup.
+
+  Two visible consequences, both harmless. The files in
+  `/config/www/vehicles/` change name, so a Lovelace card that hard-codes a
+  cached filename needs its URL updated — cards that reference the image
+  *entity* are unaffected and need nothing. And the first start after updating
+  clears the old cached files; they are fetched again on the next poll.
+
+  The same hardening already existed for the diagnostics dataset archive. It is
+  now one shared helper used by both, rather than a decision taken in one place
+  and missed in the other.
+
+  Entity unique IDs are deliberately unchanged: they are keys in Home
+  Assistant's own registry, are never served, and renaming them would orphan
+  every existing entity.
+
+- **Fuel level could lag at a stale value while a current reading was available (#2072).** The EU Data Act batch feed and a live channel can both carry the fuel level, and the batch value was treated as the owner of that field — so a fresh live reading could not replace a stale batch one, and the gauge lagged behind the car. Fuel level now follows the same freshest-wins rule as the rest of the live telemetry, so a current reading always wins over an older batch value.
+
+- **A cached vehicle could linger after re-authenticating with a different account (#1878).** The stored vehicle snapshot is keyed by the config entry, which a credential re-auth keeps — so signing the same entry in to a different account left the previous account's battery level and position frozen in place while other fields updated. The snapshot now carries an account fingerprint, and the vehicle data is discarded when it no longer matches the signed-in account; an existing cache from before this change is never wiped on upgrade. Thanks @tmh88.
+
+- **A Canadian Audi set up through the browser sign-in was routed to the US and found no vehicles (#1433).** Audi US and Audi Canada use different API hosts, but the browser (device-code) sign-in form had no US/Canada selector, so a Canadian account defaulted to the US garage and discovered no cars. The sign-in form now offers the region picker for the North-American brands, and the choice is stored and used to reach the right garage.
+
+- **A single glitched reading could freeze the odometer permanently (#2054).** The odometer only ever counts up, so once a spuriously high reading reached the cache, every correct lower reading afterwards was rejected as a step backwards and the wrong mileage stuck — one reporter's car jumped to 100663 km and stayed there while the real value was 27668. An implausible jump is now rejected as it arrives: a new reading is accepted only when the extra distance is plausible for the time since the last one, so a glitch can no longer latch. A car already stuck on a bad value clears it by removing and re-adding the integration once. Thanks @zintheweb.
+
+## [5.2.5] - 2026-11-07 — Nothing thrown away / Nichts mehr weggeworfen
+
+### Behoben / Fixed
+
+- **The empty-screen-dump error guessed at the cause and threw away the answer
+  (#1913, @stephanlasso).** His phone was awake, unlocked and showing the app,
+  and the Companion read still got no screen dump. The message offered three
+  causes — asleep, not in the foreground, secured screen — and he had ruled out
+  all three. Two defects, both in one line of shell:
+
+  **It omitted the cause the code itself documents.** `uiautomator dump` gives
+  up when the phone's UI does not go **idle**, and a single animation or a
+  transient toast is enough. The comment saying so sits twenty lines above the
+  message that did not mention it. On a phone that is awake, unlocked and in the
+  app, that is the only candidate the other three leave out — and it matches the
+  animated-advert case traced on #968. The message now names it.
+
+  **And it discarded the reason.** `uiautomator dump` prints its status,
+  including *why* it gave up, to stdout; the command sent that to `/dev/null`
+  and read the dump file instead. So in the one case where the reason is
+  printed, it was thrown away and then guessed at. The status now goes to its
+  own file and is read back only after the dump has failed twice, and it is
+  quoted in the error.
+
+  Its own file rather than the same stdout, deliberately: merging them would put
+  a status line in front of the XML on the **success** path, and that path feeds
+  a parser. The successful output is byte-identical to before, and the extra
+  round trip lands only where the read was already failing and already sleeping
+  for its retry. The `rm` that stops a failed dump returning the previous run's
+  XML now covers the status file too, or a stale reason would be reported as
+  this run's.
+
+  The status is cut to its first line and 120 characters. `_redact` caps the
+  whole exception message at 500, so an unbounded status — uiautomator can
+  answer with a Java stack trace — would push the message that matters out of
+  the record; the same reasoning the error reporter already applies to an HTTP
+  response body. It is **not** logged: `_redact` strips VINs, e-mails, JWTs,
+  UUIDs and tokens from the exception message, which is what makes it safe to
+  publish, and `_LOGGER` has no such filter.
+
+  One earlier test counted every shell call to pin "one retry, not a loop". The
+  status read is not a retry, so that count now measures the dump command and
+  asserts the status is read exactly once; the intent is unchanged. Seven
+  mutations of the new code were seeded and all seven are caught.
+
+  Also corrected publicly in the thread: my first reply called the message
+  "already the diagnosis rather than a symptom". It was not — it was three
+  guesses.
+- **A Home Assistant restart handed the drop-retry budget back, so every restart
+  produced three fast polls (#1850, @indigomejor).** He measured it on a parked
+  Škoda Octavia: four restarts, each with the same sequence — startup poll, one
+  poll at the configured interval, then exactly three at the 180 s floor, then
+  the stand-down — and his debug log showing the **same** capture anchor on every
+  poll of the burst. His control is what isolated the trigger: without a restart
+  the slow poll still appears about every six hours and no burst follows, because
+  by then the streak is already spent.
+
+  The budget itself works, and he confirmed that on a real drive. What it did not
+  survive was a restart: the newest capture time, the anchor the last decision
+  compared against, and the overdue streak were all set in `__init__` and written
+  nowhere. The predicate then read "no memory yet" as "a drop landed" — and the
+  test pinning that behaviour records why it looked right at the time: *"The
+  first anchor of an entry's life counts, so the budget starts full."* The
+  premise holds. The word that was wrong is **life**: with nothing persisted,
+  "an entry's life" meant "since the last restart".
+
+  Both halves now live in the per-entry vehicle cache, which already survived a
+  restart. The anchor became a **high-water mark** — the newest capture ever
+  seen, monotone and never cleared — because persisting the old field would not
+  have fixed this, and that is measured rather than assumed: the first poll after
+  a restart has not read the portal yet, so it wrote `None` over the restored
+  value and the second poll refilled the budget exactly as before. The streak is
+  persisted as well, and it is the half that actually holds the budget down; with
+  only the mark restored, a restart starts at zero and the three fast polls
+  happen anyway.
+
+  A restored anchor dated in the future is clamped to now. That is the one way
+  this change could be worse than the bug it fixes: a stamp written while the
+  host clock was wrong, or an edited store, would keep the mark ahead of every
+  real capture and the budget would never arm again. Clamped, the worst case is
+  one skipped refill.
+
+  Two structural tests from the first round are superseded rather than deleted,
+  each saying so in its own docstring: one pinned the predicate's first argument
+  as the previous poll's anchor, and one pinned that the anchor was assigned
+  *outside* the retry gate. Both were right for the field they guarded; the
+  high-water mark has the inverse invariant, because assigning it
+  unconditionally would let a single poll that computes no capture set it to
+  `None` and hand the budget back mid-run, without a restart. Five mutations of
+  the new code were seeded and all five are caught.
+
+  **Not claimed:** that this caused his HTTP 430 account lockout. His own numbers
+  argue against a simple rate explanation — three identical sequences passed
+  without one, busier hours passed without one, and the count covers polls rather
+  than requests. #1973 remains open on exactly that: a single poll can carry six
+  extra requests of its own.
+
+## [5.2.4] - 2026-11-06 — Two entities people watch / Zwei Entitäten, auf die man schaut
+
+### Sicherheit / Security
+
+- **The coordinate guard was written, tested and invoked by nothing; it is a
+  required check now (#1378).** `scripts/check_no_precise_gps.py` has existed
+  since 2026-11-04, enforcing the rule in CONTRIBUTING.md that forbids a
+  coordinate beyond one decimal anywhere in the repo. Its only reader was its
+  own unit test. The reason it was never wired is worth recording, because it
+  is not laziness: its sibling `check_no_real_vins.py` runs in `ci.yml` as a
+  whole-tree audit, which works because the VIN tree scans clean — while this
+  tree holds **13** deliberate pairs (public landmarks used as test inputs,
+  named in the script's docstring), so an audit run fails on every commit, and
+  a required check that always fails gets deleted rather than fixed.
+
+  So it runs in its `--base` form, which asks only what a change **adds**. A
+  guard that refuses legitimate work gets switched off, so whether it does was
+  measured rather than assumed, in the shape the changelog gate's own history
+  demanded: replayed over `main` commit by commit, each against its real parent,
+  driven by the script's own predicates rather than a re-implementation.
+
+  | window | commits | would have been refused |
+  |---|---|---|
+  | since 2026-10-20 | 120 | **0** |
+  | since 2026-08-25 | 700 | **8** — of which 4 are merge commits |
+
+  The 700-commit figure is given because quoting only the first would be a
+  chosen window. Four of the eight are merge commits, and those are an artefact
+  of the replay rather than gate behaviour: it diffs a merge against its *first*
+  parent and so sees the other branch's additions, which neither of the real
+  baselines does — a pull request is judged against its merge base and a push
+  against the commit it came from. The remaining four are ordinary commits from
+  2026-08-26 and 2026-09-08/09, and each one added a public-landmark coordinate
+  to a test fixture; between them they are how most of the 13-pair baseline
+  entered the tree. Nothing in the two months since would have been refused.
+
+  Those four are also what a future false positive looks like, and the cost is
+  the one the script's docstring already accepts: a fixture whose value is
+  arbitrary needs a marker word or rounder digits, one line, against a false
+  negative that publishes where a stranger parks.
+
+  Two ways this could have been wired and quietly protected nothing, both now
+  held by a test that fails if it is undone:
+
+  * **A shallow checkout.** `actions/checkout` defaults to depth 1, with no
+    history and no `origin/main`, so there is nothing to diff against. The job
+    now sets `fetch-depth: 0`.
+  * **A direct push comparing `main` against itself.** On a push, `origin/main`
+    *is* the new `HEAD`, so the merge base is `HEAD`, the diff is empty and the
+    gate accepts any coordinate. The step therefore uses the commit the branch
+    pointed at before the push on a push event, and the merge base with `main`
+    on a pull request.
+
+  Each of the four wiring assertions was proven by breaking the workflow in
+  exactly its own way and watching that one test go red. One of them did not:
+  the shallow-checkout test asserted `fetch-depth: 0` appeared anywhere in the
+  job and passed with the setting deleted, because the explanatory comment above
+  the checkout names the setting itself. **The test was satisfied by its own
+  documentation.** It now ignores comment lines, and the episode is recorded in
+  its docstring rather than tidied away, because a presence check that its own
+  prose can satisfy is not a rare mistake.
+
+### Behoben / Fixed
+
+- **"All closures secured" said *unknown* where *off* was the honest answer,
+  because the proof that a car implements the field was thrown away between
+  deliveries (#1950, @Adcad1970).** The aggregate only reaches a verdict when a
+  delivery carries at least one door `safe_state_*` reading of 2 — a rule that
+  exists because across 4442 payloads those fields only ever carried 3, which
+  made the old arithmetic report "not secured" permanently on locked, shut cars.
+  The comment on that rule says a 2 "proves the car implements the field, and
+  **from then on** a 3 beside it is a real unsafe". The implementation scoped
+  "from then on" to the *same* delivery, because the mapper is handed a fresh
+  `VehicleData` and sees one dataset.
+
+  **His car does send the 2** — his sensor reached `on`, which by the gate's own
+  logic can only happen when one arrives. So for a car like his the entity could
+  read `on` or `unknown` and never `off`: every delivery with the doors unlocked
+  lost the proof. He watched HA show the car open and unlocked for nearly two
+  hours while it had been shut since 08:28, and asked the right question —
+  *"Should an observed open door give 'not secured' rather than unknown?"*
+
+  The capability is now remembered per car and the verdict finalised in
+  `reconcile`, the one function every path runs after the mapper. Only the
+  negative verdict is reached there, and only from a positive observation; a car
+  that has never sent a 2 keeps its `None` and no entity appears, which is
+  #1739's measured behaviour and is untouched.
+
+  It carries in a new `CAPABILITY_FIELDS` — immutable per car, truthy wins, never
+  blanked by a poll that omits it — and deliberately not in
+  `CARRY_FORWARD_FIELDS`, which is staleness-bounded: a capability cannot go
+  stale, while a carried *value* can, and that is the trap that once latched a
+  suppressed 12V SoC at 100 % for good. **The first attempt put it in
+  `STATIC_MASTER_FIELDS` instead, and the #465 test refused it** — it enumerates
+  that set against a vw.de master-data fixture and raised a `KeyError`. It was
+  right to: that set names a *source* ("only the vw.de channel supplies these"),
+  not merely a carry behaviour, and a fact the car proves about itself is neither
+  master data nor vw.de-supplied. Same mechanics, different meaning, separate
+  set — a completeness test earning its keep by rejecting a shortcut rather than
+  a bug.
+
+  **What was NOT done, and why.** The first proposal was to let an observed open
+  door force `off` directly. An independent review of the proposal refused it,
+  with the objection that killed it: the entity would be *created* by an open
+  door and fall back to `unknown` as soon as the car was shut and locked, and a
+  security sensor that says "no idea" right after you lock up is worse than one
+  that stays absent. The same review also established that the reporter's car
+  sends the 2 — the premise the first draft had got wrong.
+
+  **The residual risk, stated rather than hidden:** a car that once sent a 2 and
+  then stops sending it for good — a firmware change, say — keeps the capability
+  flag and would read `off` on every all-3 delivery. Nothing in the corpus looks
+  like that, and the pre-#1739 state was worse for everyone, but it is the one
+  case this design cannot distinguish. Raised by that same review as not provable
+  from the information available, which is the honest verdict.
+
+- **The Charging Port sensor died on 5.2.3 for Škoda cars with an EU-Data-Act
+  export, and the guard that was supposed to prevent it covered two paths out of
+  six (#2030, @Kaputnixx).** Home Assistant refuses an enum entity outright when
+  it receives a value outside its options — it does not degrade it to
+  unavailable. So an upper-case `DISCONNECTED` reaching a sensor whose options
+  are `connected` / `disconnected` cost the whole entity, and logged a
+  `ValueError` on **every** update: 112 of them in 22 hours at the reporter's
+  12-minute scan interval.
+
+  **The path, which the reporter deduced from the symptom before anyone read the
+  code.** He had already checked that `normalize_enum_states` exists and is
+  called in the enrichment step and in the cache restore, and concluded that
+  *some other path* must be handing the entity the raw value. It does:
+  `_poll_loop` calls `_advance_historical_exports` on every iteration, which
+  imports a pending EU-Data-Act export, writes the parsed snapshot straight into
+  `self.vehicles[vin]` — or gap-fills the current one from it — and pushes with
+  `async_set_updated_data(dict(self.vehicles))`, bypassing both the enrichment
+  step and `_async_push_update`. The export dialect carries `plug_state` and
+  publishes the verbose upper-case token. That is also why reloading fixed it
+  until the next poll: the restore path folds, the export path did not.
+
+  **Why #1739's guard missed it, which is the part worth keeping.** That fix put
+  the fold in two places and its test asserts the call is present in both — while
+  its docstring claims "EVERY path that reaches the platforms". It checked the
+  paths it *named* instead of enumerating the paths that *exist*, so a third one
+  was invisible to it. There were six `async_set_updated_data` call sites and
+  four pushed `dict(self.vehicles)` with nothing in between.
+
+  So the fold moves to the one place every path must pass: an override of
+  `async_set_updated_data` on the coordinator. A seventh call site added next
+  year inherits it without anyone remembering. It folds in place on a shallow
+  copy, so the stored snapshot is cleaned too and the raw token is not persisted
+  and restored later; folding an already-folded value is a no-op, so the paths
+  that normalise earlier are unaffected.
+
+  Proven against two mutants rather than asserted: removing the fold fails four
+  behaviour tests, and reversing fold and delegation fails the order test. **The
+  order test was vacuous on its first attempt** — it compared string positions in
+  a dump of the function body, and the override's own docstring mentions
+  `normalize_enum_states`, so the fold always appeared to come first whatever the
+  code did. It now compares statement indices with the docstring dropped. Recorded
+  rather than tidied away, because that is the second time in two days that a
+  check was satisfied by its own prose.
+
+- **PRIVACY.md still told you the GPS-precision fix was unreleased, a day after
+  it shipped — and a test now holds that sentence so it cannot happen again
+  (#1378).** In two places the privacy document said the defect was "fixed in
+  the repository but **not yet in a released version**". That was true when it
+  was written on 2026-11-04 and false by the evening: `git tag --contains`
+  reports **v5.2.3** for both fixes (`44d2a7d6`, `2b274626`). So the document
+  was withholding an all-clear that already applied, and telling you to be
+  careful about a version that no longer had the defect. Corrected to name
+  5.2.3, with the part that still matters kept: an export made with 5.2.3b1 or
+  **earlier** can still carry a precise coordinate, including one already
+  attached to an issue — and deleting the comment does not remove the file.
+
+  The interesting half is why the careful wording failed. It was chosen
+  *because* naming a version would have been wrong at the time, and the note
+  prescribing it also says to follow it up at release. That follow-up was
+  missed within a day, by its author. A rule enforced by someone remembering at
+  the right moment is not a gate, so
+  `tests/test_release_claims_in_docs_do_not_go_stale.py` is now the gate: it
+  reads every user-facing document, finds each claim that something is **not**
+  released, resolves the issue it cites, and goes red if `CHANGELOG.md` puts
+  that issue's newest entry in a shipped version. It checks the opposite
+  direction too — an "as of 5.2.3" promise whose issue still sits under
+  `[Unreleased]` is a false all-clear, which is the direction that put live
+  session cookies into public issues for four months (#923) — and it fails a
+  caution that cites nothing at all, because an unverifiable sentence is
+  exactly the one that rots unnoticed.
+
+  It compares two documents rather than git, deliberately: `ci.yml` checks out
+  shallow with no tags, so `git tag --contains` would find neither commit nor
+  tag and would answer "unreleased" for everything — a gate that passes
+  silently in the only place it runs. `CHANGELOG.md` is in the checkout and is
+  the file the release process already rewrites. The guard is proven by
+  reintroducing the real sentence, verbatim, and watching it fail.
+
+### Hinzugefügt / Added
+
+- **Škoda began shipping the plug fields on the charging endpoint, which had no
+  reader for them; they are read now (#1990).** **More than thirty** of these
+  were filed on 2026-11-05, #1990 through #2021, starting at 12:44 and still
+  arriving at 20:45. Thirty bodies were read — the only ones not read are two
+  that their reporters had already closed (#1995, #1998), and for those the
+  titles say `2 new field(s) on skoda` like the rest. The count is given as a
+  lower bound on purpose: an exact figure in this paragraph would have been
+  wrong three times over the course of that one evening.
+
+  Of the thirty bodies read, **every single one names only**
+  `status.plugConnectionState` and `status.plugLockState` on the `charging`
+  endpoint, with four of them adding `status.chargingErrorReason` (#1999,
+  #2011, #2017, #2020), for which the Scout's own "spec field (official)"
+  column is blank. Not one named a fourth field. So this is one backend change
+  rather than thirty findings — one owner even filed the same observation
+  twice, three minutes apart, both bodies carrying the identical `Reported at`
+  of 12:41:46. It is not confined to the EV models either: #2008 is a Kodiaq.
+
+  **Nothing was broken.** This parser reads the plug off the *air-conditioning*
+  endpoint under Škoda's own names (`chargerConnectionState` /
+  `chargerLockState`), and has since 2026-04-26; the backend simply started
+  offering the CARIAD spelling on the charging endpoint as well, where no reader
+  existed — so the Vehicle Data Scout correctly called it unmapped. (The
+  official-API parser has read these same two field names since #1286; what
+  changed here is the mysmob path.)
+
+  **The raw token is passed through and no boolean is invented**, which is the
+  #1286 decision for these two exact field names: the official spec declares
+  both as plain strings with *no enum*, so the allowed values are not
+  specified. Thirty bodies do not settle it either — across all of them each
+  field still shows exactly two values (`CONNECTED`/`DISCONNECTED` 12:18,
+  `LOCKED`/`UNLOCKED` 6:23, the one missing lock reading being #2008, which
+  sent only the connection state), and two values seen is not the same fact as
+  two values existing. Thirty cars agreeing is evidence about the backend's
+  current behaviour, not about what the field is allowed to contain. `plug_connected` and `connector_locked` therefore keep
+  coming from the air-conditioning block, off a vocabulary that *is* known;
+  a car whose ac block is silent gains the raw state and no boolean, which is
+  the honest outcome rather than a guessed one. A test pins the absence of
+  those booleans as firmly as the presence of the strings.
+
+  **No new entities.** All three sensors existed already; what is new is that
+  they get a value on this path. `plug_state` is enabled by default,
+  `charging_error_code` is diagnostic and also enabled, and `plug_lock_state`
+  is diagnostic and **off** by default — switch that one on in the entity list
+  if you want it. All three are electric-only, and that gate is decided by
+  whether the same charging payload carried a battery state of charge, not by
+  the model name, so the Superb and the Octavia in this wave are not excluded
+  for being a Superb or an Octavia.
+
+  The delivery chain was measured link by link instead of assumed, because a
+  token that misses by case costs the whole sensor (#1739): `plug_state` is an
+  enum with the lower-case options `connected` / `disconnected`,
+  `normalize_enum_states` folds with `.strip().lower()`, and it runs on both
+  paths that reach the entities — the poll and the cache restore. `CONNECTED`
+  therefore lands as `connected` rather than being folded to nothing.
+  `plug_lock_state` and `charging_error_code` declare no options, so
+  `normalize_enum_states` does not touch them at all and their token reaches
+  the entity exactly as Škoda sent it.
+
+## [5.2.3] - 2026-11-04 — Rounded where we said it was / Gerundet, wo wir es behauptet haben
+
+The stable release that gathers 5.2.3b1. The headline is that three places
+promised your vehicle position was blunted before it left your machine, and all
+three were sending it at full precision: the diagnostics download, the Vehicle
+Data Scout, and the parking-address lookup that goes out to OpenStreetMap. If
+you have ever attached a diagnostics file to an issue, posted a Scout report, or
+switched reverse geocoding on, that is the reason to update.
+
+Alongside that, the beta line brought: the login chain restricted to the
+identity provider and the portal, a batch capture stamp that had dated a whole
+car 82 days old, a Charging Port sensor that can hold a value at all on portal
+cars, three write routes and two plug fields on the official Škoda API, and a
+refused-login message that names the one thing known to fix it.
+
+Seven more changes land on top of the beta.
+
+### Behoben / Fixed
+
+- **Our own documentation said the portal's continuous feed cannot carry a
+  position, while the code that reads one sat two files away.** Nothing in the
+  integration behaved wrongly — this is a documentation correction, and it
+  matters because `_position_fields.py` is where anyone looks first.
+
+  That module's docstring claimed the vehicle position "lives only in the
+  one-time Historical export" and that the continuous feed "carries *no*
+  coordinates". `_parse_pers_location` in `_eu_data_act.py` has meanwhile been
+  reading exactly such a position out of the continuous feed since #1378 — MEB
+  cars (Škoda Elroq and others) ship it under an undocumented `persLocation`
+  leaf — and its own comment noted in passing that the position module's
+  docstring was wrong. The note was never carried back. The test file repeated
+  the superseded sentence too.
+
+  The two statements were about different things, and both are now written that
+  way. Measured against the shipped `eu_data_dictionary.json` (7990 entries,
+  6618 field names, V6.0 Continuous + Historical merge) and reproduced on a
+  second, independent copy of the same catalogue:
+
+  - the continuous side's `Vehicle Location Tracking` cluster has exactly three
+    members — `mileage`, `outside_temperature` and a GPS `trueness` quality
+    flag — and no coordinate;
+  - the `Vehicle Location (Historical Export)` cluster has exactly ten, which
+    are one-for-one the ten UUIDs this module already mapped;
+  - `persLocation` appears in neither copy. It is undocumented, and it is how
+    the position actually arrives on the cars that have one.
+
+  So the dictionary is authoritative about what Volkswagen *documents* and is
+  silent about undocumented leaves. Three new tests pin that split, so a future
+  dictionary merge that blurs the two clusters, or a release that starts
+  documenting `persLocation`, fails here instead of being discovered through a
+  missing map pin.
+
+  One measured gap closed while counting: of the 110 coordinate-named entries in
+  the dictionary, the **largest** family (48) is geofence / speed-alert /
+  valet-alert `occurrencePosition` — the car's location when an alert fired. It
+  was missing from the false-friend markers, and it is the most tempting family
+  of all to a name-matching reader precisely because it really is the car. It is
+  a marker now, with the count recorded beside the list. The historical parser
+  these maps exist for is still deliberately not built; nothing reads this
+  module yet.
+
+- **The same module justified its manual-only kickoff with a question #923 had
+  already answered.** Also documentation, and found while re-reading three
+  months of reporter threads rather than the code.
+
+  `_position_fields.py` said the position refresh must stay an opt-in manual
+  action "until it's settled whether an in-flight historical request suspends
+  the continuous feed". That was settled on #923 back in August, and the answer
+  is **no**: a reporter measured the continuous feed running unchanged straight
+  through a pending one-time request, then ran a control night with nothing
+  pending and reproduced the same ~22:00–05:00 half-rate cadence — which
+  identifies the overnight halving as the portal's own diurnal rhythm, not
+  something our polling provokes. Citing an answered question as the blocker
+  made the restriction look removable the moment anyone checked.
+
+  It is not removable, because the real constraint turned up in the same
+  measurements: a one-time request can **vanish** 24–36 h after submission with
+  no package, no mail, no error and no failure state — the portal panel simply
+  resets — while the recurring request for the same VIN keeps running normally.
+  Nothing distinguishes "still processing" from "silently dropped", so an
+  automatic kickoff can fire into a void and wait forever. The docstring now
+  gives that as the reason, and a test pins it so the retracted justification
+  cannot come back.
+
+  Two neighbouring findings from the same work are recorded there as well, so
+  they are not re-litigated: the portal's own format description ("subfolders
+  for each data cluster … including meta information") does not match what it
+  actually delivers for the continuous package, and it is the *same* sentence
+  for the historical request — so it cannot be used to predict that envelope
+  either; and the "every 15 minutes" badge drifts (~16.6 min across 30 buffered
+  files), which is why staleness keys off each reading's own
+  `car_captured_time` and never an assumed cadence. Two things that reporter
+  also flagged were checked and need no change: an omitted `value` key already
+  reads as absent (`.get("value")` plus a `"value" in node` guard), and no
+  staleness path assumes a fixed interval.
+
+- **An endpoint that answers 500 on every attempt of every poll no longer gets
+  four requests for it (#1973).** @indigomejor measured the steady state on a
+  Škoda Octavia (petrol, MySkoda app login plus EU Data Act portal), parked,
+  over four polls, by temporarily adding the request path to the "Server error"
+  debug line. Two endpoints answered 500 every single time —
+  `connection-status/{vin}/readiness` and
+  `vehicle-information/{vin}/software-version/update-status` — and his
+  correction of the arithmetic is the substance of the fix: *"the 4th attempt
+  also goes out and then raises, so each chain is 4 requests and it is 8 failed
+  requests per poll"*. The issue was opened saying six.
+
+  The retry ladder in the shared request layer runs while `_attempt < 3` with
+  `(2 ** _attempt) * 3` seconds between, so attempts go out at 0/3/6/12 s. Four
+  requests therefore bought exactly what the first one had already said, on
+  every poll, against a portal the operator has asked community clients to put
+  less load on.
+
+  Now a URL that spends its **whole** budget on 5xx without once succeeding does
+  not get the retries again on the next poll: his two endpoints cost 2 requests
+  per poll instead of 8. Only the retries are withheld — **one attempt still
+  goes out every poll**, which is what makes this safe without answering the
+  question #1973 could not settle, namely whether such an endpoint is merely
+  unprovisioned for that car (permanent 500) or genuinely flapping. A transient
+  outage recovers on that single attempt and the mark is withdrawn, so it costs
+  the suppression only until the next good poll; a permanent one costs one
+  request instead of four. A 404 deliberately does **not** withdraw the mark: it
+  never consumed the 5xx budget, so it says nothing about it.
+
+  Skipping the call outright on a long streak is deliberately **not** done — it
+  would need a re-probe schedule and could only save one further request. The
+  key is the method plus the path with the query stripped, so a caller that puts
+  a cursor or timestamp in the query cannot grow the memory without bound while
+  never matching it; the key is never logged, and a test asserts the VIN does
+  not reach the suppression log line. 18 tests, and switching the guard off
+  fails seven of them while leaving the positive controls green.
+
+  Still open from #1973 and not addressed here: whether "more during a drive"
+  means more polls or more failures per poll. The measurement was a parked car.
+
+- **A charging field was deciding whether your doors were locked (#709, #1950).**
+  On portal cars whose payload carried `lock_state`, the door-lock state you saw
+  came from a field that does not describe a door. It is no longer read as one,
+  so on those cars the lock state now comes only from the per-door fields — and
+  where a car sends nothing else, the entity goes quiet instead of showing a
+  value from the wrong subject. This is the #1950 rule — a thing that is not a
+  door must not decide the door verdict — reaching a fifth field; the four
+  closure sites it already covered are unchanged.
+
+  Three independent lines say it is the wrong subject. The official data
+  dictionary files `lock_state` under cluster "All Data, **Charging**", beside
+  `plug_lock_state`, `charging_plug1_lock_state` and
+  `charging_plug2_lock_state`, while every field that genuinely describes a door
+  or a closure sits in "All Data, **Vehicle Access**" — all six `locked_state_*`,
+  all `safe_state_*`, all `open_state_*` and `flap_lock_state`. Cluster
+  membership is the same argument the plug and flap targets already turn on, so
+  it decides this too.
+
+  The payloads agree. In the two on record that carry both spellings, the string
+  and the per-door enums disagree in *opposite* directions — `locked_state_* = 2`
+  (locked) with `lock_state = "unlocked"`, and `locked_state_* = 3` (unlocked)
+  with `lock_state = "locked"` (#709). That is what two different subjects look
+  like, not a contradiction to be resolved. And the observed value set is
+  `locked` / `unlocked` / **`new`**; "new" is not a state a door reports.
+
+  What the field actually names is **not** established — the dictionary says
+  only "Describes the lock state", and `plug_lock_state` exists separately, so
+  folding it into the plug would be the same guess in a new place. Nothing is
+  published for it. It is still consumed, because it is a catalogued field and
+  leaving it visible would re-file it to the Vehicle Data Scout on every poll
+  (#958/#969/#970). `central_lock_state` is deliberately *not* consumed any
+  more: it appears nowhere in the dictionary, so a car that sends it has sent
+  something genuinely new and the Scout should surface it.
+
+- **"All closures secured" reported "not secured" on locked, shut cars — and
+  could never have said otherwise (#1950).** The binary sensor now stays absent
+  instead of answering wrongly, on every car that does not demonstrably
+  implement the field. This is a second, separate finding on the entity #1950
+  last touched; it is not the cause the reporter there described, and that
+  thread stays open.
+
+  It was computed as all three door `safe_state_*` reading `safe (2)`, plus the
+  boot and bonnet open states. Measured 2026-11-03 across every portal payload
+  on this machine — 4442 files spanning the attachment archive, our own tracker
+  dump and the competing readers' repositories — four deliveries carry
+  `safe_state` at all, and in all four the three door fields read `3, 3, 3, 3`.
+  A `2` has never been seen. In three of those four the car is demonstrably
+  locked (`locked_state_* = 2`) with every `open_state_* = 3` (closed) and every
+  window at 0. So the documented `safe (2)` is unobserved on the doors, and the
+  old condition could not be satisfied by any real car: the entity published
+  "not secured" permanently, on cars that were locked and shut.
+
+  This is the rule v4.7.11 already applied to the bonnet and the tailgate — a
+  field that only ever reports its negative value carries no information —
+  reached this time by measurement rather than by the dictionary. For those two
+  the dictionary documents no `safe (2)` at all; for the doors it documents one
+  that no car sends.
+
+  So one observed `2` is now required before anything is claimed. A `2` proves
+  the car implements the field, and from then on a `3` beside it is a real
+  "unsafe", which is why a mixed 2/3 reading still reads False. With no `2`
+  anywhere the verdict stays unset and the sensor does not appear at all.
+
+  The trade-off, stated rather than hidden: a car that genuinely implements
+  `safe_state` and reports every door unsafe would now say nothing instead of
+  False. Nothing in the corpus looks like that, while "sends a constant 3" is
+  four of four — and an actually open closure still surfaces on its own
+  `doors_open` / `trunk_open` / `hood_open` entity.
+
+### Sicherheit / Security
+
+- **Both places that promise a coordinate is blunted before it leaves your
+  machine could publish a precise one: the diagnostics download and the Vehicle
+  Data Scout (#1378).** Nothing about the integration's behaviour changes and no
+  sensor is affected — this is about what the two reports we ask you to attach
+  to an issue carry out of the house.
+
+  Each report rounds or removes GPS, and each did so by looking at a `float` or
+  at a field *name*. The portal does neither: MEB cars ship the vehicle position
+  as a **string**, under a leaf called `persLocation` whose value is
+  `"[<lat>, <lon>]"` with six decimals — roughly 0.1 m. A string is not a
+  `float`, and `persLocation` is not one of the names either report knows, so
+  the value walked past both.
+
+  Measured on the unfixed masker across seven shapes a coordinate arrives in —
+  bracketed pair, hemisphere letters, inside a sentence, a maps URL, a
+  comma-as-decimal pair, a lone decimal, and a `float` — **six kept full
+  precision, and every one of those six was a string**; the `float` was the only
+  one that rounded. Two controls in the same run came back masked (a VIN, a
+  UUID), so the masker was working. Measured on the diagnostics scrubber, both
+  `persLocation` and `eu_data_act.persLocation` came through at six decimals in
+  **both** modes — including the default, which promises removal rather than
+  rounding — while `latitude`, `parking_position.latitude` and an e-mail address
+  in the same payload were all handled correctly. That is exactly why it would
+  go unnoticed: the file looks redacted.
+
+  Both now go through one rule that keys on the **value**, not on a name or a
+  type: two coordinate-shaped numbers side by side, both integer parts capped
+  (two digits for latitude, three for longitude) and the real-world bounds
+  re-checked before anything is replaced. It covers the bracketed pair, a bare
+  or semicolon-separated pair, hemisphere letters, a pair inside a sentence and
+  a `?q=lat,lon` URL, and it holds for a field name nobody has seen yet. An
+  odometer, money or measurement pair is left alone, because rounding the wrong
+  number costs these reports the diagnostic value they exist for. Separator and
+  hemisphere letters survive, so a reader can still tell a position field from a
+  number field without learning where the car stood. The Scout rounds to one
+  decimal, as its footer has always promised; the diagnostics download removes
+  by default and rounds only under the existing opt-in, as its neighbouring
+  query-string rule already did. Where a car splits the position into separate
+  `latitude` and `longitude` leaves, the Scout now passes the field's own path
+  so a lone decimal is caught too; that name match is token-exact, so
+  `translation`, `related`, `doorLatch` and `allocation` do not trigger it.
+
+  Three shapes are deliberately **not** covered, named in the docstring and
+  pinned by a test so the limit is visible instead of silent: a lone decimal
+  with no field name to identify it, a pair that uses the comma as its decimal
+  separator (indistinguishable from thousands separators, and rounding those
+  would corrupt ordinary numbers), and integer microdegrees, where the scale
+  would have to be guessed. None has been observed in a live feed.
+
+  This is the defect fixed in #1690 twice over: a redaction rule that guards one
+  representation of a value and not the others. That one leaked a VIN five times
+  and was hand-redacted four times before the masker itself was fixed, and the
+  dotted-field-name finding recorded in `diagnostics.py` in October was the same
+  shape again. So the uncovered shapes above are written down rather than
+  assumed away, and the new test checks both whole chains — `detect_unexpected`
+  and `_scrub` — not just the shared helper. The example coordinate in
+  `_parse_pers_location`'s docstring and in the #1378 test is now a synthetic
+  placeholder, labelled as one, and the docstring carries only the shape
+  `"[<lat>, <lon>]"`.
+
+  One more thing was missing, and it is the reason this sat around for eight
+  weeks rather than eight minutes: `CONTRIBUTING.md` already forbade GPS with
+  more than one decimal place in the repo, "even from your own car", and nothing
+  checked. `scripts/check_no_precise_gps.py` checks now, built like the VIN
+  guard beside it — shape-based rather than a list, a coordinate word required
+  nearby so telemetry fixtures are not mistaken for positions, and the digits
+  masked in its own report so a CI log does not become the next leak. It gates
+  what a change *adds*; the 13 pairs already in the tree are public landmarks
+  used as test input and are named in the script rather than exempted, with a
+  per-file ratchet in the tests so none of those files can quietly gain another.
+  Its first catch was a fixture added earlier in this same change.
+
+- **The parking-address lookup sent your exact position, not the blunted one
+  (#60).** Reverse geocoding is opt-in precisely because vehicle GPS is
+  sensitive, and both the function's own docstring and `PRIVACY.md` promised
+  that the coordinate handed to OpenStreetMap was rounded to three decimals
+  (~110 m). The rounding reached only the cache key. The request URL two lines
+  below it was built from the raw `lat`/`lon`, so every lookup gave a third
+  party the car's exact parking spot — for anyone who had switched the feature
+  on, on every poll that found a new position. The coordinate is now rounded
+  once and that same value is used for both the cache and the request, so the
+  promise and the behaviour are the same thing. `PRIVACY.md` is corrected to
+  match, and now also describes the data paths it had never mentioned: the ABRP
+  service, Tibber, push registration, the companion channel, the EU Data Act
+  portal mode and its raw-dataset archive, what a removal leaves behind, and
+  the fact that a cached vehicle image is served under `/local/` with the VIN
+  in its filename.
+
+### Notes
+
+- **Known issue: the Charging Port sensor can say a plug is connected on a car
+  that is not plugged in (#1739).** The beta taught that sensor to hold a value
+  at all on portal cars; this release carries that onto the stable channel, and
+  one Audi Q4 e-tron has since shown it standing at connected with three
+  independent confirmations that the cable was out — the wall charger reporting
+  unplugged for 40 hours, the energy supplier reporting no smart-charge control,
+  and the owner at the car. The cause looks like an inference drawn from the
+  charging scenario, which on that firmware reads as a charge-mode setting
+  rather than proof of a running session, while the car itself reported
+  NOT_READY_FOR_CHARGING with a charging-infrastructure error and zero power.
+  It is **not** fixed here. The existing cable binary sensor may share the
+  question, and both are being followed in #1739 — thanks @awood-ops for
+  testing the beta and for bringing three separate sources rather than one
+  reading.
+
+## [5.2.3b1] - 2026-11-01 — Only two hosts may ask for your password / Nur zwei Hosts dürfen nach deinem Passwort fragen
+
+### Behoben / Fixed
+
+- **The login chain may now only reach the identity provider or the portal
+  (#1740).** Adopted from the portal operator's own reference implementation, as
+  his service notice of 2026-10-06 asked: *"Maintainers of other integrations are
+  encouraged to review and adopt the relevant login-flow changes already
+  implemented for EVCC and ioBroker.vw-connect."* All five commits on that evcc
+  pull request are his, including one answering their code review, so these are
+  his measures and not a third party's reading of them.
+
+  This module already had the core of his change, from his PR here: the chain
+  stops at `/services/callbacklogin`, the `Location` header decides the next hop,
+  there is a ten-redirect cap, and non-https is refused. The guard it lacked is
+  the one his Go version carries — **the host allowlist** — and its absence was
+  reachable in three ways, each measured before the fix:
+
+  * a **307/308 across a host boundary keeps method and body** by definition, and
+    the body of the first hop is the username and password. The existing drop
+    covers 301/302/303 only, which is correct HTTP and was never the whole
+    problem;
+  * the **Referer was set on every hop**, including a cross-host one, so the
+    previous URL — carrying `code` and `state` on an OIDC chain — reached the
+    foreign host even though `Authorization` and `Cookie` were stripped;
+  * the foreign response's **HTML went to the landing classifier**, which lets
+    whoever controls that host steer the login verdict.
+
+  There is no PKCE on this path, so a leaked `code` would be redeemable — and
+  there is none in the reference either, which makes it a property of the
+  portal's flow rather than of this client. His Go version needs none of the
+  bookkeeping above because the standard library applies the RFC rules and
+  `CheckRedirect` refuses a foreign hop *before* the request is made. The
+  allowlist closes all three here for the same reason: the request never happens.
+
+  A refused hop **raises** with the host named, rather than returning softly for
+  the classifier to judge — handing a foreign landing to the classifier is itself
+  one of the three. Fail-closed is the right direction for a step that carries a
+  password, and naming the host turns "login broken" into one grep. If the
+  operator moves either host, that is where it will say so.
+
+  Also ported: `_is_user_page` and `_valid_marketing_callback`, with his semantics
+  rather than an approximation — parsed components only, never substring tests,
+  because his own table contains `<portal>.example.org` precisely because a
+  `startswith` check would accept it.
+
+  **There is deliberately no fallback to the old behaviour, and that is the
+  point.** A guard that steps aside when it fires is not a guard: whoever can
+  trigger a foreign redirect would simply trigger the fallback. Widening the list
+  by wildcard or suffix fails the same way — a subdomain takeover is exactly the
+  case the allowlist exists for. So the list stays exact and the hop is refused.
+
+  What makes fail-closed safe to ship instead of risky is that a wrong list is now
+  **visible within one poll** rather than arriving as "login broken" weeks later.
+  The refusal logs at **warning** level with the refused host and says plainly that
+  no credentials were sent to it, so a locked-out user finds the reason and the one
+  missing piece in their own log; and `refused_login_hosts` in the diagnostics
+  carries the count and the host names. Absent or zero is the expected state and
+  says nothing needs widening. Above zero says either someone tried to steer this
+  login somewhere it does not belong, or the operator moved an endpoint — and the
+  host name is the whole fix either way.
+
+  Host names only, never the URL: a refused login URL can carry `code` and
+  `state`, and a test asserts that neither reaches the recorded data or the error
+  message, with the host itself as the positive control. The same rule the
+  transport-error field already follows.
+
+  It ships as a **beta** for the same reason. Stable users keep the 5.2.2
+  behaviour until the guard has run against real logins; that, and not a code
+  path, is the fallback.
+
+  **Tested with his tests.** His `TestIsUserPage` table and the callback and host
+  rows of his `TestLoginRedirects` are ported case for case, 44 of them, and run
+  green beside the 16 in the three test files he shipped with the original PR.
+  That the port was worth doing is itself measured: weakening the user-page check
+  from `endswith` to a substring test fails **exactly** the two cases a
+  hand-written table would have forgotten — `user.html/extra` and the trailing
+  slash. Switching the allowlist off fails fifteen, including both walker tests.
+
+- **A batch capture stamp outranked a live clock, and dated a whole car at 82
+  hours (#1917, @InfObject).** He did not just report it, he diagnosed it: "the
+  single available point timestamp... dates the whole merged vehicle despite the
+  newer web captures". Confirmed at the code. His car had **one** entry in the
+  capture-stamp map — `target_soc` from the EU Data Act portal at about 82.5 h —
+  against a `last_seen_at` of about 16.3 h from a live channel. Because the
+  verdict preferred "the newest entry of the map", and the newest entry of a
+  one-entry map is also its oldest, the 82-hour stamp won over the better
+  evidence.
+
+  What makes the rule safe is a property of the tree rather than a guess:
+  `field_captured_ts` is *written* in exactly one module, the EU Data Act mapper,
+  and holds at most seven values; `last_seen_at` is written by eight channels. So
+  the map is the batch clock by construction. A map stamp may now only override
+  `last_seen_at` when that clock is itself batch — where a live channel
+  contributed, the fresher of the two wins. The portal-only car the map was built
+  for is untouched, because there every contributor is batch and the stamp still
+  decides. The contributor set is a proxy, not per-field provenance for
+  `last_seen_at`, which does not exist; that is stated at the code so nobody
+  later reads the proxy as a guarantee.
+
+  Two things are deliberately left alone, both promised in that thread: the map
+  is not dropped, and the age **threshold** is not touched — that is the open
+  half of the original report, and mixing a correctness fix with a tuning
+  decision would make both harder to judge. This issue stays open for it.
+
+  **It also moves the poll cadence, which was not the goal.** Found by reading
+  the scheduler afterwards rather than before: ``coordinator`` rebuilds its
+  drop-anchored schedule from this same helper — the comment there says
+  "reconstructed from the same capture-age helper the staleness watchdog uses" —
+  so changing which clock wins changes when the next poll fires. Measured at a
+  600 s interval with a 180 s floor: the reported car sleeps 180 s either way,
+  because both clocks are long overdue, so its verdict moves and its cadence does
+  not. A car with a *fresh* live capture (3 min) behind an older stamp (2 h) goes
+  from 180 s to 480 s, because its next drop is no longer considered overdue. The
+  direction is the part worth stating: such a car now polls **less**, never more,
+  and a test asserts that over every pairing of the two clocks — a portal whose
+  operator has asked community clients to reduce traffic is not a place to add
+  any by accident.
+
+  Eighteen tests, including the #465 broken-clock guard in the new branch: a
+  future-dated stamp yields a negative age, and `min()` of two ages would let one
+  win outright, so an all-future map keeps the #465 behaviour instead of mixing
+  with the live clock. The eighteen existing #1917 tests pass unchanged, because
+  they pass no contributor set and an unclassifiable car stays on the old path.
+
+- **The Charging Port sensor could never hold a value on portal cars, and the
+  fix is deliberately one-way (#1739, @awood-ops).** The EU Data Act portal
+  never delivers the `plug_state` label, only the boolean `plug_connected`, so
+  the enum sensor stayed empty while the cable was demonstrably in — from the
+  same poll his `charging_status` read `CHARGING_HV_BATTERY` and the
+  `charging_cable_connected` binary sensor read on. He diagnosed it himself,
+  down to the sensor reading one field only, and proposed the derivation.
+
+  It derives `connected` from a `plug_connected` of exactly `True`, and derives
+  **nothing** from a `False`. That asymmetry is the whole design. The boolean
+  has three producers: the plug enum itself, in which case the label is already
+  set and this never runs; a German-language negation heuristic over a different
+  signal field; and an inference from an active charging session. Charging
+  proves the cable is in. Not charging proves nothing, and a missing or
+  re-worded text makes the heuristic `False` just as readily as a real
+  disconnection does. A `disconnected` out of such a `False` would be #1403
+  again — a connected plug published as a confident `False` — and that comment
+  still stands: a definite wrong answer is worse than an absent one. A `False`
+  therefore leaves the sensor without a value, which Home Assistant renders as
+  `unknown`: the honest state for "we cannot tell".
+
+  The derived label is marked `derived:plug_connected` in `field_sources`, so
+  triage never mistakes it for a portal reading. `is True` rather than a
+  truthiness test, because the boolean is the contract and a stray `"1"` must
+  not read as connected. Fifteen tests, and the asymmetry is pinned by a
+  mutation: deriving both directions fails exactly the two tests that guard it.
+
+### Hinzugefügt / Added
+
+- **The official Škoda API grew three write routes and two plug fields; the
+  fields are read, the writes deliberately are not (#1286).** Re-fetched the live
+  OpenAPI spec the research note names as its source of truth: **83120 bytes and
+  12 routes**, against the 66993 bytes and 9 routes the note was written from.
+  `ChargingStatus` gained `plugConnectionState` and `plugLockState`, and three
+  `PUT` routes appeared — `charging/limit` (`targetStateOfChargeInPercent`,
+  integer, required), `charging/mode` and `charging-profiles/{id}`.
+
+  The two read fields are now parsed, and **no mapping is invented**: the spec
+  declares both as plain strings with *no enum*, so the raw token goes onto the
+  model and `normalize_enum_states` folds it onto the sensor's own options —
+  an unrecognised value becomes no value rather than a wrong one, which is the
+  same tolerant path the mysmob dialect uses for the identical datum.
+  `drop_charge_sentinel` runs first, for the reason it already guards
+  `chargeType`: a documented no-reading token must not become a confident state.
+
+  The three writes are **not** implemented, and that is a decision rather than a
+  gap. There is no caller: `official_only` mode changes *reads*, while commands
+  go through an explicit six-command allowlist whose stated entry condition is
+  the same signature as the mysmob counterpart — vin and nothing else. A
+  target-SoC write takes a value, so wiring it means widening that allowlist, and
+  the allowlist is a safety boundary: the fallback fires only on 401/403/404, the
+  failures that *prove* the car never saw the command, because anything else may
+  have executed and sending a non-idempotent command twice on a second channel is
+  worse than reporting a failure. The routes and that reasoning are recorded
+  together in `docs/research/skoda-official-api.md`.
+
+  Also corrected there: the note said keys were mintable only from an unreleased
+  **v8.16**. They are mintable now. MyŠkoda **8.18.0** carries
+  `PublicApiKeysApi` over `POST /api/v2/public-api-keys` on mysmob — the same
+  route `mint_api_key` already uses, so the 8.16-derived implementation is still
+  correct. The user path is Settings → Smart Home, per vehicle; two distinct DTOs
+  confirm the secret is returned only at creation; and a `PUBLIC_API_KEY_MANAGEMENT`
+  flag suggests the menu is server-gated and may not be visible to everyone.
+
+  The dependency worth planning around, and the reason this was looked at at all:
+  **a key can only be minted through mysmob.** When the old API stops answering,
+  anyone without a key has no way left to get one, because the public API cannot
+  issue its own credentials.
+
+### Geändert / Changed
+
+- **The refused-login message now names the one thing known to fix it (#1969,
+  @Ra72xx).** He answered the three questions the previous message asked, and the
+  third answer was the cause: signing in at volkswagen.de in a browser and
+  clicking away an advertising/consent prompt makes the integration log in again.
+  His own words for what he wanted instead of a bare status: "give a proper error
+  message in the first place", and "give a hint like: if login fails repeatedly,
+  you might have to log on to volkswagen.de and accept/reject advertising
+  consent".
+
+  That is now what the message says. It had been asking the reporter to *test*
+  whether a browser sign-in works, as a diagnostic — which wasted the finding,
+  because doing it is the remedy. The text also says that declining the prompt is
+  enough: he objected explicitly to the idea of having to accept advertising to
+  use his own car, and he is right.
+
+  Why the integration cannot do it for him, as far as it is measured: the code
+  already auto-skips VW's marketing-consent interstitial, and there is a
+  documented case where the identity provider errors out *before* rendering that
+  page — then there is nothing to skip and the login simply fails. Another
+  reporter's log on #584 landed on `identity.vwgroup.io/v2/login/ui/error` the
+  same way. Which of the two domains actually shows the prompt decides the fix,
+  and that question is with him; the remedy in the text holds either way.
+
+  The test that guarded the old wording demanded the literal phrase "no reason",
+  which would have blocked this text. It now checks the idea across several
+  phrasings — the same trap as a test that pins a spelling instead of an effect —
+  and a second test pins the remedy itself: the site, the browser, the prompt,
+  and that declining is presented as sufficient.
+
+## [5.2.2] - 2026-10-31 — What the message actually knows / Was die Meldung wirklich weiß
+
+### Behoben / Fixed
+
+- **An auth repair card named the brand but never the account, so a two-car
+  owner could not tell which entry it was about (#923, @kalwados).** Six of the
+  cards print the account in parentheses — `auth_failed`, `two_factor_required`,
+  `email_two_factor_required`, `terms_and_conditions`, `marketing_consent`,
+  `too_many_requests` — and all six were handed an empty string, which rendered
+  as "Your Volkswagen account ()". Four of them are the fixable reasons, so the
+  card with the Repair button was in that set. The slot now carries the masked
+  account id (`p***@***.de` — the shape the diagnostics download reduces an
+  address to, because these cards get screenshotted into public issues),
+  falling back to the entry title and then to "this entry".
+
+  The reason it survived review: the frontend only checks that a placeholder
+  *key* exists, so an empty *value* renders cleanly and errors nowhere, and the
+  call site supplies both keys, which reads as complete. The new test drives
+  the real function and demands a non-empty value for every placeholder in the
+  copy that will actually be rendered, with a positive control that the copy
+  really uses the slot and a guard that a newly added card printing the account
+  cannot go unexercised.
+
+  Inventory while here: of the 34 repair cards only `stale_data`,
+  `historical_timeout` and `supplementary_reauth` name the vehicle, and only
+  the first two are keyed per vehicle at all. The remaining 31 are per entry,
+  so the account is the field that identifies them — which is what made the
+  empty value cost something rather than merely look untidy.
+
+- **The product itself promised that tokens were redacted, and that promise is
+  what put the files into public issues (#923, #1968).** Three texts ask for a
+  diagnostics file and all three overstated what the redaction did: the Vehicle
+  Data Scout repair card said "everything is redacted automatically" and named
+  **tokens** among what is stripped; the `test_cohort` option said "no VIN, GPS,
+  tokens or email is ever included"; and the bug-report template said sensitive
+  data had been auto-redacted since v1.8.x, listing neither cookies nor tokens.
+  From mid-June until 5.2.1 none of that was true of the three credential keys.
+
+  Both in-product strings are now scoped to 5.2.1 across **all 13 language
+  files**. The edit is deliberately mechanical: only the clause in front of the
+  colon that introduces the list was replaced, so each language keeps its own
+  wording for the list itself and no prose was invented in a language that
+  cannot be reviewed here. English and German additionally say what an older
+  version did **not** redact. The bug-report template now names 5.2.2 as the
+  floor, moves GPS out of the since-v1.8.x list because two of its spellings
+  were not covered until this release, separates session cookies and account tokens from the fields that have
+  been redacted since v1.8.x, and links #1968; its mandatory privacy checkbox
+  no longer asks the reporter to strip tokens out of an opaque cookie jar by
+  hand, which is not something anyone can do.
+
+  The guard against a relapse anchors on the colon and on the identifiers that
+  are spelled the same everywhere (VIN, GPS, token) rather than on vocabulary,
+  so one test covers every language; a positive control fails if that anchor
+  ever stops finding the two sentences, because an anchor that finds nothing
+  would otherwise let the module pass while checking nothing — which is the
+  shape of the review failure that allowed the original wording to stand.
+
+- **Whether this portal ever throttles *us* is now in the diagnostics
+  download, instead of being taken on faith (#1969).** Its rate limits are
+  known only from someone else measuring their own traffic against the same
+  portal — per-endpoint ceilings, a refill of roughly one request every two
+  seconds, a short explicit `Retry-After`. Honouring that cooldown was the
+  right change; pacing our polls against those numbers would not have been,
+  because nothing had ever observed the mechanism on our own requests. A rate
+  limit taken on faith is how a poll loop gets tuned against a figure that does
+  not apply to it.
+
+  Three values are recorded and exported as `portal_throttle`, so one user's
+  file answers it: a count of zero means it has never happened to us; a count
+  above zero with no seconds means we are throttled and told nothing, so any
+  cap has to be guessed; a count above zero with a number says the mechanism
+  applies and whether the 30-second cap is the right one. Recorded on **every**
+  429, including the second one within a call and the over-cap case — those are
+  precisely the observations that say the pacing is wrong, and precisely the
+  ones a "record it only when we act on it" version would throw away.
+
+  The fields are public on the connector on purpose: the download reads
+  attributes off that object by name, so a leading underscore would have made
+  this a field nobody can see. `_last_soft_status` right above it claims in its
+  own comment to be "surfaced as diagnostic sensors" and is in fact read
+  nowhere outside its module — measured, not assumed, and left alone rather
+  than repeated.
+
+- **A 404 on vehicle enumeration was reported as a dead session (#1964,
+  @Hollywoodchaos).** He diagnosed it himself and proved it from outside the
+  integration: logged into the portal in a browser with the same account, its
+  own "Veículos associados" section fails with a technical error, so the 404 we
+  received was the truth about the portal and not about his login. We turned it
+  into the session-expired repair card, which told him to fix the one thing
+  that was working.
+
+  The cause is that a 404 on this portal means different things on different
+  endpoints and one rule was applied to all of them. On the metadata endpoint
+  it means "there is no such data request" — #1932 decided that deliberately
+  and pinned it with a test — and that stays exactly as it was. On enumeration
+  it means the portal cannot list the account's cars, which is an upstream
+  problem, so that call now declares 404 and 410 as such and gets the same
+  treatment the 5xx family already had. The rule lives at the call site that
+  knows which endpoint it is talking to; nothing is implied for any other.
+
+  **An existing test asserted the old behaviour, and its expectation is what
+  changed.** #465 pinned "404/410 on enumeration raises an authentication
+  error" with the reasoning *"404/410 means the data request is not
+  provisioned"* — the metadata endpoint's meaning, borrowed onto enumeration
+  because enumeration was a convenient way to drive the shared helper. The
+  caller is what settles it: an authentication error out of enumeration makes
+  `vw_eu` **replay the stored password**, enumerate again and then raise
+  `PortalSessionExpiredError`. That is the exact sequence #465 itself exists to
+  prevent, quoted in its own docstring for the 5xx case; it fixed the outage
+  family and left 404 behind on the borrowed premise. The expectation was
+  changed only after reading that caller, and the test now carries the
+  reasoning instead of the conclusion — plus a sibling that fails if anyone
+  "simplifies" this by adding 404 to the global outage set, which would
+  silently reverse #1932.
+
+- **A refused e-mail-code step promised that waiting would fix it (#1969,
+  @Ra72xx).** His volkswagen.de login failed after the code with HTTP 400,
+  repeatedly, and the dialog said "VW backend temporarily unavailable … wait
+  5–15 minutes … do NOT reconfigure". The verdict was right and #1843 decided
+  it on purpose: the code is only sent **after** the password is accepted, so
+  neither can be the cause of an HTTP error. The remedy was wrong. Waiting
+  clears a 5xx; it does not clear a refusal, and his repeated every time.
+
+  A 4xx now has its own error text that keeps #1843's verdict — not your code,
+  not your password — and drops the promise that it passes on its own. Fixed in
+  **both** flows, because the setup path and the options/reauth path have
+  separate handlers and were reported separately by two different people;
+  fixing one would have left half the users waiting for nothing.
+
+  And the part that was worse: the raise site **parsed the site's own error
+  text one branch earlier and then threw it away** on a 4xx, leaving a bare
+  number. The single piece of evidence that would say *why* VW refused was
+  read and discarded. It is now carried on the exception and in the message.
+
+  Known gap, stated rather than hidden: the new error text is written in
+  English and German. The other eleven language files carry the English
+  sentence so that key parity holds, and they want a translation pass.
+
+  **And the first version of that text promised something it cannot keep.** It
+  said "the exact reason the site gave is in the log next to this message".
+  Measured afterwards: the parser behind that promise recognises exactly one
+  page format — a body carrying the literal `templateModel` with JSON holding
+  a truthy error — with no regex, no HTML parsing and no marker lists. An
+  Auth0 JSON body, an Auth0 error page, an nginx/WAF 400 and an empty body all
+  yield nothing, and the e-mail-code step is the Auth0 universal-login flow,
+  where that word does not appear at all. So in exactly the case the sentence
+  was written for, there is no reason in the log either.
+  
+  The text now says what is actually known — the status, and that it is
+  neither the code nor the password — states plainly that the site usually
+  gives no reason we can read on this step, and asks for the three things that
+  do help. A test drives the real parser against those four bodies and fails
+  if anyone restores the promise before the parser can keep it, which is the
+  right order.
+
+- **The portal tells us how long to wait when it throttles us, and we ignored
+  it (#1969).** It answers a burst with 429 and a short explicit
+  ``Retry-After``; 429 was deliberately kept out of the retriable set ("one
+  quiet skip, no backoff-retry"), which is the right refusal to hammer a server
+  and the wrong answer to one that has just named its own cooldown. The poll
+  was simply lost — soft returned no-data, hard reported an outage — and on a
+  multi-vehicle account the newest dataset was never reached, because the list
+  endpoint is called once per VIN and the coordinator reads the VINs
+  concurrently.
+
+  A parseable cooldown inside a 30-second cap is now waited out and the request
+  repeated, at most once per call, so a server that keeps throttling cannot
+  hold a poll open. A missing, zero, over-cap or HTTP-date value leaves the old
+  behaviour untouched. The parsing moved to ``cariad/_util`` because two
+  channels needed it and only the app backend had it (#1850); its staticmethod
+  on the base client stays, delegating, since a test pins that shape for a
+  stale-value reason that still applies.
+
+- **A dotted field name walked past every name-based redaction rule (#923).**
+  Found by generalising the same way, and it is the wider of the two: each rule
+  in the scrubber that keys off a name tested exact equality on the whole key,
+  while EU Data Act field names **are** dotted — the dictionary's own count is
+  3206 of 7990 — and an *unmapped* portal field lands verbatim in
+  `raw_unmapped_fields`, which the download emits. Measured with one marker per
+  key: `latitude`, `access_token` and `user_id` were handled, while
+  `parking_position.latitude`, `vehicle.parking.longitude`,
+  `settings.access_token`, `auth.tokens.refresh_token` and `vehicle.user_id`
+  all came through in the clear.
+
+  What hid it: the value-**pattern** rules were never affected. `profile.email`
+  masked correctly, so the file read as redacted. The name rules now match the
+  last dotted segment as well, which is the conservative direction — a dotted
+  name whose leaf is registered carries the same kind of data as the bare one.
+  The full dotted spelling is kept as the output key, so triage still sees
+  which field was redacted, and a harmless dotted field such as
+  `odometer.total_km` stays readable.
+
+  The guard walks **every** name in all three sets and requires the dotted form
+  to be handled too, so a name registered later is covered without anyone
+  remembering this. Reverting the fix turns 48 of its 68 cases red, each one
+  naming the field it would have leaked.
+
+  It had to be fixed in **both** scrubbers. `_scrub_raw` has its own key logic
+  and the same blindness: after `_scrub` was corrected it still returned four
+  of the five dotted spellings in the clear, so a guard on the half that
+  happened to be measured first would have gone green over a leak. Widening
+  that guard to sweep both functions then caught a third hole immediately, in
+  the new fix itself — `location_lat` and `location_lon` live only in the GPS
+  set, which `_scrub_raw` never consulted. That is the argument for a guard
+  that walks the sets instead of a list of examples: it found a gap introduced
+  minutes earlier.
+
+  This is the second time in one issue that a redaction looked complete because
+  it was checked against itself. Both guards added since derive their
+  expectation from somewhere else: one from the key names in `const.py`, this
+  one from the redaction sets themselves.
+
+- **A charging profile's coordinates reached the diagnostics download in the
+  clear — the place the car habitually charges (#923).** Generalising from the
+  cookie-jar defect found a second gap of exactly the same shape, and this one
+  had been shipping. `coordinator.py` flattens each Škoda / SEAT / CUPRA
+  charging profile into `{"name", "location_lat", "location_lon", …}`, while
+  the GPS branch in `diagnostics.py` only ever matched the spellings
+  `latitude` and `longitude`. So the coordinates of the profile's location —
+  home, for most people — went into the download at two decimals, roughly a
+  kilometre, in **both** the default and the opt-in mode, although that
+  module's stated contract is privacy-by-default removal. The owner's own
+  label for the place went with them, even though the project had already
+  registered the sibling `charging_location_N_name` on the argument that such
+  a label is the owner's word for a place.
+
+  `location_lat` and `location_lon` now go through the same branch as
+  `latitude` and `longitude`: removed by default, rounded to one decimal only
+  on the existing opt-in. `active_charging_profile_name` is registered, and
+  the per-profile label is masked by a container-aware step, because a global
+  `name` rule would redact every brand, device and entity name in the file.
+  Everything triage actually uses — target SoC, current limit, the counts —
+  is kept, and an absent coordinate or label still stays visibly empty rather
+  than becoming a fake redaction.
+
+  Measured, not reasoned: a profile in the production shape through the real
+  scrubber returned both coordinates and the label unchanged, with a positive
+  control confirming that bare `latitude` *was* being removed, so the branch
+  worked and the names were the gap. The guard against the next one derives
+  the set of coordinate key names from the **source** and fails if any is in
+  neither redaction set — it names `location_lat` and `location_lon` when the
+  fix is reverted, so it would have caught this before release. A list checked
+  against itself always looks complete; this is the second time that cost
+  something in this issue.
+
+  **If you have already attached a diagnostics file:** unlike the credential
+  keys, there is nothing to rotate here. The coordinates are approximate, and
+  deleting the comment is the only thing that helps — see #1968 for why that
+  does not remove the uploaded file.
+
+- **The push gate reported a permanent stop as if it were transient, so the
+  Audi/VW push toggle looked like it was still starting up (#1941,
+  @philf90).** He switched on *Audi/VW push updates*, confirmed
+  `enable_push_audi_vw: true` in diagnostics, and got one line per setup:
+  "Push setup skipped: no user_id captured by the brand client". It reads as
+  *not captured yet*, and the comment above the gate said as much — next
+  refresh re-tries. For his brand it never resolves: neither `VWEUClient` nor
+  `AudiClient` assigns `user_id` or `_user_id` anywhere, so the gate bails on
+  every setup, for both of the two brands that toggle names. It was logged at
+  debug, so without debug logging on there was nothing to see at all.
+
+  The two cases are now told apart. A client with no user-id slot at all is a
+  permanent condition: it says so once per entry, at warning level, names the
+  brand, states that it will not resolve on its own, and points at #1941. A
+  client that has the slot and has not filled it keeps the debug line, with
+  wording that now actually says it re-tries.
+
+  **Not fixed here, deliberately.** The VW EU client does hold that value under
+  another name — `_mbb_user_id()` decodes the `sub` claim of the id_token, and
+  the authproxy path carries `mbb_user_id`. Widening the gate to accept it
+  would make the toggle reachable, but the Audi/VW push manager ships with an
+  unverified subscription body by its own docstring, so that step belongs with
+  a tester on a real car rather than inside a logging fix. The same shape was
+  #602 for Škoda, which is what the comment at this gate has described since.
+
+- **`SECURITY.md` carried the same overstatement, and a supported-versions
+  table five minor lines out of date (#923, #1968).** It named `4.7.x` as the
+  supported line and said passwords, S-PINs, usernames and GPS "are never
+  exposed in diagnostics exports". The table now reads `5.2.x`, and the two
+  redaction bullets say how the redaction actually works — by key name,
+  recursively, so a value is safe only once its key or a key above it is
+  registered — which is the property that made the gap possible and the
+  property that also meant the two nested token dicts were covered while the
+  cookie jar was not. Measured, not assumed: reconstructing the pre-5.2.1
+  scrubber and running it over the shapes the code writes leaves the cookie
+  value in the clear and all six token values redacted. The file also now says
+  how a problem gets published once it is fixed; until now it only said how to
+  report one privately.
+
+  `docs/TRIAGE.md` carried the same absolute in the heading of its "Redact
+  before you paste" section — "Diagnostics redact the sensitive fields for
+  you" — and in the step that tells a reporter where to click. Both now name
+  5.2.2 as the floor, and the section explains the key-name matching, because
+  that mechanism is also the limit a reader needs in order to recognise an
+  unmasked credential if one ever shows up again.
+
+## [5.2.1] - 2026-10-30 — The file we asked you for / Die Datei, um die wir gebeten haben
+
+### Behoben / Fixed
+
+- **Three credential keys reached the diagnostics download unredacted, the
+  volkswagen.de session cookies among them (#923).** The file this integration
+  asks you to attach to a public issue could carry `website_cookies` — the vw.de
+  cookie jar that keeps you signed in — plus the per-VIN MBB command tokens and,
+  if you use it, the Tibber account's tokens. All three are stored on the config
+  entry, which the download emits as `config`, and a cookie or a token is an
+  opaque string, so none of the pattern-based redactions matched one.
+
+  **If you have attached a diagnostics file from a volkswagen.de-login entry to
+  a public issue, sign out of volkswagen.de and back in.** That invalidates the
+  jar in the file. There is no sign that anyone has used one — the problem is
+  that the file was readable by anyone.
+
+  It was missed the way long allow-lists are missed. The redaction list already
+  carried both *sibling* jars — the supplementary vw.de slot and the VW-EU
+  two-way one — and its own comment states that "the vw.de cookie list carries
+  the auth0 / auth0-mf SSO session tokens". Checked against itself the list
+  looked complete. The same had happened to the token maps: Companion, VW-EU
+  two-way and Škoda were registered, MBB and Tibber were not. So the new test
+  does not read the list. It derives what ought to be redacted from the key
+  names in `const.py`, which is the only thing that exists at the moment someone
+  adds a key, and fails when one is unhandled. Two keys are exempt with a
+  written reason: a boolean opt-in that only looks like a password, and the
+  Škoda key map, which has its own masker so the enrolment count survives.
+
+- **"No data-request yet" was printed at people whose data request was active
+  (#1850).** Reported by @indigomejor, who paired the line with its timestamps:
+  the portal said it once at 12:03, four `dataset listing unavailable (HTTP 404)`
+  lines followed, and his request had never gone away.
+
+  The line now says what the portal actually answered — `(the portal answered
+  HTTP 404)` — and adds that this answer does not always mean the request is
+  missing, so if you already have one you should leave it alone. The advice for
+  someone who genuinely has no request is unchanged, deliberately: a 404 *is*
+  the portal saying "no such request", which #1932 decided and pinned with a
+  test, and that is the one case where there is something to do. Replacing the
+  advice on the strength of one report would have reversed that decision
+  silently.
+
+  Also fixed behind it: the status being reported is now cleared *before* the
+  metadata read rather than after it. It is only written when a read fails
+  softly, so a successful read left the previous poll's status in place — naming
+  that would have attributed an old 404 to a healthy poll.
+
+- **A dataset whose JSON root is not an object was read as "no data this poll",
+  silently.** Nothing in a log distinguished that from an empty delivery. The
+  shape has never been seen — every export file in this repository has an object
+  at its root, and the "flat list of objects" in #1950 is the `Data` array
+  inside one — so this deliberately does not start handling it: inventing
+  handling for a payload nobody has delivered is how untested branches are born.
+  It now warns, naming the root's type and how many top-level items it had, and
+  nothing else: not the file name, which can carry a VIN, and not a single
+  value.
+
+- **The one-time historical export told you to enable a continuous data
+  request (#1850).** It reaches the same "no active request" branch through its own
+  metadata path, where that is the wrong control to point at: there is nothing
+  continuous to enable for a one-time export. Named as a loose end when the
+  rest of that message was corrected, and closed here rather than left as a
+  known-wrong sentence.
+
+## [5.2.0] - 2026-10-30 — As of when? / Seit wann gilt das?
+
+### Behoben / Fixed
+
+- **The Charging Port sensor could fail to be created at all, with "Error
+  adding entity" in the log instead of an unavailable sensor (#1739).** Reported
+  by @awood-ops on 5.1.3.
+
+  That sensor is an enum: it declares exactly two permitted states, and Home
+  Assistant does not degrade an out-of-vocabulary state to "unavailable" — it
+  refuses to add the entity at all. His traceback showed the state arriving as
+  `DISCONNECTED` against options spelled in lower case.
+
+  **Three mistakes lined up, and the first diagnosis caught the least important
+  one.** The normaliser was guarded by `isinstance(value, str)`, so it inspected
+  only values that were already the type it trusted. That was real but it was not
+  his bug: an upper-case string passes that guard and comes out folded correctly.
+
+  The one that broke his car is that on his path the normaliser never ran at all.
+  It lived only in the enrichment step, which runs on a poll that parsed vehicle
+  data — and his failure was at setup, before any poll. On startup the integration
+  restores the last-known-good snapshot so entities show recorded values instead
+  of sitting unknown, and that restore hands the stored data straight to the
+  platforms without enriching it. Since the vehicle cache has never had its
+  version bumped, a snapshot written before a normaliser existed is still loaded
+  verbatim today. Third, the normaliser covered one field while there are five
+  enum sensors, every one of them exposed the same way.
+
+  Normalisation now reads each enum sensor's permitted states from the sensor
+  descriptors themselves and runs on both paths, so a sixth enum sensor is
+  covered without anyone remembering a second list. A value that is not in its
+  options becomes unavailable rather than a guess. Five mutations of the new code
+  were each caught by a dedicated test, including one that moves the call after
+  the snapshot is published — which would read as a fix and do nothing.
+
+  @awood-ops read his own traceback and named the case mismatch before I did,
+  after I had already published the wrong explanation.
+
+- **A log line promised that a car refused by the legacy gateway would be
+  retried after twelve hours, which for many setups never happens (#584).**
+  Found in a log @Mjukes posted while asking how to opt in: the line was in his
+  log, the observation was mine. The first published version of this entry said
+  he had pointed it out and "reasonably expected a retry", which he never said —
+  corrected here rather than quietly, since it put words in a reporter's mouth.
+
+  The twelve hours are real — they are the cooldown on the denial — but the
+  same denial also records a "no legacy enrolment" verdict, held in memory for
+  as long as Home Assistant keeps the entry loaded, and since a
+  change in early September the periodic check skips a car carrying that verdict
+  outright when the entry reads through another channel. On such an entry the
+  cooldown expiring changes nothing. On an entry whose primary channel *is* the
+  legacy one, the read does come back. Both shapes exist, so no single number
+  was ever true for everyone.
+
+  The line no longer names a duration. It now says that the periodic check does
+  not ask again while the verdict stands, and that a restart, a reload or a
+  command attempt does — which is accurate for both shapes. The explanatory
+  comment above the constant and the debug line for repeat hits made the same
+  promise and were corrected with it. Anyone searching their logs for
+  `Not retried for 12 h` will no longer find it; `operationList` and
+  `gw.error.authentication` are unchanged.
+
+- **A repair card from a car you no longer own could keep your full VIN, and
+  put it in the diagnostics file you attach to a public issue (#923).** Found by
+  @skornehl, who spotted it in his own export and stripped it out by hand before
+  posting — twice, on two separate exports.
+
+  A repair's id lands verbatim in Home Assistant's own config-entry
+  diagnostics, where this integration's VIN redaction never sees it. That was
+  fixed twice before, for `historical_timeout` (#1768) and for `stale_data`
+  (#1626): new cards carry a masked VIN, and the legacy raw-VIN id is deleted
+  when that same card is next raised or cleared. For `stale_data` the clear runs
+  on every poll, so the cleanup was judged unnecessary — a sweep for it "would
+  be dead code", and a test pinned that decision.
+
+  **It is only dead code while the car still polls.** His second vehicle is sold
+  and disabled. Its card was raised on 14 September carrying the raw VIN; the
+  vehicle never polls again, so the clear never runs, so the id survived two
+  releases. Two further holes had the same shape: the sweep took a list of VINs,
+  and a sold car is in no list the code can build, and the call sat inside the
+  cache-restore branch, so an entry with no cached snapshot never swept at all.
+
+  The sweep now walks the integration's own issue registry and deletes any id
+  ending in something VIN-shaped, on every setup, needing neither a VIN list nor
+  a list of card families — so a family added later that forgets to mask is
+  covered too. It matches the real VIN alphabet (ISO 3779 has no I, O or Q), so
+  a 17-character tail that is not a VIN is left alone, and a masked id is never
+  touched: that card may be showing a live warning. Nothing here changes what a
+  card says or when it appears.
+
+### Hinzugefügt / Added
+
+- **The closure and lock sensors now say when the car captured them (#1950).**
+  Asked for by @Adcad1970, who read the source first and corrected the premise
+  this was going to be built on — see the entry below. Per-value freshness
+  (`data_captured_at`, `freshness_source`) has been on numeric sensors since
+  v4.7.11, but doors, locks, windows, boot and bonnet carried no capture time at
+  all. On a portal-fed car those states are carried forward between snapshots,
+  so a door state captured six hours ago rendered identically to one captured a
+  minute ago — sitting right beside a battery reading that did show its age. A
+  dashboard can now say "doors closed as of 15:36".
+
+  The method moved onto the shared entity base instead of being copied into the
+  binary-sensor platform, so **no platform file was touched** to gain it and
+  every platform fed by the portal answers the question the same way. The
+  existing gate does the limiting by itself: a live-read channel is already
+  current at poll time, and a description without a data key has nothing to
+  stamp, so neither gets an attribute. One caveat worth stating plainly: the
+  stamp belongs to **that one field**. The newest capture in a snapshot is not
+  every value's capture time, and that confusion is exactly what this closes.
+
+- **The door, boot and bonnet locks now say when the car captured them (#1950).**
+  Asked for by @Adcad1970, who then sent the shape of two real deliveries and read
+  it correctly himself: every lock entry in his export carries its own
+  `timestampUtc`, and the parser never dropped them. They were being lost one step
+  later. Recording a capture time is opt-in per call site in the mapper, and no
+  lock or closure site had ever asked for it — so those sensors reported
+  `freshness_source: "dataset"` even though their own entry in the file was
+  stamped. They now carry `data_captured_at` and `"point"`.
+
+  **The door-lock sensor is an aggregate, and its stamp is the OLDEST reporting
+  door's.** "All doors locked" is only as trustworthy as its stalest member: if one
+  door's reading was captured two days ago, the verdict is two days old however
+  fresh the other three are, and taking the freshest member would advertise a
+  confidence the verdict does not have. If any reporting door carries no stamp at
+  all, the verdict stays unstamped rather than borrowing a sibling's time — the
+  sensor then reads "dataset" exactly as before, instead of a wrong "point". Boot
+  and bonnet come from single fields and need no such choice.
+
+  Nothing here depends on position in the file. His two deliveries, generated 44
+  minutes apart, listed the same six locks in different places, so a result that
+  moved with the order would have been wrong on at least one of them. The stamp is
+  also recorded inside the branch that assigns the value, so an unsupported or
+  invalid reading (0 or 1) records nothing and a verdict that came from another
+  channel keeps its own provenance.
+
+  One place it cannot appear: the `lock.door_lock` entity. That one has no data key
+  — it reads the merged value directly — so the freshness attributes do not apply
+  to it. The capture time is on the door-lock, boot-lock and bonnet-lock binary
+  sensors.
+
+### Geändert / Changed
+
+- **Ready for Home Assistant 2026.11 before it reaches you (#1965).** The
+  scheduled beta watch — not a user — found our own checks failing against
+  2026.11.0b0, in three different ways that are worth separating.
+
+  **The real change:** `ClimateEntity` got the native-unit treatment sensors
+  have had for years. `temperature_unit`, `current_temperature` and
+  `target_temperature` became deprecated aliases for `native_*` names, with
+  removal announced for 2027.11. We are **deliberately not migrating yet**: the
+  native names do not exist before 2026.11 — measured absent on 2026.10.1 — and
+  this integration still supports 2026.6, so switching would break the climate
+  entity on every installation that has not taken the update. For a custom
+  integration the deprecation only logs a warning, so the entity keeps working
+  on 2026.11 either way. A test now fails the moment the supported floor
+  reaches 2026.11 and the old names are still there, so the migration happens
+  on a trigger rather than on someone remembering.
+
+  **A dependency that is not ours:** `httpx` is not part of Home Assistant's
+  dependency set, so on an environment without it the HTTP/2 channel's three
+  string returns are seen as untyped. They are now annotated, which is a
+  statement of fact rather than a silencer.
+
+  **And one false alarm, worth naming as such:** Home Assistant flipped the
+  order inside its ALPN constant to prefer HTTP/2 — if anything an improvement
+  for the volkswagen.de channel. Nothing of ours reads that order; a test of
+  ours had pinned it, and so turned a cosmetic upstream change into a red
+  build. It now compares the contents.
+
+  No behaviour changes for anyone on any version.
+
+- **A code comment called `last_seen_at` a delivery clock, which it is not
+  (#1950, #1917).** @Adcad1970 found the contradiction in the source:
+  `_capture_age_s` said `last_seen_at` "says when the delivery was last SEEN",
+  while `compute_connection_state` and the EU Data Act mapper both document it
+  as a capture time. The mapper is right. Every writer of that field takes a
+  capture stamp and none takes a poll or wall clock — a test now measures that
+  across the package rather than asserting it in prose.
+
+  What made it the wrong anchor for the staleness verdict in #1917 is *which*
+  capture it is: the freshest stamp known for the car, from any channel,
+  advance-only, which can be hours newer than the values actually surfaced. So
+  the verdict had been anchored on a real capture time, just not on the capture
+  time of the data it was judging. The 5.1.3 fix stands unchanged; only its
+  explanation was wrong. That wording had already travelled beyond the comment,
+  which is the reason it is corrected here rather than quietly.
+
+- **Code comments described the dataset-level capture time as a "~15-min"
+  floor, which is not what it is (#1950).** It is the newest *car-captured*
+  stamp in an export, and that is no duration at all: #1688 is this repo's
+  standing case of a car whose own capture field sat five days behind every
+  data point beside it. The 15 minutes is the portal's publish cadence, and
+  even that holds only while the car keeps having wake events — a parked car's
+  export repeats the last one.
+
+  Nothing computed from it changed, and the parser's own docstring was always
+  right; the shorthand that distant places used to refer to it was not. The
+  same framing had spread to two further comments about merge order — a
+  position pin and the static service data — so five comments were corrected,
+  not three. It is corrected in public rather than quietly because the phrase
+  had already been published: the 4.4.0 note further down still says "the
+  portal's up-to-15-minute-old snapshot" about exactly these door and lock
+  states. Shipped release notes are left as they were said.
+
+  One finding worth passing on if you read the freshness attributes:
+  `freshness_source: "dataset"` does **not** mean the value inherited a floor.
+  It means only that no per-point capture time was *recorded* for that
+  attribute — recording is opt-in in the mapper and few attributes ask for it —
+  so a lock sensor can report "dataset" even though its own entry in the file
+  did carry a timestamp. Either way that attribute carries no age, so nothing
+  about it can be read as "roughly 15 minutes old".
+
+  A test now pins what the comments assert and refuses a comment that prices a
+  portal value at 15 minutes again. It also pins something that was found by
+  measuring rather than by reading: a capture marker standing in the same list
+  as a value is **taken as** that value's capture time, while the payload-wide
+  floor is withheld. Two things are worth stating about that, because neither
+  was: it is an inference from POSITION, and VW reorders the list between
+  deliveries (#465, and @Adcad1970 measured the lock entries moving between two
+  files on 30 Oct), so it is not the same thing as an entry carrying its own
+  timestamp. And this repo cannot say which shape is more common — the only
+  real export files in it are four from one CUPRA Born (#1195), all with
+  markers, while marker-free exports whose every entry carries its own stamp
+  are attested by #1688 and #1950 and by no fixture at all. Those two routes
+  look identical in a single-marker file, which is how the wrong wording
+  survived. One older test of the "newest wins" rule fed its input in
+  ascending order only, so a "last one in the array wins" implementation would
+  have passed it; it now feeds both orders.
+
+## [5.1.3] - 2026-10-28 — No verdict without the evidence / Kein Urteil ohne Beleg
+
+### Behoben / Fixed
+
+- **An existing entry could not finish setting itself up, and the message
+  blamed the account (#1947).** Reported on v5.1.2 by @mortenmoulder, @RichardPitt and
+  @hausamsee, all on CUPRA, and diagnosed correctly in a single comment by
+  @nijaobscvra666. The portal sign-in that v5.1.2 repaired succeeds, the read
+  channel arms, a cached vehicle is restored — and setup then gives up every
+  160 seconds with "No vehicles found for this account. The login itself
+  worked", on accounts whose car is plainly visible in the portal.
+
+  Nothing was wrong with those accounts, and nothing was wrong with the v5.1.2
+  fix. These entries hold persisted tokens with no recorded strategy, which is
+  why setup skips the fresh login; the token refresh is then refused, and such a
+  refusal has been classified as *transient* since 2026-09-01, deliberately, so
+  that a network hiccup would stop bouncing people to a password prompt. The
+  fallback ladder that exists for exactly this situation — do the login that was
+  skipped, and if that is refused as well, enumerate through the EU Data Act
+  portal — was built thirteen days **before** that reclassification and only
+  ever caught the other class. So the refusal walked past both rungs untouched,
+  and the generic "no vehicles" wording is simply what the entry point reports
+  when setup gives up without a reason of its own. It was never about vehicles.
+
+  Both rungs now take both classes, **at setup only**. The poll loop keeps
+  treating a refused refresh as transient, because there the entry has a
+  last-known-good snapshot to stay alive on while the hiccup passes; setup has
+  no snapshot, so "transient" meant retrying the same dead token file forever
+  with nothing able to change the outcome. @hausamsee asked for precisely the
+  outcome this produces — carry on with the channel that authenticated — and his
+  car is the case the second rung now serves. The workaround people found,
+  removing the entry and adding it again, worked only because it wipes the
+  stored token file; it is no longer needed, and it cost everyone who used it
+  their entity history.
+
+- **A single stopped clock could switch the stale-data indicator off
+  completely.** Found by auditing the fix above before it shipped, so it was
+  never released — it is written down because the shape is worth knowing.
+
+  The corrected verdict takes the newest of up to seventy per-field capture
+  stamps. "Newest" is the smallest age, and a stamp dated in the **future**
+  has a negative age, so it won outright: one car reporting a clock six hours
+  ahead answered "six hours in the future" and the indicator read *not stale*
+  on a feed that had been frozen for four days. Sixty-nine correct stamps
+  silenced by one broken one.
+
+  The verdict now judges on the stamps that are not in the future. Only when
+  **every** stamp is future-dated does the negative answer stand, which keeps
+  the deliberate behaviour from [#465](https://github.com/its-me-prash/vwgroup-connect-ha/issues/465):
+  a car whose clock runs ahead raises no repair card, because then there is
+  nothing sane to prefer over it.
+  ([#1917](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1917))
+
+- **A parked car on a dongle is not a frozen feed, and no longer reports as
+  one.** Also caught before shipping.
+
+  The first version of the fix above consulted `data_captured_at` as a second
+  source. That field is written in exactly one place — the KWP2000 dongle —
+  and that client documents it as refreshing "only when the car is driven / on
+  ignition". So the fix silently gave the dongle channel a staleness verdict it
+  had never had, and every dongle car parked longer than three days would have
+  reported its data as outdated. Correct arithmetic, wrong question: the
+  indicator exists to say the feed broke, not that the owner took the train.
+
+  The dongle's "Datenstand" is no longer part of that decision. It is still
+  shown as the per-sensor *Data captured at* attribute, where it answers the
+  question it can answer.
+  ([#1917](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1917))
+
+- **The indicator that tells you a reading is old was reading the wrong
+  clock — and the capture time was sitting in the same snapshot all along.**
+
+  @tdrieshof measured it on an Audi Q6 e-tron (PPE, Belgium, portal-only): the
+  car was at **38 %**, Home Assistant showed **56 %**, and nothing in the
+  interface suggested the number was two days old. His diagnostic is what made
+  it checkable: the anchor the code read was about **22 hours** old while the
+  car's own capture, quoted in his own log, was about **47 hours** old.
+
+  A second report that looked identical turned out not to be this fault, and
+  that belongs here rather than in a footnote: a Q4 whose charge target read 80
+  against a setting of 50 looked exactly like a frozen feed, and the owner then
+  checked the portal archives himself and found the source data genuinely wrong
+  — readings four hours old against a fifteen-minute cadence, and a charging
+  speed of 660 km/h held for three hours. That is VW's data being wrong, not
+  ours being stale, and #1917 says so explicitly. It is named here because the
+  symptom is the same and the cause is not, which is the whole difficulty with
+  this class of bug.
+
+  The staleness verdict asked "how long since `last_seen_at`", and
+  `last_seen_at` says when the **delivery** was last seen. A channel refreshes
+  that stamp even when every value inside the delivery is old, so the age came
+  out as minutes no matter how stale the data was. The function's own docstring
+  called that field "the car's own data was captured", which is the whole bug
+  in one sentence.
+
+  What makes this one unusual: nothing had to be collected. `field_captured_ts`
+  — a per-field record of when the car captured each value — was already in the
+  snapshot, already feeding the per-sensor *Data captured at* attribute, and
+  already flipping that sensor's freshness label from "dataset" to "point". The
+  per-sensor attributes knew the capture time while the verdict did not. The
+  verdict now looks at it, preferring the **newest** capture (the question is
+  whether the car recorded anything recently), then the dongle's own
+  *Datenstand*, then the delivery sighting as before — so a channel that
+  records no capture time behaves exactly as it did.
+
+  A carried-forward field keeps its original capture stamp, which is the point:
+  if every field is carried forward, every stamp is old, the newest is old, and
+  the verdict fires.
+
+  **What this does not fix, so nobody updates expecting it.** Two things:
+
+  1. **The bar is 72 hours.** With the anchor corrected, @tdrieshof's two-day-old
+     data is now *measured* correctly — 47 hours against the 22 the old
+     anchor reported — and
+     still sits under that bar, so his indicator stays off. While the anchor was
+     wrong the bar never mattered, because the age was always minutes; fixing
+     the anchor is what makes the threshold a live question for the first time.
+     Three days is a long time for a feed that normally arrives every fifteen
+     minutes. Lowering it means more cards on more cars, so it is a decision
+     rather than a fix and it is not made here.
+  2. **The 40 carried-forward fields still have no age limit of their own.**
+     Only position has one, at 24 hours. This fixes the global verdict — "did
+     the car capture anything recently" — so a wholly frozen feed is flagged. A
+     single field freezing while others keep moving is a per-field problem and
+     is still open.
+
+  Pinned by 18 tests against seven mutations, including one that restores the
+  old anchor. Why no test caught it before, measured rather than assumed: of
+  the ten test files covering this area, not one set an old capture next to a
+  fresh delivery, and both tests that call the age helper directly pass it a
+  delivery sighting and nothing else. The function was covered only on its
+  fallback path.
+  ([#1917](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1917),
+  [#1364](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1364))
+
+- **The "raise your update interval" card could latch on for good and
+  recommend a bigger number every time — and v5.1.2 is what made that
+  possible.** This one is ours, introduced four hours after release, so it is
+  stated plainly rather than buried.
+
+  @clipse2004's CUPRA Formentor
+  ([#1942](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1942)):
+  he raised the interval, the card came back with a higher number, he raised it
+  again, and so on. The escalation looked like repeated storms. It was not —
+  the recommended value is derived from the *current* interval, so **one** flag
+  that never clears produces 40 → 55 → 60 all by itself.
+
+  The flag has exactly one setter and five clearers. The #1918 fix in v5.1.2
+  added an early return so a bearer-less cookie session stops paying for a
+  re-login that cannot work — correct in itself, but it sits *before* the
+  budget check and before all five of those clearers. So: a client trips the
+  budget while it still holds a real bearer (the flag goes up, rightly), the
+  native plane then answers with the attestation wall *in the same session*,
+  the portal fallback is armed, and from that moment every refresh leaves
+  through the early return. Nothing can clear the flag again for the life of
+  the client, and the card is raised on every poll with no storm behind it.
+  That is the one state in which the advice is pure noise: a cookie session
+  spends no refresh budget at all, so raising the interval cannot change
+  anything.
+
+  The branch now clears the flag on its way out. That is a measurement rather
+  than an assumption — it returns precisely *because* it will not spend a slot.
+  An account-lock flag is deliberately **not** cleared alongside it: nothing on
+  that path checked whether the account is locked, and inventing an all-clear is
+  the mistake this release is otherwise about.
+
+  **That alone was not enough, and the reason is worth writing down.** Clearing
+  it only on the next refresh assumes a next refresh happens. The data path asks
+  for one only on a **401** — and the native block that sends a SEAT or CUPRA car
+  to this fallback is a **403**. So on exactly the car the fallback exists for,
+  nothing came back to run the clear and the card stayed raised until a restart.
+  The flag is therefore now also dropped at the moment either read-only fallback
+  is armed, which is the moment a storm becomes impossible. The evidence for
+  that gap was already in this repository, in a test written days earlier that
+  pins "a 403 does not recover"; it simply had not been connected to this fix.
+
+  Why the #1918 tests could not see it: every one of them starts from a client
+  built moments earlier, where the flag has never been anything but False.
+  Asserting it is still False proves nothing about a flag that was True. Pinned
+  now by the sequence itself, against six mutations — the first of which is a
+  straight revert to the v5.1.2 code.
+
+- **A locked car reported its doors unlocked, because the boot was counted as a
+  door.** Found on the EU Data Act portal path and fixed there first; the entry
+  below it covers the four other places the same mistake turned out to be live,
+  North America included.
+
+  There the tailgate's lock state was folded
+  into the per-door `doors_locked` aggregation, where any unlocked member makes
+  the whole verdict *unlocked*. So an unlocked boot on an otherwise locked car
+  reported the doors as unlocked.
+
+  @Adcad1970's Audi A6 e-tron is where it surfaced
+  ([#1950](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1950)):
+  "Doors Locked" and "Trunk Locked" moved together — identical timestamps,
+  identical values — for hours while the car stayed locked.
+
+  The direction he could not see is the worse one. On a delivery carrying *only*
+  the tailgate's lock state, which this portal does send, the door verdict was
+  decided entirely by the boot — and a locked boot then asserted **doors
+  locked** on no door evidence at all. Measured before and after the change: a
+  tailgate-locked-only payload went from a fabricated *locked* to *unknown*, and
+  four locked doors plus an unlocked boot went from a wrong *unlocked* to
+  *locked*. Only the boot's **lock** state was ever involved; an *open* boot
+  never touched the door verdict, in either direction, and that boundary is now
+  pinned too.
+
+  The file already guarded against this exact hazard in the other dialect — the
+  bare `locked` field is read under a dotted spelling precisely so the trunk
+  state cannot mis-set `doors_locked` — and the historical `door_info.*` path
+  has always aggregated doors alone, sending the boot lock to `trunk_locked`
+  separately. Only the enum path got it wrong. The door verdict now comes from
+  door fields; a tailgate-only payload leaves it unknown rather than stating
+  something no field reported.
+
+  Two consequences worth knowing, because they are not all upside. On a car
+  whose portal delivery only ever carries the tailgate's lock state,
+  `doors_locked` is now *unknown* instead of wrong — so the named `locked` and
+  `unlocked` triggers cannot fire on it (an edge needs a real value on both
+  sides), the `is_locked` condition answers "not locked" for unknown, and on a
+  fresh install the "Doors Locked" sensor may not be created at all while
+  hide-empty is on. In exchange, leaving the field empty finally lets the
+  historical export path and the cross-channel gap-fill supply it — the old code
+  occupied the field with the boot's value and blocked both.
+
+  Why the existing portal tests never caught this is worth recording, because
+  the obvious guess is wrong. It is not that they all supplied door fields
+  alongside the tailgate: two of them feed a tailgate-only lock payload, which
+  is exactly the broken shape. They passed because **not one of them asserted**
+  `doors_locked` on it. The tests sat directly on the defect and said nothing.
+  A field can be exercised by several tests and pinned by none — it is pinned
+  now, against eight separate mutations.
+
+- **The same mistake was live in four more places, and one of them was six
+  brands wide.** After the fix above, the integration was swept for the pattern
+  "a closure that is not a door decides whether the doors are shut". Every hit
+  below was measured on the real parsers, not reasoned about, and each one broke
+  the same two ways: it inverted the verdict against the real doors, and on a
+  delivery carrying no door at all it fabricated a verdict from a single
+  non-door member.
+
+  **North America** (`doorStatus` and `exteriorStatus.doorLockStatus`): the boot
+  and the bonnet rode in the list that decides both *Doors Open* and *Doors
+  Locked*. Four locked doors plus an unlocked boot read as **unlocked**; worse,
+  a locked boot on a delivery with no door fields at all reported the doors
+  **locked** on no door evidence whatsoever. Both now come from door fields
+  only.
+
+  **Volkswagen EU — which Audi, Bentley, Lamborghini, VW Commercial and Audi NA
+  all inherit unchanged**: the bonnet and the boot sat in the door aggregate and
+  the roof sat in the window aggregate, so four closed doors plus an open bonnet
+  reported an open door, and an open roof reported an open window.
+
+  The part that makes this more than a tidy-up: **neither `hood_open` nor
+  `sunroof_open` was ever written anywhere in that file**, and North America had
+  no roof mapping at all. So the bonnet's and the roof's only effect on your
+  system was to corrupt an aggregate they did not belong to. They now populate
+  *Hood Open* and *Sunroof Open* — entities that already existed, already had
+  names, and had simply never received a value on those channels.
+
+  Kept deliberately: the per-closure *door* entities still include the boot and
+  the bonnet. Those are intended — the translation table has named keys for both
+  — so only the aggregate changed. The per-closure *window* entities lose their
+  roof members, which is the opposite case: nothing ever translated `roofCover`
+  or `sunRoofRear`, so they surfaced as window entities named after the raw
+  backend key.
+
+  The exclusions are deny-lists of known non-members, never allow-lists of door
+  names. Those dict-iteration paths exist so a firmware-specific door id works
+  without being enumerated anywhere, so an unrecognised spelling still counts as
+  a door exactly as before — a fix that quietly dropped the next new door would
+  be worse than the bug.
+
+  One existing test had to change, and it is worth naming: it asserted that a
+  raised bonnet plus an open boot meant "a door is open", on a fixture whose two
+  side doors were both closed. It pinned the defect in place. 30 tests now cover
+  the five sites, against 15 separate mutations.
+  ([#1950](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1950))
+
+- **"All closures secured" could say yes with the boot standing open.** It was
+  deciding from at most three doors — the data dictionary documents a safe-state
+  field for three of them and none at all for the front left — while the name
+  promised every closure. Measured: three secured doors plus an open tailgate
+  gave *secured*, with *Trunk Open* reading true on the same vehicle at the same
+  moment.
+
+  The arithmetic was widened to match the name rather than the name narrowed to
+  match the arithmetic. It now also requires that nothing we can see is standing
+  open, read from the boot's and the bonnet's **open** state — deliberately not
+  from their own safe-state fields, which is the trap: v4.7.11 removed those two
+  from this calculation after a live SEAT/CUPRA delivery reported the bonnet
+  "unsafe" while a second field in the same dataset said it was closed. The
+  dictionary documents no "safe" value for either of them, so that signal cannot
+  carry a verdict. A test now pins that case so the widening cannot resurrect it.
+
+  A closure we cannot see neither forces a *no* nor permits a *yes* on its own,
+  so the claim is "every closure this delivery reported is secured". **This can
+  change an automation's behaviour**: on a car that reports an open boot, an
+  entity that used to read secured will now read unsecured — which is the point,
+  but it is a value change rather than a cosmetic one.
+  ([#1950](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1950))
+
+- **Per-source connectivity sensors read "unavailable" for up to a whole poll
+  interval after every restart.** The map those sensors are created from was
+  computed on the poll path only, so after each setup and each reload they sat
+  at *unavailable (restored)* until the next scheduled poll. For a diagnostic
+  whose entire job is to say which sources a car is reaching, that reads as
+  "this source is broken" rather than "not measured yet".
+
+  @InfObject found it on a VW ID. Buzz
+  ([#1954](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1954)) and
+  brought the fix point with him: the computation is local-only — no await, no
+  network — so there was never a reason to defer it to a poll. It now runs
+  during setup as well, fail-soft, exactly as it does on the poll path.
+
+  Two paths it does **not** reach, so nobody reads more into it than is there:
+  a **companion (ADB) entry** skips that part of setup entirely — its first poll
+  is immediate rather than an interval away, so the window is much shorter, but
+  it is not zero — and a VIN whose setup read failed outright has nothing stored
+  to put the value in.
+
+- **A single "connection reset" on the dongle channel was offered to you as a
+  defect worth filing.** The poll handler decides whether an error is
+  self-healing — the car will be reachable again next poll — or something the
+  Error Reporter should offer to file. Every branch of that decision inspected
+  an `APIError`, which is the shape the shared request helper produces after it
+  has retried a network failure and given up. Five of the fifteen channel
+  clients do not go through that helper, and measuring what that actually means
+  took two attempts:
+
+  - the **dongle cloud** and **Skoda-official** convert nothing, so all four
+    transient classes reach the handler raw and count as a defect — this is the
+    gap that filed the issue;
+  - **VW North America** converts three of the four into a backend-unavailable
+    error the handler already understood, and leaks the fourth, a truncated
+    response body;
+  - **Porsche** retries and then raises the same tagged `APIError` the helper
+    does, so it was already covered.
+
+  An earlier version of this entry said a reset arrives raw on all five. It
+  does not, and the correction is the same kind of care this release is about:
+  the measurement that mattered was not "which clients inherit the helper" but
+  "which ones let the exception through".
+
+  That is what filed
+  [#1959](https://github.com/its-me-prash/vwgroup-connect-ha/issues/1959): one
+  reset against the dongle cloud, on one car, over two days, on my own
+  installation. Ordinary internet, presented as a bug. The cost is not that one
+  issue — it is that noise in those reports teaches people to ignore the next
+  one, and the next one may be real.
+
+  The handler now recognises the transient network classes directly, and
+  **imports that list from the request helper instead of restating it**, so the
+  two cannot drift apart as one of them gains a class. The exclusion is by
+  exception class only, never by which client raised it, so a genuine failure on
+  the same channel is still reported.
+
+  **What this does not change**, so nobody reads more into it. The Error
+  Reporter has never filed anything on its own and still does not — it prepares
+  a report and you decide whether to send it; this changes what it *offers*, not
+  whether it asks. And a bare `OSError` is still reported: a connection reset
+  reaches this point wrapped in an `aiohttp` class, while a bare one can just as
+  easily be a local file or permission failure, which is worth knowing about.
 
 ## [5.1.2] - 2026-10-28 — Ten things it reported wrongly / Zehn Dinge, die es falsch gemeldet hat
 
@@ -916,6 +2977,8 @@ Versioning: [Semantic Versioning 2.0.0](https://semver.org/)
   a mutation, because `release.yml` carries a second `exit 1` in an unrelated
   step. That assertion is scoped to its own step now.
   ([#1916](https://github.com/its-me-prash/vwgroup-connect-ha/pull/1916))
+
+
 ## [5.1.0] - 2026-10-20 — Saying what actually happened / Sagen, was wirklich passiert ist
 
 ### Hinzugefügt / Added
@@ -3865,6 +5928,16 @@ _Consolidates the 4.4.0b1–b5 betas into one stable release._
 ### Fixed
 - **Audi cars finally show their real model — the bare "Audi (2021)" S6 becomes "Audi S6 Avant TDI quattro tiptronic".** The localized `media.shortName`/`longName` are only returned when the model query carries a locale; our request omitted `Accept-Language` + `X-User-Country`, so the backend answered with just the model year and a null `media`. Proven with a same-account A/B test (no headers → blank; headers → full name). The request now always sends a valid locale (from the account's country), the list is read from the myAudi app-API first (web-proxy as fallback), and the render-image entities got clean, consistent, localized names too.
 - **Portal-primary cars no longer show a stale door / window / lock state.** If the EU Data Act portal is your main channel and a live channel (the CARIAD BFF or vw.de) is also connected, the current door / window / lock / trunk reading from the live channel now wins over the portal's up-to-15-minute-old snapshot — the same cross-channel rule we already apply to charging and SoC (a door-open warning automation was exactly the kind of thing that could act on the stale value). Odometer, GPS position and service intervals are deliberately left untouched.
+
+  > **Later correction (2026-10-30, #1950):** "up-to-15-minute-old" above is
+  > wrong, and is left standing as it shipped. 15 minutes is the portal's publish
+  > cadence, not a bound on how old a portal value is: a car that has had no wake
+  > event keeps re-delivering its last export, and #1688 had the car's own capture
+  > field frozen five days behind the data points beside it. The rule this entry
+  > describes does not rest on that number — it hands the field to the
+  > highest-priority live channel whenever the batch feed owns it, whatever the
+  > batch value's age. If anything the wrong number understated why the rule is
+  > needed.
 - **The EU-Data-Act export buttons now appear on a command car that also reads the portal (#923).** If your car sends remote commands *and* pulls the EU Data Act feed, the "Request historical export" / data-request buttons were missing — the gate only recognised a read-only portal or the explicit option. It now also spots a live portal connection (or a saved active data request), on merged setups too, so the buttons show up on their own and a merged setup can import the result. Thanks @naked-head and @dazzzl — the toggle A/B test pinned it exactly.
 - **SEAT/CUPRA: the "outdated OLA headers" repair no longer gets stuck on (#1301).** For cars that read via the portal (the SEAT/CUPRA online API is switched off at VW's end), that repair could latch on and re-announce itself on every poll — it was built to clear only on a successful call to an API that can no longer answer. It now auto-resolves whenever the portal is serving your data and stays gone. Thanks @anju1337 for the precise report.
 - **VW trunk-open now reads the portal's dotted `trunk.open` field (#1293).** The EU Data Act feed can report the trunk state as a dotted boolean (`trunk.open: "true"`), the same way it already does for `trunk.locked`; we only read the numeric enum and UUID form, so on that dialect the trunk-open sensor stayed empty. Thanks @MirkoKas.

@@ -117,12 +117,14 @@
         "data": {
           "brand": "Fordonsmärke",
           "spin": "S-PIN",
-          "scan_interval": "Uppdateringsintervall"
+          "scan_interval": "Uppdateringsintervall",
+          "use_browser_auth0": "Experimentellt: inloggning via webbläsaren (Auth0)"
         },
         "data_description": {
-          "brand": "Endast märken med stöd för webbläsarinloggning visas. Använd 'E-post + lösenord' för Volkswagen EU och Porsche.",
+          "brand": "Endast märken med stöd för webbläsarinloggning visas. Använd 'E-post + lösenord' för Porsche.",
           "scan_interval": "Minuter mellan fordonets datahämtningar.",
-          "spin": "Valfri 4-siffrig säkerhets-PIN för fjärråtgärder (lås, lås upp, klimat)."
+          "spin": "Valfri 4-siffrig säkerhets-PIN för fjärråtgärder (lås, lås upp, klimat).",
+          "use_browser_auth0": "Endast SEAT och CUPRA: använd webbläsarinloggningen (Auth0) i stället för enhetskodsinloggningen. Den här vägen är ännu inte verifierad för dem — testare, rapportera ert resultat. Audi använder den alltid."
         }
       },
       "browser_login_pending": {
@@ -181,6 +183,34 @@
           "mbb_vins": "Lämna det här tomt om inte inställningen ber om det.",
           "spin": "Din Audi-S-PIN — koden du använder för att låsa/låsa upp på distans."
         }
+      },
+      "auth0": {
+        "title": "Logga in med {brand} i webbläsaren",
+        "description": "{note}Den här integrationen kan inte längre logga in hos {brand} med bara e-post och lösenord — sista steget kräver nu en enhetskontroll som bara den officiella appen klarar. Märkets egen inloggningssida fungerar fortfarande:\n\n1. Öppna den här länken, helst i ett privat webbläsarfönster: [{authorization_url}]({authorization_url})\n2. Logga in med ditt {brand}-konto.\n3. Webbläsaren skickas sedan till en callback-adress som inte kan läsas in. **Det anslutningsfelet är förväntat.**\n4. Kopiera hela adressen från webbläsarens adressfält — eller, om webbläsaren inte visar någon, värdet för code — och klistra in den nedan.\n\nLänken gäller bara det här försöket; misslyckas det visas en ny.",
+        "data": {
+          "callback_url": "Adress från webbläsaren, eller code-värdet"
+        },
+        "data_description": {
+          "callback_url": "Innehåller code= och state=."
+        }
+      },
+      "reauth_auth0": {
+        "title": "Logga in igen med {brand} i webbläsaren",
+        "description": "{note}Den här integrationen kan inte längre logga in hos {brand} med bara e-post och lösenord — sista steget kräver nu en enhetskontroll som bara den officiella appen klarar. Märkets egen inloggningssida fungerar fortfarande:\n\n1. Öppna den här länken, helst i ett privat webbläsarfönster: [{authorization_url}]({authorization_url})\n2. Logga in med ditt {brand}-konto.\n3. Webbläsaren skickas sedan till en callback-adress som inte kan läsas in. **Det anslutningsfelet är förväntat.**\n4. Kopiera hela adressen från webbläsarens adressfält — eller, om webbläsaren inte visar någon, värdet för code — och klistra in den nedan.\n\nLänken gäller bara det här försöket; misslyckas det visas en ny.",
+        "data": {
+          "callback_url": "Adress från webbläsaren, eller code-värdet"
+        },
+        "data_description": {
+          "callback_url": "Innehåller code= och state=."
+        }
+      },
+      "reauth_auth0_menu": {
+        "title": "Logga in igen",
+        "description": "Inloggning med e-post + lösenord fungerar inte längre för det här märket (enhetskontroll). Inloggning via märkets egen inloggningssida i en webbläsare fungerar fortfarande. Hur vill du logga in igen?",
+        "menu_options": {
+          "reauth_auth0": "Logga in via webbläsaren (rekommenderas)",
+          "reauth_credentials": "Ange e-post + lösenord (endast EU Data Act-portalen)"
+        }
       }
     },
     "error": {
@@ -196,6 +226,7 @@
       "website_login_failed": "Din e-postadress och ditt lösenord är inte problemet — inloggningen på volkswagen.de kom förbi dem och misslyckades i ett senare steg (till exempel en utgången session, en omdirigeringsloop eller en sida den inte kände igen). Orsaken finns i Home Assistant-loggen. Ett nytt lösenord hjälper inte; om det fortsätter, öppna ett ärende och bifoga den loggraden.",
       "portal_interaction_required": "EU Data Act-portalen kräver en engångsåtgärd i din webbläsare eller varumärkesapp (t.ex. godkänna villkor, bekräfta samtycke, slutföra onboarding/regionval) innan huvudlös åtkomst fungerar. Detta är INTE ett lösenordsproblem — öppna portalen en gång i en webbläsare, slutför uppmaningen och försök igen.",
       "upstream_unavailable": "VW backend tillfälligt otillgänglig. Detta är ett serverproblem hos VW, INTE ett autentiseringsfel. Vänta 5–15 minuter och försök igen. Konfigurera INTE om integrationen.",
+      "authproxy_refused": "volkswagen.de refused the e-mail-code step. This is not your code and not your password — the code is only sent after the password has been accepted, and unlike a server outage this will not necessarily clear on its own. Try this first: sign in at volkswagen.de in a browser from the same machine and clear whatever the site puts in front of you — a consent or advertising prompt counts, and declining it is enough. A reporter found that this lets the integration sign in again, and the site does not tell us when it is waiting for that. If it still fails afterwards, the useful report is the status from the log line next to this message and whether the browser sign-in worked.",
       "na_signin_attestation": "Din e-postadress och ditt lösenord är korrekta — Volkswagen North America blockerar nu den här inloggningen bakom en enhetsattesteringskontroll från Google (Play Integrity) som bara den officiella appen på en äkta telefon kan passera. Att ange lösenordet igen hjälper inte; det här är en serverspärr hos VW, inte ett problem med inloggningsuppgifterna. (Spåras: #1165.)",
       "porsche_login_wall": "Din e-post och ditt lösenord är korrekta — inloggningen tog sig förbi lösenordssteget, men hamnade sedan på en Porsche captcha-/samtyckesskärm (sedd på vissa konton på my.porsche.com) som en headless inloggning inte kan ta sig förbi. Att ange lösenordet igen hjälper inte; det här är en spärr på Porsches sida, inte ett problem med inloggningsuppgifterna. Försök högst en gång — upprepade försök har låst Porsche-konton. (Spåras: #1337.)",
       "brand_not_dag_eligible": "Det valda märket stöder inte webbläsarinloggning. Använd flödet för e-post + lösenord i stället.",
@@ -212,7 +243,10 @@
       "captcha_retry": "Lös den captcha som visas ovan för att fortsätta.",
       "companion_addon_token_required": "An add-on token is required for new connections. Set api_token in the ADB Bridge add-on and enter the same token here.",
       "companion_agent_token_weak": "The agent token is too predictable. Use the generated random token or a random token with at least 32 characters and 16 distinct characters, with no character making up more than half.",
-      "eu_signin_attestation": "Din e-post och ditt lösenord är korrekta — själva inloggningen fungerade och auktoriseringskoden kom tillbaka. Volkswagen vägrar nu det sista steget, att byta den koden mot en token, eftersom de kräver ett Google-signerat enhetsintyg (Play Integrity) som bara den officiella appen på en äkta telefon kan skapa. Att skriva lösenordet igen hjälper inte, och inte heller att försöka igen. Den skrivskyddade EU Data Act-portalen, som normalt tar över i det här fallet, levererade inte heller något — och det här meddelandet kan inte säga varför. Öppna portalen i en webbläsare: om den laddar, kontrollera att datadelning är påslagen för din bil. Om den inte laddar är det portalen själv som ligger nere, och inget behöver ändras hos dig. (Spåras: #1712.)"
+      "eu_signin_attestation": "Din e-post och ditt lösenord är korrekta — själva inloggningen fungerade och auktoriseringskoden kom tillbaka. Volkswagen vägrar nu det sista steget, att byta den koden mot en token, eftersom de kräver ett Google-signerat enhetsintyg (Play Integrity) som bara den officiella appen på en äkta telefon kan skapa. Att skriva lösenordet igen hjälper inte, och inte heller att försöka igen. Den skrivskyddade EU Data Act-portalen, som normalt tar över i det här fallet, levererade inte heller något — och det här meddelandet kan inte säga varför. Öppna portalen i en webbläsare: om den laddar, kontrollera att datadelning är påslagen för din bil. Om den inte laddar är det portalen själv som ligger nere, och inget behöver ändras hos dig. (Spåras: #1712.) Audi: välj Reparera och sedan webbläsarinloggning med myAudi — den tar sig förbi den här spärren.",
+      "invalid_auth0_callback": "Det är inte adressen från det här inloggningsförsöket. Klistra in hela localhost:8080/myaudi-callback-adressen från adressfältet efter att du loggat in via länken ovan.",
+      "auth0_denied": "Inloggningen avbröts eller nekades på Audis sida. Öppna länken igen och logga in.",
+      "auth0_auth_failed": "Audi avvisade inloggningskoden — en kod kan bara användas en gång. Öppna den nya länken ovan och logga in igen."
     },
     "abort": {
       "already_configured": "Det här kontot är redan konfigurerat.",
@@ -291,7 +325,7 @@
           "abrp_user_token": "'Generic'-token från ABRP-appen: Inställningar -> din bil -> Live Data. Loggas aldrig.",
           "keep_raw_datasets": "Endast användbart på EU Data Act-portalkanalen. När det är på sparas de senaste råa dataset-ZIP-filerna som portalen levererar på disken (under .storage, per fordon och med en storleksgräns), så att ett felaktigt eller saknat värde kan återskapas från exakt de byte som din bil skickade. Dessa filer innehåller din GPS-position, VIN och telemetri, så det är avstängt som standard – slå bara på det vid felsökning.",
           "auto_utility_meters": "Av som standard. När det är på skapar integrationen Home Assistant utility_meter-hjälpare som summerar din laddade energi och körsträcka per kalendermånad, en per fordon. Reglaget visas bara när en matchande källsensor redan finns. Det här är permanenta hjälpare: att stänga av det igen stoppar att nya skapas men tar inte bort de som redan skapats – ta bort dem under Inställningar → Enheter och tjänster → Hjälpare.",
-          "test_cohort": "Avstängt som standard. Slå på det här så får integrationen prova experimentella avläsningar från din bil — till exempel det pågående försöket att få fram GPS-position för Volkswagen-bilar i EU — och då och då visa en avisering, som du enkelt kan stänga, där du ombeds dela en diagnostikfil så att en ny funktion kan bekräftas för just din modell. Allt som delas rensas automatiskt innan det lämnar ditt system: inget VIN, ingen GPS, inga tokens och ingen e-post skickas någonsin med. Det är så nya funktioner låses upp — för din bil och för alla andra som kör samma modell — och du kan stänga av det igen när du vill.",
+          "test_cohort": "Avstängt som standard. Slå på det här så får integrationen prova experimentella avläsningar från din bil — till exempel det pågående försöket att få fram GPS-position för Volkswagen-bilar i EU — och då och då visa en avisering, som du enkelt kan stänga, där du ombeds dela en diagnostikfil så att en ny funktion kan bekräftas för just din modell. 5.2.1+: inget VIN, ingen GPS, inga tokens och ingen e-post skickas någonsin med. Det är så nya funktioner låses upp — för din bil och för alla andra som kör samma modell — och du kan stänga av det igen när du vill.",
           "vwde_cred_relogin": "Av som standard. Påverkar bara Volkswagen.de-läskanalen. När den tysta återupptagningen av sessionen misslyckas loggar integrationen in igen med lösenordet du redan har sparat i stället för att be dig lägga till kanalen på nytt. Det kan få Volkswagen att skicka högst en e-postkod var 15:e minut; om en kod krävs kan den inte anges automatiskt, och du blir ombedd att lägga till kanalen på nytt.",
           "vweu_device_grant": "Endast Volkswagen, BETA. Lägger till tvåvägsstyrning (lås/lås upp, klimat, laddning) och live-CARIAD-avläsningar genom att du loggar in med ditt Volkswagen ID. Volkswagen utfärdar bara en 1-timmestoken här, så ditt lösenord lagras för att förnya den automatiskt — det skickas endast till Volkswagens egen inloggningsserver och skrivs aldrig till loggar eller diagnostik. Om du hellre inte vill lagra ett lösenord, använd de skrivskyddade kanalerna istället. Om du kryssar i detta öppnas inloggningssteget."
         }
@@ -2551,7 +2585,7 @@
     },
     "vehicle_data_scout_findings": {
       "title": "API-spanare — {count} nytt fält på {brand}",
-      "description": "API-spanaren hittade **{count}** nya fält i {brand}-API-svaret som VW Group Connect inte läser ännu.\n\nDet betyder oftast att din bil har en funktion eller firmware-version som vi inte har kartlagt — och **att skicka in den här rapporten är precis det som låter oss bygga stöd för den**, för din bil och alla andra med samma modell.\n\n**1-klick-rapport:** klicka på **Läs mer** nedan för att öppna ett förifyllt GitHub-ärende.\n\n**Ännu mer användbart:** bifoga din diagnostik — Inställningar → Enheter och tjänster → VW Group Connect → ⋮ → **Ladda ner diagnostik**. Den innehåller nu hela API-svaret med de nya fälten i sitt sammanhang, vilket är precis vad vi behöver för att göra dem till entiteter.\n\n_Allt maskeras automatiskt: VIN maskeras, GPS tas bort, tokens, användar-ID, e-postadresser och registreringsskyltar rensas bort. Ingenting delas någonsin om du inte bifogar det själv._"
+      "description": "API-spanaren hittade **{count}** nya fält i {brand}-API-svaret som VW Group Connect inte läser ännu.\n\nDet betyder oftast att din bil har en funktion eller firmware-version som vi inte har kartlagt — och **att skicka in den här rapporten är precis det som låter oss bygga stöd för den**, för din bil och alla andra med samma modell.\n\n**1-klick-rapport:** klicka på **Läs mer** nedan för att öppna ett förifyllt GitHub-ärende.\n\n**Ännu mer användbart:** bifoga din diagnostik — Inställningar → Enheter och tjänster → VW Group Connect → ⋮ → **Ladda ner diagnostik**. Den innehåller nu hela API-svaret med de nya fälten i sitt sammanhang, vilket är precis vad vi behöver för att göra dem till entiteter.\n\n_5.2.1+: VIN maskeras, GPS tas bort, tokens, användar-ID, e-postadresser och registreringsskyltar rensas bort. Ingenting delas någonsin om du inte bifogar det själv._"
     },
     "error_reporter_findings": {
       "title": "Felrapportör — {count} senaste fel på {brand}",
@@ -2685,7 +2719,7 @@
     },
     "eu_signin_attestation": {
       "title": "Volkswagen blockerar inloggningen för {brand}",
-      "description": "Din e-post och ditt lösenord är korrekta — själva inloggningen fungerade och auktoriseringskoden kom tillbaka. Volkswagen vägrar nu det sista steget, att byta den koden mot en token, eftersom de kräver ett Google-signerat enhetsintyg (Play Integrity) som bara den officiella appen på en äkta telefon kan skapa. Att skriva lösenordet igen hjälper inte, och inte heller att försöka igen. Den skrivskyddade EU Data Act-portalen, som normalt tar över i det här fallet, levererade inte heller något — och det här meddelandet kan inte säga varför. Öppna portalen i en webbläsare: om den laddar, kontrollera att datadelning är påslagen för din bil. Om den inte laddar är det portalen själv som ligger nere, och inget behöver ändras hos dig. (Spåras: #1712.)"
+      "description": "Din e-post och ditt lösenord är korrekta — själva inloggningen fungerade och auktoriseringskoden kom tillbaka. Volkswagen vägrar nu det sista steget, att byta den koden mot en token, eftersom de kräver ett Google-signerat enhetsintyg (Play Integrity) som bara den officiella appen på en äkta telefon kan skapa. Att skriva lösenordet igen hjälper inte, och inte heller att försöka igen. Den skrivskyddade EU Data Act-portalen, som normalt tar över i det här fallet, levererade inte heller något — och det här meddelandet kan inte säga varför. Öppna portalen i en webbläsare: om den laddar, kontrollera att datadelning är påslagen för din bil. Om den inte laddar är det portalen själv som ligger nere, och inget behöver ändras hos dig. (Spåras: #1712.) Audi: välj Reparera och sedan webbläsarinloggning med myAudi — den tar sig förbi den här spärren."
     }
   },
   "services": {

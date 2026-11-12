@@ -153,6 +153,28 @@ def test_a_number_in_the_title_moves_out_of_it() -> None:
     )
 
 
+def test_two_numbers_in_the_title_also_move_out_of_it() -> None:
+    """An entry about two issues writes both into its title.
+
+    The stripper matched a single ``(#NNN)`` only, so ``(#709, #1950)`` stayed
+    where it was and the generated line read ``… were locked (#709, #1950) —
+    #709 #1950 #958 #969``. Found by reading the real 5.2.3 body rather than by
+    a failing test: the six other entries in that release each cite one issue,
+    so nothing exercised the comma form.
+    """
+    entry = (
+        "- **A charging field decided the doors (#709, #1950).** The body also "
+        "cites #958 as an earlier report of the same thing."
+    )
+    line = brn.short_line(entry)
+    assert "(#709, #1950)" not in line, f"the numbers are still in the title: {line}"
+    assert line.count("#709") == 1, f"#709 is duplicated: {line}"
+    assert line.count("#1950") == 1, f"#1950 is duplicated: {line}"
+    assert "#709" in line and "#1950" in line, (
+        f"moving them out must not drop them: {line}"
+    )
+
+
 def test_the_subject_reference_comes_first() -> None:
     """Source order puts a cited precedent in front of the actual subject.
 
@@ -576,3 +598,95 @@ def test_the_builder_ships_with_the_repository() -> None:
     assert (REPO_ROOT / "scripts/build_release_notes.py").is_file()
     code = _workflow_code()
     assert 'sys.path.insert(0, "scripts")' in code
+
+
+def test_a_prerelease_section_is_found_and_compared_against_the_last_stable() -> None:
+    """A beta must not produce a degraded page — and v5.2.3b1 did.
+
+    The version pattern in ``release.yml`` was plain semver only, so
+    ``## [5.2.3b1]`` never matched, the version was absent from the list, and the
+    body came out as "The change list could not be generated". Nothing had
+    noticed because the "Release-Notes vollständig?" gate was added on
+    2026-10-21 while the previous beta was tagged on 2026-10-04, and because the
+    happy path above filters its driving heading down to plain semver — so the
+    harness never ran a pre-release through the block it tests.
+
+    This drives the real block with a pre-release heading and asserts three
+    things: the section is found, the page is not degraded, and the comparison
+    still points at the last STABLE version rather than at another beta.
+    """
+    import os
+    import re
+    import shutil
+    import subprocess
+    import tempfile
+
+    yml = _workflow()
+    match = re.search(r"python3 << 'PYTHON'\n(.*?)\n          PYTHON", yml, re.DOTALL)
+    assert match, "could not find the python block in release.yml"
+    block = "\n".join(
+        ln[10:] if ln.startswith(" " * 10) else ln
+        for ln in match.group(1).split("\n")
+    )
+
+    changelog = _changelog()
+    # The NEWEST pre-release, not the first one that happens to have entries.
+    # The original selection had "and brn.split_entries(...)" in it, and that
+    # silently chose a healthy 4.10.0b5 while the section this test was written
+    # for — 5.2.3b1, five entries and no "### " category heading — parsed to
+    # zero and stayed unexamined. Choosing the input by the property under test
+    # is how a test passes on a case it was meant to catch.
+    beta = next(
+        (
+            name
+            for name in _HEADINGS.findall(changelog)
+            if re.fullmatch(r"\d+\.\d+\.\d+(?:a|b|rc|pre)\d*", name)
+        ),
+        None,
+    )
+    assert beta is not None, (
+        "no pre-release section in the changelog to drive — this test must not "
+        "quietly skip itself"
+    )
+    assert brn.split_entries(brn.section_for(changelog, beta)), (
+        f"the newest pre-release section ({beta}) parses to zero entries, which "
+        "is exactly the degraded-page defect. check_changelog_structure refuses "
+        "that state, so reaching here means that gate regressed too"
+    )
+    last_stable = next(
+        (n for n in _HEADINGS.findall(changelog) if re.fullmatch(r"\d+\.\d+\.\d+", n)),
+        None,
+    )
+    assert last_stable is not None, "no stable section to compare against"
+
+    work = pathlib.Path(tempfile.mkdtemp())
+    (work / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
+    (work / "scripts").mkdir()
+    shutil.copy(REPO_ROOT / "scripts/build_release_notes.py", work / "scripts")
+    notes_path = str(work / "notes.md").replace("\\", "/")
+    (work / "block.py").write_text(
+        block.replace("/tmp/release_notes.md", notes_path), encoding="utf-8"
+    )
+    gh_output = work / "gh_output"
+    gh_output.write_text("", encoding="utf-8")
+    proc = subprocess.run(
+        [sys.executable, "-I", "-X", "utf8=1", "block.py"],
+        cwd=work, capture_output=True, text=True, encoding="utf-8",
+        errors="replace", stdin=subprocess.DEVNULL,
+        env={**os.environ, "VERSION": beta, "GITHUB_OUTPUT": str(gh_output)},
+    )
+    assert proc.returncode == 0, proc.stderr[-800:]
+
+    notes = (work / "notes.md").read_text(encoding="utf-8")
+    assert "could not be generated" not in notes, (
+        f"the {beta} section was not found — the page is degraded"
+    )
+    assert "incomplete" not in notes.lower(), "the page still reports itself degraded"
+    assert gh_output.read_text(encoding="utf-8").strip() != "degraded=true", (
+        "the gate flag is still set"
+    )
+    assert f"v{beta}" in notes, "the notes must name the version they are for"
+    assert last_stable in notes, (
+        f"a beta page should compare against the last stable ({last_stable}); "
+        "pointing at another beta is what the position rule avoids"
+    )

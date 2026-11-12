@@ -70,6 +70,14 @@ _BATCH_SOURCES = frozenset({"eu_data_act"})
 _LIVE_TELEMETRY = frozenset({
     # battery / SoC / range
     "battery_soc", "target_soc", "electric_range_km",
+    # #2072 — fuel level is the non-monotonic combustion twin of
+    # electric_range_km: a live read (vw.de / BFF) must beat a stale or frozen
+    # EU-DA batch after a refuel, exactly as the EV range already does. The old
+    # exclusion cited the "BFF <- MBB VSR merge", but that is a WITHIN-vw_eu
+    # fallback (fetch MBB VSR when the BFF returns no fuel), not a cross-channel
+    # merge, so it does not govern this precedence. Non-monotonic → no odometer-
+    # style regression.
+    "fuel_level",
     # charging live state
     "charging_state", "is_charging", "charging_scenario", "charging_reason",
     "charging_preferred_mode",
@@ -103,8 +111,9 @@ _LIVE_TELEMETRY = frozenset({
 #     odometer test). Gap-fill / primary must stand.
 #   - position (lat/lon/position_captured_at): governed by its own carry-forward
 #     TTL in vehicle_cache.reconcile, which already reasons about capture age.
-#   - fuel_level: has a dedicated endpoint-specific merge (BFF ← MBB VSR).
-#   - service_*/master data: effectively static; a 15-min batch age is irrelevant.
+#   - service_*/master data: effectively static, so the batch's capture age is
+#     irrelevant whatever it turns out to be (it is not bounded by the 15-minute
+#     publish cadence — see the 98 h-frozen case below).
 _LIVE_CLOSURE = frozenset({
     "doors_locked", "doors_open", "windows_open",
     "doors_individual", "windows_individual", "windows_position",
@@ -198,7 +207,8 @@ def merge_channels(
 
     # v4.7.8 (#923/#1378) — position: FRESHEST capture wins, not merge order.
     # The EU-DA batch feed can now carry a pin (``persLocation``), and with the
-    # portal as PRIMARY its 15-min-old pin would outrank a live vw.de fix via
+    # portal as PRIMARY its batch pin — hours or days old on a car that has not
+    # woken, not 15 minutes — would outrank a live vw.de fix via
     # plain gap-fill (position is deliberately outside the live-supersede set:
     # capture AGE, not channel class, is the right judge). Among every source
     # that has a pin AND a parseable capture time, take the newest; a source

@@ -298,6 +298,73 @@ class TestTheHeadingIsAnchoredToColumnZero:
         assert "headings" in out
 
 
+class TestASectionNeedsACategoryHeading:
+    """A section with entries but no ``### `` heading parses to ZERO entries.
+
+    ``build_release_notes.split_entries`` only yields a group once it has seen
+    a category heading, so such a section produces "The change list could not
+    be generated" on the release page. v5.2.3b1 shipped that way on
+    2026-11-01 — five entries, no heading, degraded page — and it was the only
+    one of 386 sections with the defect.
+
+    Nothing caught it, and the reason is worth keeping in view: the fix made
+    for it was verified by a test that drives the first pre-release *with
+    entries*, which silently picked a different, healthy section. So the guard
+    belongs in the gate, over every section, not in a test that chooses its own
+    input.
+    """
+
+    def test_a_released_section_without_a_category_is_refused(self, tmp_path: Path):
+        live = tmp_path / "CHANGELOG.md"
+        live.write_text(
+            MIN.replace("### Fixed\n\n- **Old.**", "- **Old.**"),
+            encoding="utf-8", newline="\n",
+        )
+        code, out = _run(_CHECKER, "--file", str(live))
+        assert code == 1, f"a headingless section was accepted:\n{out}"
+        assert "1.0.0" in out, "the offending section must be named"
+        assert "category heading" in out
+
+    def test_the_unreleased_block_is_held_to_it_too(self, tmp_path: Path):
+        live = tmp_path / "CHANGELOG.md"
+        live.write_text(
+            MIN.replace("### Behoben / Fixed\n\n- **First.**", "- **First.**"),
+            encoding="utf-8", newline="\n",
+        )
+        code, out = _run(_CHECKER, "--file", str(live))
+        assert code == 1
+        assert "Unreleased" in out
+
+    def test_a_section_with_a_category_passes(self, tmp_path: Path):
+        """Positive control: the rule must not refuse a healthy file."""
+        live = tmp_path / "CHANGELOG.md"
+        live.write_text(MIN, encoding="utf-8", newline="\n")
+        code, out = _run(_CHECKER, "--file", str(live))
+        assert code == 0, out
+
+    def test_a_section_with_no_entries_at_all_is_not_refused(self, tmp_path: Path):
+        """An empty Unreleased block is the normal post-release state, and a
+        prose-only section is legitimate. Only entries WITHOUT a category are
+        the defect, so the rule keys on both halves rather than on the heading
+        alone."""
+        live = tmp_path / "CHANGELOG.md"
+        live.write_text(
+            MIN.replace(
+                "### Behoben / Fixed\n\n- **First.** body ([#101](u)).\n\n"
+                "- **Second.** body ([#102](u)).\n",
+                "",
+            ),
+            encoding="utf-8", newline="\n",
+        )
+        code, out = _run(_CHECKER, "--file", str(live))
+        assert code == 0, out
+
+    def test_the_live_changelog_satisfies_it(self):
+        """The repo's own file, so the rule cannot pass only on fixtures."""
+        code, out = _run(_CHECKER, "--file", str(_ROOT / "CHANGELOG.md"))
+        assert code == 0, out
+
+
 # ── two entries, one title ───────────────────────────────────────────────────
 
 class TestCollidingTitlesOccupyTwoSlots:
@@ -541,6 +608,175 @@ class TestTheCiJobGatesOnlyWhatItCan:
         assert producer["run"].index("GITHUB_OUTPUT") < producer["run"].index("exit 0"), (
             "the guard's input is published after the early exit, so it would "
             "be empty on exactly the pull requests it has to judge"
+        )
+
+    # ── the push half, added 29.10.2026 ────────────────────────────────────
+    #
+    # The trigger was ``pull_request`` only, and what that cost was measured
+    # rather than assumed: 30 of the last 30 runs of this workflow were
+    # pull-request events, and no push to main had ever produced a changelog
+    # verdict. A direct push could therefore drop an entry in silence — the one
+    # thing this workflow exists to prevent. The tests below pin the trigger
+    # and the range it judges, because a trigger is one line and reverts
+    # without looking like a regression.
+    #
+    # What the push half does NOT do, so nobody re-derives it from the trigger:
+    # it does not remove the "Bypassed rule violations" notice on a direct
+    # push. A brand-new commit cannot carry check results that only exist once
+    # it has landed, so under required status checks every direct push to main
+    # reports all five contexts as "expected" and needs the bypass. That is a
+    # property of pushing straight to a protected branch, not of this file.
+
+    def _job(self):
+        import yaml  # noqa: PLC0415
+
+        return yaml.safe_load(self.WF.read_text(encoding="utf-8"))["jobs"]["check"]
+
+    def _scope(self):
+        return next(s for s in self._job()["steps"] if s.get("id") == "scope")
+
+    def test_it_also_runs_on_a_push_to_main(self):
+        import yaml  # noqa: PLC0415
+
+        spec = yaml.safe_load(self.WF.read_text(encoding="utf-8"))
+        # A bare ``on`` key resolves to the boolean True under YAML 1.1, which
+        # is what PyYAML implements. Read both spellings or this test passes
+        # vacuously on a KeyError-free lookup that found nothing.
+        triggers = spec["on"] if "on" in spec else spec[True]
+        assert "push" in triggers, (
+            "the changelog gate no longer runs on a push to main, so a direct "
+            "push can drop an entry and nothing will say so"
+        )
+        assert "main" in triggers["push"]["branches"]
+        assert "pull_request" in triggers, (
+            "the pull-request half was dropped; both halves are required"
+        )
+
+    def test_a_push_is_judged_over_its_whole_range(self):
+        """``HEAD~1..HEAD`` reads a multi-commit push as its tip alone, so a
+        push whose code change sits in an earlier commit than its changelog
+        entry — or the reverse — would be judged on the wrong change set. The
+        push event carries the pre-push SHA, and that is the anchor."""
+        scope = self._scope()
+        env_values = " ".join(str(v) for v in (scope.get("env") or {}).values())
+        assert "github.event.before" in env_values, (
+            "the push range no longer anchors on the pre-push SHA, so a "
+            "multi-commit push is judged on its tip alone"
+        )
+        assert "PUSH_BEFORE" in scope["run"]
+
+    def test_the_push_range_has_a_fallback_for_a_missing_predecessor(self):
+        """A branch creation reports the all-zero SHA as the predecessor. With
+        no fallback the diff command fails and the job goes red for a reason
+        that has nothing to do with the changelog — which teaches the reader
+        that this check is noise."""
+        run = self._scope()["run"]
+        assert "0" * 40 in run, "the all-zero predecessor is not handled"
+        assert "cat-file" in run, (
+            "an unreachable predecessor is never checked for, so the diff "
+            "fails instead of falling back"
+        )
+        assert "HEAD~1" in run, "there is no fallback range"
+
+    def test_the_pull_request_half_still_uses_the_merge_base(self):
+        """Two dots compare against main's tip, which turns an advancing main
+        into a false refusal and races a re-run. The three-dot form asks the
+        merge base. Adding the push half must not quietly change this."""
+        run = self._scope()["run"]
+        # The fork also runs this check for pull requests into ``releases``,
+        # so the base is the pull request's target branch, defaulting to main.
+        assert "origin/main...HEAD" in run or "origin/${BASE_REF:-main}...HEAD" in run, (
+            "the pull-request comparison is no longer against the merge base"
+        )
+
+    def test_the_push_path_runs_and_judges_the_whole_range(self, tmp_path: Path):
+        """The tests above read the file. This one runs it, because every one
+        of them would still pass against a rewrite that kept the substrings
+        and broke the logic.
+
+        The case is built to discriminate, which the obvious one does not: with
+        the code change in the LAST commit and the entry in an earlier one, a
+        ``HEAD~1..HEAD`` implementation sees only the code, refuses, and turns
+        a correct push red. The whole-range form sees both and accepts. The
+        reverse order answers the same either way, so it proves nothing.
+        """
+        import os  # noqa: PLC0415
+        import shutil  # noqa: PLC0415
+
+        bash = shutil.which("bash")
+        if bash is None:
+            pytest.skip("no bash to run the step body with")
+
+        script = tmp_path / "scope.sh"
+        script.write_text(self._scope()["run"], encoding="utf-8", newline="\n")
+
+        repo = tmp_path / "repo"
+        (repo / "custom_components" / "vag_connect").mkdir(parents=True)
+
+        def git(*args: str) -> str:
+            done = subprocess.run(
+                ["git", *args], cwd=repo, check=True, capture_output=True,
+                # Same two settings as _run, for the same two reasons: an
+                # inherited stdin kills the call on Windows before the script
+                # starts, and the step prints box-drawing characters that
+                # cp1252 cannot decode, which blows up communicate()'s reader
+                # thread while the test still passes.
+                encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL,
+            )
+            return done.stdout.strip()
+
+        git("init", "-q", ".")
+        git("config", "user.email", "t@example.invalid")
+        git("config", "user.name", "t")
+
+        def commit(rel: str, body: str) -> str:
+            path = repo / rel
+            path.write_text(body, encoding="utf-8", newline="\n")
+            git("add", "-A")
+            git("commit", "-q", "-m", rel)
+            return git("rev-parse", "HEAD")
+
+        base = commit("README.md", "r\n")
+        entry = commit("CHANGELOG.md", "# CL\n")
+        code = commit("custom_components/vag_connect/x.py", "x\n")
+
+        def verdict(before: str, after: str) -> tuple[int, str]:
+            done = subprocess.run(
+                [bash, str(script)], cwd=repo, capture_output=True,
+                encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL,
+                env={
+                    **os.environ,
+                    "EVENT_NAME": "push",
+                    "PUSH_BEFORE": before,
+                    "PUSH_AFTER": after,
+                    "GITHUB_OUTPUT": str(tmp_path / f"out-{before[:7]}.txt"),
+                },
+            )
+            return done.returncode, done.stdout + done.stderr
+
+        code_rc, out = verdict(base, code)
+        assert code_rc == 0, (
+            "a push whose entry sits in an earlier commit than its code "
+            f"change was refused, which is what judging only the tip does:\n{out}"
+        )
+        entry_rc, out = verdict(entry, code)
+        assert entry_rc == 1, (
+            "a push carrying only the code change was accepted, so the "
+            f"assertion above passes for the wrong reason:\n{out}"
+        )
+
+    def test_no_github_expression_is_spliced_into_a_shell_body(self):
+        """A ref name is attacker-controlled on a fork, and ``${{ }}`` is
+        substituted before bash ever sees the script, so a crafted name runs as
+        code. Values reach the script through the step's ``env:`` block."""
+        offenders = [
+            (step.get("name") or step.get("id") or "?")
+            for step in self._job()["steps"]
+            if "${{" in (step.get("run") or "")
+        ]
+        assert offenders == [], (
+            f"these steps splice a GitHub expression straight into the shell; "
+            f"pass the value through env: instead: {offenders}"
         )
 
 

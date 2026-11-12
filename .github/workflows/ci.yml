@@ -15,22 +15,37 @@ jobs:
     name: Lint & Validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # fetch-depth: 0 is required by the GPS gate below, which asks what a
+      # change ADDS and therefore needs a baseline to diff against. The default
+      # shallow checkout has neither history nor origin/main, and the gate is
+      # deliberately loud about a missing baseline rather than permissive — so
+      # without this it would fail every run instead of passing silently.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Python 3.14 einrichten
         uses: actions/setup-python@v7
         with:
           python-version: "3.14"
 
-      - name: Install dependencies
+      - name: Abhängigkeiten installieren
         run: |
           pip install \
             ruff==0.15.12 \
             mypy \
             homeassistant
 
+      # scripts/ is included deliberately, added 2026-11-06 together with the
+      # 22 findings it had accumulated. It was never excluded by configuration —
+      # there is no ruff config in this repo at all — it was simply never passed
+      # in, so nothing looked at 45 files. Cleaning them up without adding them
+      # here would have been pointless: the findings were the kind that
+      # accumulate one quick probe script at a time, so they would be back.
+      # The default rule set is small (E4/E7/E9 plus F), which is why this costs
+      # a probe script almost nothing.
       - name: Ruff Lint
-        run: ruff check custom_components/ tests/
+        run: ruff check custom_components/ tests/ scripts/
 
       - name: mypy strict
         run: |
@@ -41,7 +56,29 @@ jobs:
             --warn-return-any \
             --no-error-summary
 
-      - name: Validate manifest.json
+      # scripts/ gets mypy too, added 2026-11-06, but NOT with the strict flags
+      # above — and that difference is measured, not a shrug. With
+      # --disallow-untyped-defs/--warn-return-any the 45 probe scripts produce
+      # 55 findings, every single one of them no-untyped-def (36) or
+      # no-any-return (19): annotation pressure, not one type defect. Without
+      # them the count is 0, and the run still catches the classes that matter.
+      # It had caught three real defects within the hour it was first run:
+      #   * vwde_masterdata_probe.py imported two constants removed from
+      #     _website_authproxy on 2026-09-09, so it died on ImportError the
+      #     moment main() ran — unnoticed for two months;
+      #   * test_vw_ca_connection.py read exc.headers/exc.body off an exception
+      #     that carries neither, i.e. AttributeError inside the error handler,
+      #     on the failure path only;
+      #   * get_idk_token.py declared `-> int` while returning three tokens.
+      # Demanding full annotations on throwaway probe scripts would buy nothing
+      # on top of that and would get this step deleted the first busy evening.
+      - name: mypy auf scripts/
+        run: |
+          mypy scripts/ \
+            --ignore-missing-imports \
+            --no-error-summary
+
+      - name: manifest.json validieren
         run: |
           python3 -c "
           import json, sys
@@ -49,17 +86,17 @@ jobs:
           required = ['domain', 'name', 'version', 'requirements', 'iot_class', 'config_flow']
           missing = [k for k in required if k not in m]
           if missing:
-              print('ERROR: Missing fields:', missing); sys.exit(1)
+              print('FEHLER: Fehlende Felder:', missing); sys.exit(1)
           # requirements can be empty (we bundle our own client) or contain pypi packages
           print('requirements:', m.get('requirements', []))
           valid_iot = ('cloud_push', 'cloud_polling', 'local_push', 'local_polling')
           if m.get('iot_class') not in valid_iot:
-              print('ERROR: Invalid iot_class:', m.get('iot_class')); sys.exit(1)
+              print('FEHLER: iot_class ungültig:', m.get('iot_class')); sys.exit(1)
           print('iot_class:', m['iot_class'])
           print('manifest.json OK — Version:', m['version'])
           "
 
-      - name: Validate all JSON files
+      - name: Alle JSON-Dateien validieren
         run: |
           python3 -c "
           import json, os, sys
@@ -72,7 +109,7 @@ jobs:
                           json.load(open(p))
                           print(f'OK: {p}')
                       except Exception as e:
-                          errors.append(f'ERROR {p}: {e}')
+                          errors.append(f'FEHLER {p}: {e}')
           if errors:
               for e in errors: print(e)
               sys.exit(1)
@@ -82,19 +119,58 @@ jobs:
       # it binds maintainers as well as contributors. Runs here rather than only
       # in a git hook, because .git/hooks is not committed and so does not
       # protect a fork PR at all.
-      - name: No real VINs in the repo
+      - name: Keine echten VINs im Repo
         run: python3 scripts/check_no_real_vins.py
 
-      - name: CHANGELOG.md contains current version
+      # The same rule for coordinates, which CONTRIBUTING.md forbids beyond one
+      # decimal. It runs with --base rather than as an audit because the tracked
+      # tree holds 13 pairs that are deliberate — public landmarks used as test
+      # inputs, named in the script's docstring. An audit run would fail on
+      # those every time, and a required check that always fails gets deleted,
+      # so this one gates what a change ADDS. Measured before wiring it: replayed
+      # over the last 120 main commits against their real parents it would have
+      # refused 0 of them, which is the number that decides whether a gate may
+      # be required at all.
+      #
+      # The base differs by event, and that is not cosmetic. On a pull request
+      # the merge base with main is the right comparison. On a direct push to
+      # main, origin/main IS the new HEAD, so merge-base would return HEAD, the
+      # diff would be empty and the gate would pass on anything — a gate that
+      # does not gate. The pushed-from commit is the only honest baseline there.
+      #
+      # Refs go through the environment instead of ${{ }} in the script body:
+      # on a fork they are attacker-controlled and would otherwise be spliced
+      # straight into the shell.
+      - name: Keine präzisen GPS-Koordinaten in neuen Zeilen
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT_NAME" = "push" ]; then
+            BASE="$PUSH_BEFORE"
+            if [ -z "$BASE" ] \
+               || [ "$BASE" = "0000000000000000000000000000000000000000" ] \
+               || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+              echo "Vorgänger-SHA des Push nicht nutzbar — vergleiche HEAD~1."
+              BASE="HEAD~1"
+            fi
+          else
+            BASE="origin/${BASE_REF:-main}"
+          fi
+          echo "Basis: $BASE"
+          python3 scripts/check_no_precise_gps.py --base "$BASE"
+
+      - name: CHANGELOG.md enthält aktuelle Version
         run: |
           python3 -c "
           import json, sys
           version = json.load(open('custom_components/vag_connect/manifest.json'))['version']
           changelog = open('CHANGELOG.md').read()
           if f'[{version}]' not in changelog:
-              print(f'ERROR: Version {version} not found in CHANGELOG.md!')
+              print(f'FEHLER: Version {version} nicht im CHANGELOG.md!')
               sys.exit(1)
-          print(f'CHANGELOG.md contains version {version} — OK')
+          print(f'CHANGELOG.md enthält Version {version} — OK')
           "
 
   tests:
@@ -102,15 +178,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - name: Python 3.14 einrichten
         uses: actions/setup-python@v7
         with:
           python-version: "3.14"
 
-      - name: Install test dependencies
+      - name: Test-Abhängigkeiten installieren
         run: |
           pip install \
             pytest \
@@ -120,7 +194,7 @@ jobs:
             voluptuous \
             homeassistant
 
-      - name: Run tests with coverage
+      - name: Tests mit Coverage ausführen
         id: pytest
         run: |
           set -o pipefail
@@ -158,7 +232,7 @@ jobs:
 
       - name: Upload pytest log as artifact
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@v7
         with:
           name: pytest-output
           path: pytest_output.log
@@ -169,8 +243,8 @@ jobs:
     name: HA Hassfest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@v7
       # SHA-pinned per supply-chain-hardening (v1.24.1, 2026-05-08).
       # home-assistant/actions has no semver tags — pin to commit SHA.
       # Bump manually when upstream announces breaking changes.
-      - uses: "home-assistant/actions/hassfest@cd6f3635a740c84d8a14f6121a90068b8ece6bf6"
+      - uses: "home-assistant/actions/hassfest@86d4564712fa02543c808e3a693dd04f9d3f8361"

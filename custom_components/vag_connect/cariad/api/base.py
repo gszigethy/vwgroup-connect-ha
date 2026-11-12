@@ -20,6 +20,7 @@ from aiohttp import (
 )
 
 from ..auth.idk import IDKAuth
+from .._util import retry_after_seconds
 from .graphql import VehicleImageFetcher, VehicleImageData
 from ..exceptions import (
     APIError,
@@ -143,6 +144,34 @@ _PROBE_CB_THRESHOLD  = 3
 _RETRY_AFTER_MIN_S = 30
 _LOCKOUT_429_S = 1800   # 30 min once 429 retries are exhausted
 _LOCKOUT_430_S = 7200   # 2 h on a hard 430 (explicit lockout signal)
+# #1973 — a URL that spent its ENTIRE 5xx retry budget without once succeeding
+# does not get that budget again on the next poll. Measured by @indigomejor on a
+# Škoda Octavia: two endpoints answer 500 on all four attempts of every poll
+# (``connection-status/{vin}/readiness`` and
+# ``vehicle-information/{vin}/software-version/update-status``), so each poll
+# spent 8 requests to learn what the first one already said. A retry exists to
+# survive a TRANSIENT failure; 500-on-every-attempt-of-every-poll is not
+# transient, and the portal is known to be load-sensitive.
+#
+# Deliberately one single attempt still goes out every poll, so this needs no
+# answer to "is that endpoint merely unprovisioned for this car?" — the question
+# #1973 could not settle. Transient recovers on the next poll and clears the
+# mark; permanent costs one request instead of four. The next rung, skipping the
+# call outright on a long streak, is NOT taken: it would need a re-probe
+# schedule and it can only save one more request per poll.
+_5XX_SUPPRESS_RETRIES_AFTER = 1  # consecutive polls with the budget fully spent
+
+
+def _5xx_budget_key(method: str, url: str) -> str:
+    """Key for the 5xx retry-budget memory: method plus path, query stripped.
+
+    The query is dropped on purpose. ``trip-statistics/{vin}?offsetType=week``
+    is stable, but a caller that puts a timestamp or a cursor in the query would
+    otherwise mint a new key on every poll and the memory would grow without
+    bound while never matching. The VIN stays in the path, so the memory is
+    per-vehicle; the key is never logged.
+    """
+    return f"{method} {url.split('?', 1)[0]}"
 # VW EU Two-Way (650d46ca): the ~1 h device-grant Bearer is NON-refreshable, and
 # an EXPIRED bearer can come back 403 (not 401) from the CARIAD BFF, so the
 # reactive 401-retry re-mint can miss it and the entry freezes after ~1 h
@@ -318,6 +347,12 @@ class CariadBaseClient:
         # Pruned to the last `_REFRESH_WINDOW_S` on every refresh attempt.
         # Prevents the spiral documented in myskoda #976 / volkswagencarnet #683.
         self._refresh_history: list[float] = []
+        # #1973 — per (method, path) count of consecutive polls in which this URL
+        # spent its whole 5xx retry budget without once succeeding. Keyed on the
+        # PATH with the query stripped, so a changing query parameter cannot grow
+        # this without bound; the VIN in the path keeps it per-vehicle, and the
+        # key is never logged. Any non-5xx answer clears the entry.
+        self._5xx_spent: dict[str, int] = {}
         # v2.15.12 (#584) — SEPARATE storm budget for refreshes triggered by a
         # remote COMMAND (MBB lock/unlock/climate/charge). A failing command
         # (e.g. the MBB token exchange 500 or a data-plane 401) used to spend
@@ -482,6 +517,7 @@ class CariadBaseClient:
             "device_grant",
             "device_grant_portal",
             "mbb",
+            "auth0",  # #1712 — browser (Auth0/PKCE) sign-in, no password held
         ):
             from ..exceptions import DeviceLoginExpiredError  # noqa: PLC0415
 
@@ -686,6 +722,14 @@ class CariadBaseClient:
             expires_at=_time.time() + 3300,
             strategy="data_act_portal",
         )
+        # #1942 — arming this fallback is the moment a refresh storm becomes
+        # impossible, so it is the moment to drop the flag that claims one.
+        # Clearing it in ``_refresh_tokens`` alone was not enough: the data
+        # path only calls that on a 401, and the native block that sends us
+        # here is a 403. So on the very car this fallback exists for, nothing
+        # re-entered the refresh path and the "raise your update interval"
+        # Repair stayed raised until a restart. Belt and braces, both places.
+        self.refresh_storm_detected = False
 
     def supplementary_readers(
         self, vin: str
@@ -1122,6 +1166,11 @@ class CariadBaseClient:
             expires_at=_time.time() + 3300,
             strategy="website_authproxy",
         )
+        # #1942 — same reasoning as the portal fallback above: this channel
+        # spends no refresh budget, so a storm flag set before the switch can
+        # no longer be true, and nothing is guaranteed to re-enter the refresh
+        # path to clear it.
+        self.refresh_storm_detected = False
 
     def get_website_proxy_cookies(self) -> list[dict[str, Any]]:
         """v2.14.3 — export the live website-authproxy session cookies.
@@ -1595,14 +1644,15 @@ class CariadBaseClient:
         Only the delta-seconds form is honoured. RFC 9110 also allows an
         HTTP-date, and a half-parsed date is worse than no value: an unparsed
         header simply leaves the existing backoff in charge.
+
+        #1969 — the parsing now lives in ``cariad/_util.retry_after_seconds``,
+        because the EU Data Act portal path needed the same thing and had none.
+        This stays a staticmethod delegating to it: the signature and the
+        absence of ``self`` are what a test pins, for the stale-value reason
+        above, and that property is worth keeping separate from where the three
+        lines of parsing happen to live.
         """
-        raw = headers.get("Retry-After") if headers is not None else None
-        if raw is None:
-            return None
-        text = str(raw).strip()
-        if not text.isdigit():
-            return None
-        return int(text)
+        return retry_after_seconds(headers)
 
     def _enter_rate_lockout(self, seconds: int, status: int) -> None:
         """Pause all requests on this client for ``seconds`` (B4).
@@ -1751,11 +1801,33 @@ class CariadBaseClient:
                 if resp.status == 430:
                     # explicit hard lockout signal — long account-scoped hold (B4)
                     self._enter_rate_lockout(_LOCKOUT_430_S, 430)
-                if resp.status in (500, 502, 503, 504) and _attempt < 3:
-                    wait = (2 ** _attempt) * 3
-                    _LOGGER.debug("Server error %d — retrying in %ds", resp.status, wait)
-                    await asyncio.sleep(wait)
-                    return await self._request(method, url, retry=retry, _attempt=_attempt + 1, **kwargs)
+                if resp.status in (500, 502, 503, 504):
+                    # #1973 — see ``_5XX_SUPPRESS_RETRIES_AFTER``. One attempt
+                    # always goes out; only the RETRIES are withheld, and only
+                    # from a URL that already spent the whole budget for nothing.
+                    _budget_key = _5xx_budget_key(method, url)
+                    _budget_memory = self._5xx_memory()
+                    _spent = _budget_memory.get(_budget_key, 0)
+                    if _attempt >= 3:
+                        # Budget fully spent on 5xx — remember it for next poll.
+                        _budget_memory[_budget_key] = _spent + 1
+                    elif _spent >= _5XX_SUPPRESS_RETRIES_AFTER:
+                        if _attempt == 0:
+                            _LOGGER.debug(
+                                "Server error %d — not retrying: this endpoint"
+                                " spent its whole retry budget on each of the"
+                                " last %d poll(s) without succeeding",
+                                resp.status, _spent,
+                            )
+                    else:
+                        wait = (2 ** _attempt) * 3
+                        _LOGGER.debug("Server error %d — retrying in %ds", resp.status, wait)
+                        await asyncio.sleep(wait)
+                        return await self._request(method, url, retry=retry, _attempt=_attempt + 1, **kwargs)
+                elif resp.status in (200, 201, 202, 204, 207):
+                    # #1973 — a real answer withdraws the mark, so a transient
+                    # outage costs the suppression only until the next good poll.
+                    self._5xx_memory().pop(_5xx_budget_key(method, url), None)
                 if resp.status == 204:
                     self._capture_rate_limit_headers(resp.headers)
                     return None
@@ -1871,6 +1943,25 @@ class CariadBaseClient:
                 and self._tokens.strategy in _COOKIE_SESSION_STRATEGIES
             ):
                 _cs_args = (self._brand.name, self._tokens.strategy)
+                # #1942 (@clipse2004) — this return sits BEFORE the budget check
+                # and before all five paths that clear the storm flag, so a
+                # client that tripped the budget while it still held a real
+                # bearer and only then fell back to a cookie session — which
+                # happens in-session, seat_cupra arms the portal on a 403 —
+                # could never clear the flag again. The "raise your update
+                # interval" Repair then stayed raised for the rest of the
+                # client's life, recommending a higher number each time, with no
+                # storm behind it at all. That is the self-escalating card
+                # #1942 reports.
+                #
+                # Clearing it here is a measurement, not an assumption: this
+                # branch spends no slot of the budget, so there is no refresh
+                # storm by definition. ``account_lock_detected`` is deliberately
+                # NOT cleared alongside it — nothing on this path measured
+                # whether the account is locked, and a full re-authentication
+                # after a restart clears that one honestly.
+                if not for_command:
+                    self.refresh_storm_detected = False
                 if not self._cookie_session_refusal_reported:
                     self._cookie_session_refusal_reported = True
                     _LOGGER.info(
@@ -2026,6 +2117,31 @@ class CariadBaseClient:
             # drives the login; the shared session's cookie jar carries the 24h
             # re-auth cookie, so most re-mints take the password-free QUICK route
             # (silent confirm). On failure the error propagates → coordinator reauth.
+            # #1712 — EU browser sign-in (Auth0/PKCE), any brand. The token set
+            # was minted at group.identity.vwgroup.io, so it refreshes there
+            # too: the IDK endpoint the generic branch below talks to would
+            # answer ``invalid assertion headers`` for it. A dead refresh token
+            # raises ``AuthenticationError`` out of here so the coordinator
+            # starts a reauth instead of re-running the attestation-walled
+            # password login; a transient rejection raises
+            # ``TokenRefreshRetryError``.
+            if (
+                self._tokens
+                and self._tokens.strategy == "auth0"
+                and self._tokens.refresh_token
+            ):
+                from ..auth._auth0 import Auth0Grant  # noqa: PLC0415
+
+                auth0_grant = Auth0Grant(self._session, brand=self._brand.name)
+                self._tokens = await auth0_grant.refresh(
+                    self._tokens.refresh_token, id_token=self._tokens.id_token
+                )
+                await self._notify_tokens_changed()
+                self.account_lock_detected = False
+                self.refresh_storm_detected = False
+                self._lock_history.clear()
+                return
+
             if (
                 self._tokens
                 and self._tokens.strategy == "device_grant"
@@ -2117,6 +2233,21 @@ class CariadBaseClient:
         if not self._tokens:
             raise AuthenticationError("Not authenticated — call authenticate() first.")
         return self._tokens.access_token
+
+    def _5xx_memory(self) -> dict[str, int]:
+        """#1973 — per-URL count of polls that spent the whole 5xx budget.
+
+        Same defensive-getattr as ``_parser_job``: tolerate clients
+        instantiated via ``__new__`` in unit tests, where ``__init__``
+        never ran and the dict does not exist. Creating it on first use
+        keeps the suppression identical for those clients instead of
+        raising AttributeError inside ``_request``.
+        """
+        store = getattr(self, "_5xx_spent", None)
+        if store is None:
+            store = {}
+            self._5xx_spent = store  # type: ignore[attr-defined]
+        return store
 
     def _capture_rate_limit_headers(self, headers: Any) -> None:
         """v1.19.1 — Read X-RateLimit-* headers from a response.
